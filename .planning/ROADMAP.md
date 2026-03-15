@@ -193,6 +193,19 @@ Plans:
 - [ ] 18-02-PLAN.md — Update GitHub helper (is_private_repo, per-file table, marker) + rewrite workflow Step 5 to find-or-update pattern → tests GREEN (CI-01, CI-02) (Wave 2)
 - [ ] 18-03-PLAN.md — Assemble ci-templates/ distributable package + write README for non-technical analysts (CI-04) (Wave 3)
 
+### Phase 18.1: Creation of PR (INSERTED)
+
+**Goal:** Users on an experiment branch can open a GitHub Pull Request or GitLab Merge Request directly from the Remote panel without leaving the desktop app
+**Requirements**: PR-API, PR-ENDPOINT, PR-UI
+**Depends on:** Phase 17 (needs activeBranch Zustand state from Phase 17)
+**Plans:** 4 plans
+
+Plans:
+- [ ] 18.1-01-PLAN.md — Backend services: GitHub PR + GitLab MR create/check functions in github_api.py + gitlab_api.py, TDD (Wave 1)
+- [ ] 18.1-02-PLAN.md — Backend endpoints: POST /api/remote/pr/create + GET /api/remote/pr/status in remote.py (Wave 2)
+- [ ] 18.1-03-PLAN.md — Frontend: inline PR form + humanized branch title + existing-PR link in RemotePanel.tsx (Wave 3)
+- [ ] 18.1-04-PLAN.md — Human verification checkpoint: end-to-end PR creation flow (Wave 4)
+
 ## Progress
 
 **Execution Order:** 10 → 11 → 12 → 13 → 14 → 15 → 16 → 16.1 → 17 → 18 (Phase 18 independent)
@@ -218,13 +231,4 @@ Plans:
 | 16.1. Git History UX + Graph View | 4/4 | Complete    | 2026-03-15 | - |
 | 17. Branch Management | 5/5 | Complete    | 2026-03-15 | - |
 | 18. CI Polish | 3/3 | Complete    | 2026-03-15 | - |
-
-### Phase 18.1: Creation of PR (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 18
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 18.1 to break down)
+| 18.1. Creation of PR | 0/4 | In planning  | - |
