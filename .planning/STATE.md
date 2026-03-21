@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
 status: planning
-stopped_at: Phase 18.1 context gathered
-last_updated: "2026-03-15T22:57:55.500Z"
+stopped_at: Completed 18.1-01-PLAN.md
+last_updated: "2026-03-21T23:44:03.302Z"
 last_activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
 progress:
   total_phases: 11
   completed_phases: 10
-  total_plans: 43
-  completed_plans: 43
+  total_plans: 47
+  completed_plans: 44
   percent: 0
 ---
 
@@ -93,6 +93,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18-ci-polish P01 | 2 | 2 tasks | 2 files |
 | Phase 18-ci-polish P02 | 2 | 2 tasks | 2 files |
 | Phase 18-ci-polish P03 | 4 | 2 tasks | 5 files |
+| Phase 18.1-creation-of-pr P01 | 2 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -201,6 +202,8 @@ Recent decisions affecting current work:
 - [Phase 18-ci-polish]: per_page:100 in listComments — avoids first-page miss on busy PRs (GitHub default is 30)
 - [Phase 18-ci-polish]: ruff noqa E501 on Markdown string literals in ci-templates Python helpers — Markdown output can't be line-wrapped; noqa is the correct fix
 - [Phase 18-ci-polish]: ci-templates/ mirrored directory structure — users copy entire directory without path surgery; README is the canonical setup guide
+- [Phase 18.1-01]: parse_github_owner_repo regex handles both .git and non-.git URLs; ValueError on no match
+- [Phase 18.1-01]: get_gitlab_project_id encodes namespace slash as %2F via direct string replace (not urllib.parse.quote) per RESEARCH.md
 
 ### Roadmap Evolution
 
@@ -219,6 +222,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-15T22:57:55.496Z
-Stopped at: Phase 18.1 context gathered
-Resume file: .planning/phases/18.1-creation-of-pr/18.1-CONTEXT.md
+Last session: 2026-03-21T23:44:03.300Z
+Stopped at: Completed 18.1-01-PLAN.md
+Resume file: None
