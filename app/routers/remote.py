@@ -40,6 +40,15 @@ class PushRequest(BaseModel):
     provider: str = "github"
 
 
+class PRCreateRequest(BaseModel):
+    project_id: str
+    folder: str
+    provider: str = "github"
+    title: str
+    description: str = ""
+    branch: str  # backend has no branch state; frontend must supply it
+
+
 # ---------------------------------------------------------------------------
 # REMOTE-01: GitHub Device Flow endpoints
 # ---------------------------------------------------------------------------
@@ -263,3 +272,81 @@ def remote_behind_commits(folder: str) -> list[dict]:
     with contextlib.suppress(Exception):
         return git_ops.git_behind_commits(folder)
     return []
+
+
+# ---------------------------------------------------------------------------
+# PR/MR creation and status endpoints — Phase 18.1
+# ---------------------------------------------------------------------------
+
+
+@router.post("/pr/create")
+def pr_create(body: PRCreateRequest) -> dict:
+    """Create a pull request (GitHub) or merge request (GitLab) for a branch.
+
+    Delegates all API calls to github_api / gitlab_api service modules.
+    Returns {"pr_url": url} on success, {"success": False, "error": ...} on any failure.
+    """
+    try:
+        token = remote_auth.get_token(body.provider)
+        repo_url = config_store.get_remote_repo(body.project_id, body.provider)
+        if body.provider == "github":
+            owner, repo = github_api.parse_github_owner_repo(repo_url)
+            result = github_api.create_pull_request(
+                token,
+                owner,
+                repo,
+                body.title,
+                body.branch,
+                body=body.description,
+            )
+            pr_url = result["html_url"]
+        else:  # gitlab
+            namespace = gitlab_api.parse_gitlab_namespace_path(repo_url)
+            project_id_num = gitlab_api.get_gitlab_project_id(token, namespace)
+            result = gitlab_api.create_merge_request(
+                token,
+                project_id_num,
+                body.title,
+                body.branch,
+                description=body.description,
+            )
+            pr_url = result["web_url"]
+        return {"pr_url": pr_url}
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/pr/status")
+def pr_status(
+    folder: str,
+    project_id: str = "",
+    provider: str = "github",
+    branch: str = "",
+) -> dict:
+    """Return whether an open PR/MR exists for the given branch.
+
+    Returns {"pr_exists": bool, "pr_url": str | None}.
+    Gracefully returns pr_exists:False on any error or missing config.
+    """
+    try:
+        token = remote_auth.get_token(provider)
+        repo_url = config_store.get_remote_repo(project_id, provider)
+        if not token or not repo_url or not branch:
+            return {"pr_exists": False, "pr_url": None}
+        if provider == "github":
+            owner, repo = github_api.parse_github_owner_repo(repo_url)
+            pr = github_api.get_open_pr_for_branch(token, owner, repo, branch)
+            return {
+                "pr_exists": pr is not None,
+                "pr_url": pr["html_url"] if pr else None,
+            }
+        else:  # gitlab
+            namespace = gitlab_api.parse_gitlab_namespace_path(repo_url)
+            project_id_num = gitlab_api.get_gitlab_project_id(token, namespace)
+            mr = gitlab_api.get_open_mr_for_branch(token, project_id_num, branch)
+            return {
+                "pr_exists": mr is not None,
+                "pr_url": mr["web_url"] if mr else None,
+            }
+    except Exception:  # noqa: BLE001
+        return {"pr_exists": False, "pr_url": None}

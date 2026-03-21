@@ -32,14 +32,20 @@ def save_config(cfg: dict) -> None:
     )
 
 
-def get_remote_repo(project_id: str) -> dict:
+def get_remote_repo(project_id: str, provider: str | None = None) -> dict | str | None:
     """Return the remote repo info dict for project_id.
 
     Returns {} if no entry exists.
     Shape: {"github_url": "...", "gitlab_url": "..."} (only keys that are set).
+
+    If `provider` is given ("github" or "gitlab"), returns the repo URL string
+    for that provider, or None if not configured.
     """
     cfg = load_config()
-    return cfg.get("remote_repos", {}).get(project_id, {})
+    info = cfg.get("remote_repos", {}).get(project_id, {})
+    if provider is not None:
+        return info.get(f"{provider}_url")
+    return info
 
 
 def set_remote_repo(project_id: str, provider: str, url: str) -> None:

@@ -139,6 +139,17 @@ def get_gitlab_token() -> str | None:
     return keyring.get_password(SERVICE_GITLAB, USERNAME_KEY)
 
 
+def get_token(provider: str) -> str | None:
+    """Return the stored token for the given provider ("github" or "gitlab").
+
+    Convenience dispatcher used by routers that receive provider as a string
+    parameter and need a single call site for both GitHub and GitLab tokens.
+    """
+    if provider == "github":
+        return get_github_token()
+    return get_gitlab_token()
+
+
 # ---------------------------------------------------------------------------
 # GitLab PAT validation
 # ---------------------------------------------------------------------------
