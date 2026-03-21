@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { useProjectStore } from '@/store/useProjectStore'
 import { Cloud } from 'lucide-react'
 
@@ -10,7 +11,16 @@ interface RemoteStatus {
   github_connected: boolean
   gitlab_connected: boolean
   repo_url: string | null
+  gitlab_repo_url: string | null
 }
+
+function humanizeBranchName(branch: string): string {
+  const withoutPrefix = branch.replace(/^experiment\/(\d{4}-\d{2}-\d{2}-)?/, '')
+  const withSpaces = withoutPrefix.replace(/-/g, ' ')
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
+}
+
+type PRState = 'idle' | 'loading' | 'done' | 'error'
 
 interface GitHubFlow {
   userCode: string
@@ -22,12 +32,24 @@ type PushErrorKind = 'generic' | 'auth_expired' | null
 type PullState = 'idle' | 'pulling' | 'done' | 'up_to_date' | 'error'
 
 export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } = {}) {
-  const { projects, activeProjectId } = useProjectStore()
+  const { projects, activeProjectId, activeBranch } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId)
+  const currentBranch = activeBranch[activeProject?.id ?? ''] ?? 'main'
+  const isExperiment = currentBranch.startsWith('experiment/')
 
   const [loading, setLoading] = useState(true)
   const [remoteStatus, setRemoteStatus] = useState<RemoteStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+
+  // PR state
+  const [githubPRState, setGithubPRState] = useState<PRState>('idle')
+  const [gitlabPRState, setGitlabPRState] = useState<PRState>('idle')
+  const [githubPRUrl, setGithubPRUrl] = useState<string | null>(null)
+  const [gitlabPRUrl, setGitlabPRUrl] = useState<string | null>(null)
+  const [showGithubPRForm, setShowGithubPRForm] = useState(false)
+  const [showGitlabPRForm, setShowGitlabPRForm] = useState(false)
+  const [prTitle, setPrTitle] = useState('')
+  const [prDescription, setPrDescription] = useState('')
 
   // GitHub device flow state
   const [githubFlow, setGithubFlow] = useState<GitHubFlow | null>(null)
@@ -66,12 +88,21 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
     setLoading(true)
     setStatusError(null)
     try {
-      const res = await fetch(
-        `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}`
-      )
-      if (!res.ok) throw new Error('Failed to fetch remote status')
-      const data: RemoteStatus = await res.json()
-      setRemoteStatus(data)
+      const [githubRes, gitlabRes] = await Promise.all([
+        fetch(
+          `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}&provider=github`
+        ),
+        fetch(
+          `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}&provider=gitlab`
+        ),
+      ])
+      if (!githubRes.ok) throw new Error('Failed to fetch remote status')
+      const githubData = await githubRes.json()
+      const gitlabData = gitlabRes.ok ? await gitlabRes.json() : null
+      setRemoteStatus({
+        ...githubData,
+        gitlab_repo_url: gitlabData?.repo_url ?? null,
+      })
     } catch {
       setStatusError('Could not load remote status. Check your connection.')
     } finally {
@@ -79,8 +110,63 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
     }
   }
 
+  const fetchPRStatus = async (provider: 'github' | 'gitlab') => {
+    if (!activeProject || !isExperiment) return
+    try {
+      const params = new URLSearchParams({
+        folder: activeProject.path,
+        project_id: activeProject.id,
+        provider,
+        branch: currentBranch,
+      })
+      const res = await fetch(`/api/remote/pr/status?${params}`)
+      const data = await res.json()
+      if (provider === 'github') {
+        setGithubPRUrl(data.pr_url ?? null)
+        if (data.pr_exists) setGithubPRState('done')
+      } else {
+        setGitlabPRUrl(data.pr_url ?? null)
+        if (data.pr_exists) setGitlabPRState('done')
+      }
+    } catch { /* silent */ }
+  }
+
+  const handleCreatePR = async (provider: 'github' | 'gitlab') => {
+    if (!activeProject || prTitle.trim() === '') return
+    const setState = provider === 'github' ? setGithubPRState : setGitlabPRState
+    const setUrl = provider === 'github' ? setGithubPRUrl : setGitlabPRUrl
+    setState('loading')
+    try {
+      const res = await fetch('/api/remote/pr/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: activeProject.id,
+          folder: activeProject.path,
+          provider,
+          title: prTitle,
+          description: prDescription,
+          branch: currentBranch,
+        }),
+      })
+      const data = await res.json()
+      if (data.pr_url) {
+        setUrl(data.pr_url)
+        setState('done')
+      } else {
+        setState('error')
+      }
+    } catch {
+      setState('error')
+    }
+  }
+
   useEffect(() => {
     fetchStatus()
+    if (isExperiment) {
+      fetchPRStatus('github')
+      fetchPRStatus('gitlab')
+    }
     // Clean up polling on unmount or project change
     return () => {
       if (pollIntervalRef.current) {
@@ -88,7 +174,19 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
         pollIntervalRef.current = null
       }
     }
-  }, [activeProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeProjectId, currentBranch]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset PR form state when project or branch changes
+  useEffect(() => {
+    setGithubPRState('idle')
+    setGithubPRUrl(null)
+    setGitlabPRState('idle')
+    setGitlabPRUrl(null)
+    setShowGithubPRForm(false)
+    setShowGitlabPRForm(false)
+    setPrTitle('')
+    setPrDescription('')
+  }, [activeProjectId, currentBranch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function stopPolling() {
     if (pollIntervalRef.current) {
