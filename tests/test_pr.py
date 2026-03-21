@@ -191,3 +191,134 @@ def test_get_open_gitlab_mr_none():
         )
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Endpoint tests — Phase 18.1 Plan 02
+# ---------------------------------------------------------------------------
+
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.server import app  # noqa: E402
+
+client = TestClient(app)
+
+
+def test_post_pr_create_github():
+    """POST /api/remote/pr/create returns {pr_url} on success for GitHub."""
+    with (
+        patch("app.routers.remote.github_api") as mock_gh,
+        patch("app.routers.remote.remote_auth") as mock_auth,
+        patch("app.routers.remote.config_store") as mock_cs,
+    ):
+        mock_auth.get_token.return_value = "tok"
+        mock_cs.get_remote_repo.return_value = "https://github.com/owner/repo.git"
+        mock_gh.parse_github_owner_repo.return_value = ("owner", "repo")
+        mock_gh.create_pull_request.return_value = {
+            "html_url": "https://github.com/owner/repo/pull/1"
+        }
+
+        resp = client.post(
+            "/api/remote/pr/create",
+            json={
+                "project_id": "proj1",
+                "folder": "/some/folder",
+                "provider": "github",
+                "title": "Price calc",
+                "branch": "experiment/foo",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"pr_url": "https://github.com/owner/repo/pull/1"}
+
+
+def test_post_pr_create_error():
+    """POST /api/remote/pr/create returns {success:false, error} on API failure."""
+    import httpx
+
+    with (
+        patch("app.routers.remote.github_api") as mock_gh,
+        patch("app.routers.remote.remote_auth") as mock_auth,
+        patch("app.routers.remote.config_store") as mock_cs,
+    ):
+        mock_auth.get_token.return_value = "tok"
+        mock_cs.get_remote_repo.return_value = "https://github.com/owner/repo.git"
+        mock_gh.parse_github_owner_repo.return_value = ("owner", "repo")
+        mock_gh.create_pull_request.side_effect = httpx.HTTPStatusError(
+            "422", request=MagicMock(), response=MagicMock()
+        )
+
+        resp = client.post(
+            "/api/remote/pr/create",
+            json={
+                "project_id": "proj1",
+                "folder": "/some/folder",
+                "provider": "github",
+                "title": "Price calc",
+                "branch": "experiment/foo",
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    assert "error" in body
+
+
+def test_get_pr_status_exists_github():
+    """GET /api/remote/pr/status returns pr_exists:true when open PR found."""
+    with (
+        patch("app.routers.remote.github_api") as mock_gh,
+        patch("app.routers.remote.remote_auth") as mock_auth,
+        patch("app.routers.remote.config_store") as mock_cs,
+    ):
+        mock_auth.get_token.return_value = "tok"
+        mock_cs.get_remote_repo.return_value = "https://github.com/owner/repo.git"
+        mock_gh.parse_github_owner_repo.return_value = ("owner", "repo")
+        mock_gh.get_open_pr_for_branch.return_value = {
+            "html_url": "https://github.com/owner/repo/pull/1"
+        }
+
+        resp = client.get(
+            "/api/remote/pr/status",
+            params={
+                "folder": "x",
+                "project_id": "y",
+                "provider": "github",
+                "branch": "experiment/foo",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "pr_exists": True,
+        "pr_url": "https://github.com/owner/repo/pull/1",
+    }
+
+
+def test_get_pr_status_none_github():
+    """GET /api/remote/pr/status returns pr_exists:false when no open PR found."""
+    with (
+        patch("app.routers.remote.github_api") as mock_gh,
+        patch("app.routers.remote.remote_auth") as mock_auth,
+        patch("app.routers.remote.config_store") as mock_cs,
+    ):
+        mock_auth.get_token.return_value = "tok"
+        mock_cs.get_remote_repo.return_value = "https://github.com/owner/repo.git"
+        mock_gh.parse_github_owner_repo.return_value = ("owner", "repo")
+        mock_gh.get_open_pr_for_branch.return_value = None
+
+        resp = client.get(
+            "/api/remote/pr/status",
+            params={
+                "folder": "x",
+                "project_id": "y",
+                "provider": "github",
+                "branch": "experiment/foo",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"pr_exists": False, "pr_url": None}
