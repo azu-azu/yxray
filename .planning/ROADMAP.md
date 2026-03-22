@@ -206,7 +206,7 @@ Plans:
 - [ ] 18.1-03-PLAN.md — Frontend: inline PR form + humanized branch title + existing-PR link in RemotePanel.tsx (Wave 3)
 - [ ] 18.1-04-PLAN.md — Human verification checkpoint: end-to-end PR creation flow (Wave 4)
 
-### Phase 19: Close Audit Gaps — Branch Verification + APP-04b
+### Phase 19: Close Audit Gaps — Branch Verification + APP-04b (COMPLETE)
 **Goal**: Formally verify Phase 17 Branch Management by running gsd-verifier to produce VERIFICATION.md, and resolve the orphaned APP-04b requirement by confirming the existing implementation and updating REQUIREMENTS.md
 **Requirements**: BRANCH-01, BRANCH-02, BRANCH-03, APP-04b
 **Gap Closure:** Closes gaps from v1.1 audit — Phase 17 unverified, APP-04b checkbox unchecked
@@ -218,6 +218,38 @@ Plans:
 
 Plans:
 - [ ] 19-01-PLAN.md — Run gsd-verifier for Phase 17, update APP-04b checkbox + traceability, fix coverage count
+
+### Phase 20: Tech Debt Cleanup
+**Goal**: Resolve all non-intentional tech debt items identified in the v1.1 milestone audit — fix the autostart toggle regression, add error feedback to project add flow, replace the brittle DOM query with controlled React state, unify the config_store return type, and remove dead interface surface
+**Depends on**: Phase 19
+**Requirements**: APP-02 (toggle disable path), ONBOARD-02 (error feedback), REMOTE-02 (GitLab tab UX), CI-01 (GitLab MR comment dedup)
+**Tech Debt:** Closes 7 items from v1.1 audit across phases 11, 15, 16, 16.1, 18
+**Success Criteria** (what must be TRUE):
+  1. After user disables autostart in Settings, the next manual app launch does NOT re-enable it — `register_autostart()` guarded with `if not autostart.is_autostart_enabled()`
+  2. When `POST /api/projects` returns 400 or 409, user sees a visible error message in the UI — no silent fail
+  3. GitLab tab switch in RemotePanel uses controlled React state, not `document.querySelector`
+  4. `config_store.get_remote_repo()` has a unified, documented return type
+  5. `mergeBaseSha` removed from HistoryPanelProps interface; `gitlab_repo_url` removed from RemotePanel local interface
+  6. `.gitlab-ci.yml` implements find-or-update for MR comments (matching GitHub Actions behavior)
+**Plans**: 3 plans
+
+Plans:
+- [ ] 20-01-PLAN.md — Backend fixes: autostart guard + config_store return type unification (Wave 1)
+- [ ] 20-02-PLAN.md — Frontend fixes: App.tsx error feedback + RemotePanel React state + dead interface props removed (Wave 2)
+- [ ] 20-03-PLAN.md — CI fix: .gitlab-ci.yml find-or-update MR comment + human verification checkpoint (Wave 3)
+
+### Phase 21: Nyquist Wave-0 Remediation
+**Goal**: All v1.1 phases achieve `wave_0_complete: true` Nyquist compliance — every phase has smoke tests that execute the critical path without requiring human interaction
+**Depends on**: Phase 20
+**Nyquist Gaps:** Phases 10, 11, 12, 13, 14, 15, 16, 16.1, 19 all have `wave_0_complete: false`
+**Success Criteria** (what must be TRUE):
+  1. Each of the 9 partial phases has wave_0 smoke tests added to its VALIDATION.md with `wave_0_complete: true`
+  2. Smoke tests cover the critical path for each phase (e.g. app launches, file watcher detects changes, history loads)
+  3. All smoke tests pass in CI on a clean checkout
+**Plans**: 1 plan
+
+Plans:
+- [ ] 21-01-PLAN.md — Retroactive wave_0 test generation for phases 10-16.1 + 19 using gsd:validate-phase
 
 ## Progress
 
@@ -246,3 +278,5 @@ Plans:
 | 18. CI Polish | 3/3 | Complete    | 2026-03-15 | - |
 | 18.1. Creation of PR | 3/4 | Complete    | 2026-03-22 |
 | 19. Close Audit Gaps | 1/1 | Complete    | 2026-03-22 | — |
+| 20. Tech Debt Cleanup | v1.1 | 0/3 | Pending | — |
+| 21. Nyquist Wave-0 Remediation | v1.1 | 0/1 | Pending | — |
