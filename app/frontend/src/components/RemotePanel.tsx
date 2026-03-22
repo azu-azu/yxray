@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { useProjectStore } from '@/store/useProjectStore'
 import { Cloud } from 'lucide-react'
 
@@ -13,14 +12,6 @@ interface RemoteStatus {
   repo_url: string | null
   gitlab_repo_url: string | null
 }
-
-function humanizeBranchName(branch: string): string {
-  const withoutPrefix = branch.replace(/^experiment\/(\d{4}-\d{2}-\d{2}-)?/, '')
-  const withSpaces = withoutPrefix.replace(/-/g, ' ')
-  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
-}
-
-type PRState = 'idle' | 'loading' | 'done' | 'error'
 
 interface GitHubFlow {
   userCode: string
@@ -35,21 +26,9 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
   const { projects, activeProjectId, activeBranch } = useProjectStore()
   const activeProject = projects.find((p) => p.id === activeProjectId)
   const currentBranch = activeBranch[activeProject?.id ?? ''] ?? 'main'
-  const isExperiment = currentBranch.startsWith('experiment/')
-
-  const [loading, setLoading] = useState(true)
+const [loading, setLoading] = useState(true)
   const [remoteStatus, setRemoteStatus] = useState<RemoteStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
-
-  // PR state
-  const [githubPRState, setGithubPRState] = useState<PRState>('idle')
-  const [gitlabPRState, setGitlabPRState] = useState<PRState>('idle')
-  const [githubPRUrl, setGithubPRUrl] = useState<string | null>(null)
-  const [gitlabPRUrl, setGitlabPRUrl] = useState<string | null>(null)
-  const [showGithubPRForm, setShowGithubPRForm] = useState(false)
-  const [showGitlabPRForm, setShowGitlabPRForm] = useState(false)
-  const [prTitle, setPrTitle] = useState('')
-  const [prDescription, setPrDescription] = useState('')
 
   // GitHub device flow state
   const [githubFlow, setGithubFlow] = useState<GitHubFlow | null>(null)
@@ -110,63 +89,8 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
     }
   }
 
-  const fetchPRStatus = async (provider: 'github' | 'gitlab') => {
-    if (!activeProject || !isExperiment) return
-    try {
-      const params = new URLSearchParams({
-        folder: activeProject.path,
-        project_id: activeProject.id,
-        provider,
-        branch: currentBranch,
-      })
-      const res = await fetch(`/api/remote/pr/status?${params}`)
-      const data = await res.json()
-      if (provider === 'github') {
-        setGithubPRUrl(data.pr_url ?? null)
-        if (data.pr_exists) setGithubPRState('done')
-      } else {
-        setGitlabPRUrl(data.pr_url ?? null)
-        if (data.pr_exists) setGitlabPRState('done')
-      }
-    } catch { /* silent */ }
-  }
-
-  const handleCreatePR = async (provider: 'github' | 'gitlab') => {
-    if (!activeProject || prTitle.trim() === '') return
-    const setState = provider === 'github' ? setGithubPRState : setGitlabPRState
-    const setUrl = provider === 'github' ? setGithubPRUrl : setGitlabPRUrl
-    setState('loading')
-    try {
-      const res = await fetch('/api/remote/pr/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: activeProject.id,
-          folder: activeProject.path,
-          provider,
-          title: prTitle,
-          description: prDescription,
-          branch: currentBranch,
-        }),
-      })
-      const data = await res.json()
-      if (data.pr_url) {
-        setUrl(data.pr_url)
-        setState('done')
-      } else {
-        setState('error')
-      }
-    } catch {
-      setState('error')
-    }
-  }
-
   useEffect(() => {
     fetchStatus()
-    if (isExperiment) {
-      fetchPRStatus('github')
-      fetchPRStatus('gitlab')
-    }
     // Clean up polling on unmount or project change
     return () => {
       if (pollIntervalRef.current) {
@@ -174,18 +98,6 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
         pollIntervalRef.current = null
       }
     }
-  }, [activeProjectId, currentBranch]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reset PR form state when project or branch changes
-  useEffect(() => {
-    setGithubPRState('idle')
-    setGithubPRUrl(null)
-    setGitlabPRState('idle')
-    setGitlabPRUrl(null)
-    setShowGithubPRForm(false)
-    setShowGitlabPRForm(false)
-    setPrTitle('')
-    setPrDescription('')
   }, [activeProjectId, currentBranch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function stopPolling() {
@@ -437,87 +349,6 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
     await fetchStatus()
   }
 
-  function renderPRSection(provider: 'github' | 'gitlab') {
-    const repoUrl = provider === 'github' ? remoteStatus?.repo_url : remoteStatus?.gitlab_repo_url
-    if (!isExperiment || !repoUrl) return null
-
-    const prState = provider === 'github' ? githubPRState : gitlabPRState
-    const prUrl = provider === 'github' ? githubPRUrl : gitlabPRUrl
-    const showForm = provider === 'github' ? showGithubPRForm : showGitlabPRForm
-    const setShowForm = provider === 'github' ? setShowGithubPRForm : setShowGitlabPRForm
-    const label = provider === 'github' ? 'pull request' : 'merge request'
-    const platformName = provider === 'github' ? 'GitHub' : 'GitLab'
-
-    return (
-      <div className="border-t pt-3 mt-3">
-        {prState === 'done' && prUrl ? (
-          <p className="text-sm text-green-600">
-            &#x2713; {label.charAt(0).toUpperCase() + label.slice(1)} created.{' '}
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500 underline underline-offset-2 hover:text-blue-600 transition-colors"
-            >
-              View on {platformName} &#x2192;
-            </a>
-          </p>
-        ) : showForm ? (
-          <div className="space-y-2">
-            <input
-              type="text"
-              placeholder="PR title"
-              value={prTitle}
-              onChange={(e) => setPrTitle(e.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <Textarea
-              placeholder="Description (optional)"
-              value={prDescription}
-              onChange={(e) => setPrDescription(e.target.value)}
-              className="text-sm"
-              rows={3}
-            />
-            {prState === 'error' && (
-              <p className="text-xs text-red-500">Failed to create {label}. Please try again.</p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => handleCreatePR(provider)}
-                disabled={prTitle.trim() === '' || prState === 'loading'}
-              >
-                {prState === 'loading' ? 'Creating...' : 'Create'}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setShowForm(false)
-                  setPrTitle('')
-                  setPrDescription('')
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setShowForm(true)
-              setPrTitle(humanizeBranchName(currentBranch))
-            }}
-          >
-            Open {label}
-          </Button>
-        )}
-      </div>
-    )
-  }
-
   function renderGithubTab() {
     const connected = remoteStatus?.github_connected ?? false
 
@@ -537,7 +368,6 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
             </button>
           </div>
           {renderPushButton('github')}
-          {renderPRSection('github')}
         </div>
       )
     }
@@ -635,7 +465,6 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
             </button>
           </div>
           {renderPushButton('gitlab')}
-          {renderPRSection('gitlab')}
         </div>
       )
     }

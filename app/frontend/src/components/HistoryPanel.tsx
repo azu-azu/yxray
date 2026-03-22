@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import { Cloud } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BranchChip } from '@/components/BranchChip'
+
+function humanizeBranchName(branch: string): string {
+  const withoutPrefix = branch.replace(/^experiment\/(\d{4}-\d{2}-\d{2}-)?/, '')
+  const withSpaces = withoutPrefix.replace(/-/g, ' ')
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
+}
+
+type PRState = 'idle' | 'loading' | 'done' | 'error'
 
 export interface CommitEntry {
   sha: string
@@ -485,6 +494,13 @@ export function HistoryPanel({
     }
   })
 
+  // PR state
+  const [prState, setPrState] = useState<PRState>('idle')
+  const [prUrl, setPrUrl] = useState<string | null>(null)
+  const [showPRForm, setShowPRForm] = useState(false)
+  const [prTitle, setPrTitle] = useState('')
+  const [prDescription, setPrDescription] = useState('')
+
   function handleToggle(mode: 'list' | 'graph') {
     setViewMode(mode)
     try {
@@ -570,6 +586,64 @@ export function HistoryPanel({
   const remoteConnected = !!(remoteStatus?.github_connected || remoteStatus?.gitlab_connected)
   const aheadCount = remoteStatus?.ahead ?? 0
   const behindCount = remoteStatus?.behind ?? 0
+  const isExperiment = activeBranch?.startsWith('experiment/')
+
+  async function fetchPRStatus() {
+    if (!projectId || !projectPath || !isExperiment) return
+    const providers: Array<'github' | 'gitlab'> = []
+    if (remoteStatus?.github_connected) providers.push('github')
+    if (remoteStatus?.gitlab_connected) providers.push('gitlab')
+    for (const provider of providers) {
+      try {
+        const params = new URLSearchParams({ folder: projectPath, project_id: projectId, provider, branch: activeBranch! })
+        const res = await fetch(`/api/remote/pr/status?${params}`)
+        const data = await res.json()
+        if (data.pr_exists && data.pr_url) {
+          setPrUrl(data.pr_url)
+          setPrState('done')
+          return
+        }
+      } catch { /* silent */ }
+    }
+  }
+
+  async function handleCreatePR() {
+    if (!projectId || !projectPath || prTitle.trim() === '') return
+    const providers: Array<'github' | 'gitlab'> = []
+    if (remoteStatus?.github_connected) providers.push('github')
+    if (remoteStatus?.gitlab_connected) providers.push('gitlab')
+    if (providers.length === 0) return
+    setPrState('loading')
+    for (const provider of providers) {
+      try {
+        const res = await fetch('/api/remote/pr/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId, folder: projectPath, provider, title: prTitle, description: prDescription, branch: activeBranch }),
+        })
+        const data = await res.json()
+        if (data.pr_url) {
+          setPrUrl(data.pr_url)
+          setPrState('done')
+          setShowPRForm(false)
+          return
+        }
+      } catch { /* try next provider */ }
+    }
+    setPrState('error')
+  }
+
+  useEffect(() => {
+    if (remoteConnected && isExperiment) fetchPRStatus()
+  }, [projectId, activeBranch, remoteConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setPrState('idle')
+    setPrUrl(null)
+    setShowPRForm(false)
+    setPrTitle('')
+    setPrDescription('')
+  }, [projectId, activeBranch])
 
   async function handlePull() {
     if (!projectId || !projectPath || !remoteStatus) return
@@ -701,6 +775,30 @@ export function HistoryPanel({
               {pushState === 'pushing' ? 'Publishing...' : '↑ Publish branch'}
             </Button>
           )}
+          {remoteConnected && isExperiment && (
+            prState === 'done' && prUrl ? (
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-500 underline underline-offset-2 hover:text-blue-600 transition-colors shrink-0"
+              >
+                View PR →
+              </a>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  setShowPRForm((v) => !v)
+                  if (!showPRForm && prTitle === '') setPrTitle(humanizeBranchName(activeBranch!))
+                }}
+              >
+                Open PR
+              </Button>
+            )
+          )}
           {entries.length > 0 && (
             <Button variant="outline" size="sm" onClick={onUndo}>
               Undo last save
@@ -733,6 +831,37 @@ export function HistoryPanel({
 
       {pushError && (
         <p className="text-xs text-red-500 px-4 pb-1">{pushError}</p>
+      )}
+
+      {/* Inline PR form */}
+      {showPRForm && prState !== 'done' && (
+        <div className="border-b px-4 py-3 space-y-2 shrink-0">
+          <input
+            type="text"
+            placeholder="PR title"
+            value={prTitle}
+            onChange={(e) => setPrTitle(e.target.value)}
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <Textarea
+            placeholder="Description (optional)"
+            value={prDescription}
+            onChange={(e) => setPrDescription(e.target.value)}
+            className="text-sm"
+            rows={2}
+          />
+          {prState === 'error' && (
+            <p className="text-xs text-red-500">Failed to create PR. Please try again.</p>
+          )}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleCreatePR} disabled={prTitle.trim() === '' || prState === 'loading'}>
+              {prState === 'loading' ? 'Creating...' : 'Create PR'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowPRForm(false); setPrTitle(''); setPrDescription('') }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Scrollable entry list or graph */}
