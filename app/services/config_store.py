@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import overload
 
 import platformdirs
 
@@ -32,14 +33,20 @@ def save_config(cfg: dict) -> None:
     )
 
 
+@overload
+def get_remote_repo(project_id: str, provider: str) -> str | None: ...
+
+
+@overload
+def get_remote_repo(project_id: str, provider: None = None) -> dict: ...
+
+
 def get_remote_repo(project_id: str, provider: str | None = None) -> dict | str | None:
-    """Return the remote repo info dict for project_id.
+    """Return the remote repo info for project_id.
 
-    Returns {} if no entry exists.
-    Shape: {"github_url": "...", "gitlab_url": "..."} (only keys that are set).
-
-    If `provider` is given ("github" or "gitlab"), returns the repo URL string
-    for that provider, or None if not configured.
+    Without provider: returns the full info dict
+      {"github_url": "...", "gitlab_url": "..."} — empty dict if unset.
+    With provider ("github" or "gitlab"): returns the URL string, or None if unset.
     """
     cfg = load_config()
     info = cfg.get("remote_repos", {}).get(project_id, {})
