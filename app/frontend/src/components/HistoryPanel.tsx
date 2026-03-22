@@ -43,7 +43,6 @@ interface HistoryPanelProps {
   onPushComplete?: () => void
   onBranchSwitch?: () => void
   activeBranch?: string
-  mergeBaseSha?: string | null
   allBranchEntries?: CommitEntry[]
 }
 

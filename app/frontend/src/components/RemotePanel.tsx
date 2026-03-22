@@ -10,7 +10,6 @@ interface RemoteStatus {
   github_connected: boolean
   gitlab_connected: boolean
   repo_url: string | null
-  gitlab_repo_url: string | null
 }
 
 interface GitHubFlow {
@@ -29,6 +28,7 @@ export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } 
 const [loading, setLoading] = useState(true)
   const [remoteStatus, setRemoteStatus] = useState<RemoteStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'github' | 'gitlab'>('github')
 
   // GitHub device flow state
   const [githubFlow, setGithubFlow] = useState<GitHubFlow | null>(null)
@@ -80,7 +80,6 @@ const [loading, setLoading] = useState(true)
       const gitlabData = gitlabRes.ok ? await gitlabRes.json() : null
       setRemoteStatus({
         ...githubData,
-        gitlab_repo_url: gitlabData?.repo_url ?? null,
       })
     } catch {
       setStatusError('Could not load remote status. Check your connection.')
@@ -527,10 +526,7 @@ const [loading, setLoading] = useState(true)
           <Button size="sm" variant="outline" onClick={startGithubDeviceFlow}>
             Connect GitHub
           </Button>
-          <Button size="sm" variant="outline" onClick={() => {
-            const trigger = document.querySelector<HTMLElement>('[data-value="gitlab"]')
-            trigger?.click()
-          }}>
+          <Button size="sm" variant="outline" onClick={() => setActiveTab('gitlab')}>
             Connect GitLab
           </Button>
         </div>
@@ -563,7 +559,7 @@ const [loading, setLoading] = useState(true)
         <>
           {renderDisconnectedCTA()}
 
-          <Tabs defaultValue="github">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'github' | 'gitlab')}>
             <TabsList>
               <TabsTrigger value="github">GitHub</TabsTrigger>
               <TabsTrigger value="gitlab">GitLab</TabsTrigger>

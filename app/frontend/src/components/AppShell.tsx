@@ -224,7 +224,6 @@ export default function AppShell({ onAddFolder, showIdentityCard, onIdentitySave
               onPushComplete={() => fetchHistory()}
               onBranchSwitch={handleBranchSwitch}
               activeBranch={activeBranch[activeProject.id]}
-              mergeBaseSha={mergeBaseSha}
               allBranchEntries={allBranchEntries}
             />
           </div>
@@ -258,7 +257,6 @@ export default function AppShell({ onAddFolder, showIdentityCard, onIdentitySave
           onPushComplete={() => fetchHistory()}
           onBranchSwitch={handleBranchSwitch}
           activeBranch={activeBranch[activeProject.id]}
-          mergeBaseSha={mergeBaseSha}
           allBranchEntries={allBranchEntries}
         />
       )
