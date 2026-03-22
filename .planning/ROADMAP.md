@@ -249,7 +249,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 21-01-PLAN.md — Retroactive wave_0 test generation for phases 10-16.1 + 19 using gsd:validate-phase
+- [ ] 21-01-PLAN.md — Fix Phase 10 port tests (mock socket) + flip wave_0_complete: true in all 9 VALIDATION.md files
 
 ## Progress
 
