@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
 status: planning
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-03-22T18:24:16.157Z"
+stopped_at: Completed 20-03-PLAN.md
+last_updated: "2026-03-22T20:38:51.122Z"
 last_activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
 progress:
   total_phases: 14
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 51
-  completed_plans: 50
+  completed_plans: 51
   percent: 0
 ---
 
@@ -99,6 +99,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19-close-audit-gaps P01 | 136 | 2 tasks | 3 files |
 | Phase 20-tech-debt-cleanup P02 | 2 | 2 tasks | 4 files |
 | Phase 20 P01 | 8 | 2 tasks | 3 files |
+| Phase 20-tech-debt-cleanup P03 | 30 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,7 @@ Recent decisions affecting current work:
 - [Phase 20-01]: autostart guard placed in main.py caller (not inside register_autostart) — register_autostart() stays a transparent low-level operation
 - [Phase 20-01]: @overload stubs in config_store.py are documentation-only: zero runtime behavior change, eliminates Union[dict,str,None] ambiguity for type checkers
 - [Phase 20-01]: autostart and tray imports moved to module level in main.py so unittest.mock.patch targets resolve correctly
+- [Phase 20-tech-debt-cleanup]: post_or_update_note() re-reads GITLAB_TOKEN at call time for patch.dict testability; CI_MERGE_REQUEST_IID used (not ID); Python owns MARKER in build_comment() output
 
 ### Roadmap Evolution
 
@@ -239,6 +241,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-22T18:24:16.154Z
-Stopped at: Completed 20-01-PLAN.md
+Last session: 2026-03-22T20:38:51.116Z
+Stopped at: Completed 20-03-PLAN.md
 Resume file: None
