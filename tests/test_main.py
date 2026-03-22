@@ -124,3 +124,32 @@ def test_is_instance_running_false():
         result = is_running()
 
     assert result is False, f"Expected False (no instance running), got {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# test_main_does_not_reregister_when_already_enabled
+# ---------------------------------------------------------------------------
+
+
+def test_main_does_not_reregister_when_already_enabled():
+    """main() must NOT call register_autostart() if autostart is already enabled."""
+    mock_sock = MagicMock()
+    mock_server = MagicMock()
+    mock_server.serve = AsyncMock(return_value=None)
+    with (
+        patch("sys.argv", ["app"]),
+        patch("app.main.is_instance_running", return_value=False),
+        patch("app.main.find_available_port", return_value=(7433, mock_sock)),
+        patch("app.main.uvicorn.Server", return_value=mock_server),
+        patch("app.main.uvicorn.Config", return_value=MagicMock()),
+        patch("app.main.asyncio.run", return_value=None),
+        patch("app.main.autostart.is_autostart_enabled", return_value=True),
+        patch("app.main.autostart.register_autostart") as mock_register,
+        patch("app.main.tray.start_tray"),
+        patch("app.main.threading.Timer"),
+        patch("app.main.webbrowser.open"),
+    ):
+        from app.main import main
+
+        main()
+    mock_register.assert_not_called()

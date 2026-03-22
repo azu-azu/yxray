@@ -21,7 +21,9 @@ import webbrowser
 
 import uvicorn
 
+from app import tray
 from app.server import app as fastapi_app
+from app.services import autostart
 
 
 def find_available_port(
@@ -82,9 +84,10 @@ def main() -> None:
     port, sock = find_available_port()
 
     # Register autostart silently (Windows only; no-op + warning on failure).
-    from app.services import autostart  # noqa: PLC0415
-
-    autostart.register_autostart()
+    # Guard: only register if not already enabled — prevents overwriting user's
+    # Settings toggle on every manual launch.
+    if not autostart.is_autostart_enabled():
+        autostart.register_autostart()
 
     config = uvicorn.Config(
         fastapi_app,
@@ -95,8 +98,6 @@ def main() -> None:
     server = uvicorn.Server(config)
 
     # Start tray icon in a daemon thread before the event loop blocks.
-    from app import tray  # noqa: PLC0415
-
     tray_thread = threading.Thread(
         target=tray.start_tray,
         args=(port, server),
