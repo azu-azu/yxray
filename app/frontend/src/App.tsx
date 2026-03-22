@@ -23,6 +23,7 @@ export default function App() {
   const [showIdentityCard, setShowIdentityCard] = useState(false)
   const [showGitInitConfirm, setShowGitInitConfirm] = useState(false)
   const [pendingPath, setPendingPath] = useState<string | null>(null)
+  const [addProjectError, setAddProjectError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/projects')
@@ -67,6 +68,7 @@ export default function App() {
   }
 
   async function doAddProject(path: string) {
+    setAddProjectError(null)
     // POST /api/projects — backend runs git init if needed (already user-approved via dialog)
     const addRes = await fetch('/api/projects', {
       method: 'POST',
@@ -74,7 +76,12 @@ export default function App() {
       body: JSON.stringify({ path }),
     })
     if (!addRes.ok) {
-      // TODO: surface error toast in Phase 12
+      const data = await addRes.json().catch(() => ({}))
+      setAddProjectError(
+        addRes.status === 409
+          ? 'This folder is already registered.'
+          : (data.detail ?? 'Could not add project. Try again.')
+      )
       return
     }
     const project = await addRes.json()
@@ -93,6 +100,12 @@ export default function App() {
 
   return (
     <>
+      {addProjectError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded shadow-md">
+          {addProjectError}
+          <button className="ml-3 text-red-400 hover:text-red-600" onClick={() => setAddProjectError(null)}>&#x2715;</button>
+        </div>
+      )}
       {projects.length === 0 ? (
         <WelcomeScreen onAddFolder={handleAddFolder} />
       ) : (
