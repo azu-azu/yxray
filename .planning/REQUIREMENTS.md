@@ -11,7 +11,7 @@
 - [x] **APP-02**: App starts automatically when Windows boots, running silently in the background
 - [x] **APP-03**: App runs on port 7433 with automatic fallback to ports 7434–7443 if already in use
 - [x] **APP-04a**: Browser opens automatically at localhost:PORT when the exe starts (webbrowser.open on startup)
-- [ ] **APP-04b**: User can open the app UI by clicking the system tray icon (opens browser at localhost:PORT)
+- [x] **APP-04b**: User can open the app UI by clicking the system tray icon (opens browser at localhost:PORT) — implemented in app/tray.py (on_open handler, default=True); Windows-only human verification applies
 - [x] **APP-05**: System tray icon shows app status (watching / changes detected / idle)
 
 ### ONBOARD — Onboarding
@@ -49,9 +49,9 @@
 
 ### BRANCH — Experiment Copies
 
-- [ ] **BRANCH-01**: User can create an experiment copy (branch) with auto-generated name (experiment/YYYY-MM-DD-description)
-- [ ] **BRANCH-02**: User can switch between experiment copies
-- [ ] **BRANCH-03**: Current workspace shown as a label in the UI (no DAG visualization)
+- [x] **BRANCH-01**: User can create an experiment copy (branch) with auto-generated name (experiment/YYYY-MM-DD-description)
+- [x] **BRANCH-02**: User can switch between experiment copies
+- [x] **BRANCH-03**: Current workspace shown as a label in the UI (no DAG visualization)
 
 ### CI — CI Integration Polish
 
@@ -99,7 +99,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | APP-02 | Phase 15 | Complete |
 | APP-03 | Phase 10 | Complete |
 | APP-04a | Phase 10 | Complete |
-| APP-04b | Phase 19 | Pending |
+| APP-04b | Phase 15 | Complete |
 | APP-05 | Phase 15 | Complete |
 | ONBOARD-01 | Phase 11 | Complete |
 | ONBOARD-02 | Phase 11 | Complete |
@@ -119,9 +119,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REMOTE-04 | Phase 16 | Complete |
 | REMOTE-05 | Phase 16 | Complete |
 | REMOTE-06 | Phase 16 | Complete |
-| BRANCH-01 | Phase 19 | Pending |
-| BRANCH-02 | Phase 19 | Pending |
-| BRANCH-03 | Phase 19 | Pending |
+| BRANCH-01 | Phase 17 | Complete |
+| BRANCH-02 | Phase 17 | Complete |
+| BRANCH-03 | Phase 17 | Complete |
 | CI-01 | Phase 18 | Complete |
 | CI-02 | Phase 18 | Complete |
 | CI-03 | Phase 18 | Complete |
@@ -134,4 +134,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-13*
-*Last updated: 2026-03-13 — APP-04 split into APP-04a (Phase 10, browser auto-open on startup) and APP-04b (Phase 15, tray icon click opens browser)*
+*Last updated: 2026-03-22 — Phase 19: APP-04b marked [x] (implemented Phase 15, app/tray.py); BRANCH-01/02/03 marked [x] (implemented Phase 17, formally verified Phase 19)*
