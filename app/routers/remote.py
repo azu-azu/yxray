@@ -234,11 +234,13 @@ def remote_status(
     folder: str,
     project_id: str = "",
     provider: str = "github",
+    fast: bool = False,
 ) -> dict:
     """Return ahead/behind counts, connection status, and repo URL for a project.
 
-    If a token and repo URL are available, fetches from remote first to update
-    the ahead/behind counts.
+    When fast=False (default), fetches from remote first to get fresh counts.
+    When fast=True, skips the network fetch and returns cached local counts only.
+    Use fast=True for initial project-switch loads; fast=False after push/pull.
     """
     if provider == "github":
         token = remote_auth.get_github_token()
@@ -249,7 +251,7 @@ def remote_status(
     repo_url: str | None = repo_info.get(f"{provider}_url")
 
     ahead, behind = 0, 0
-    if token and repo_url:
+    if token and repo_url and not fast:
         with contextlib.suppress(Exception):
             git_ops.git_fetch(folder, repo_url, token)
             ahead, behind = git_ops.git_ahead_behind(folder)

@@ -53,6 +53,7 @@ export default function AppShell({ onAddFolder, showIdentityCard, onIdentitySave
 
   const fetchHistory = useCallback(async () => {
     if (!activeProject) return
+    const fetchingForProject = activeProject.id
     setAllBranchEntries([])
     try {
       // Read branch from store's latest state to avoid stale closure on initial load
@@ -62,6 +63,8 @@ export default function AppShell({ onAddFolder, showIdentityCard, onIdentitySave
         `/api/history/${activeProject.id}?folder=${encodeURIComponent(activeProject.path)}${branchParam}`
       )
       if (!res.ok) return
+      // Discard response if the user switched projects while the fetch was in-flight
+      if (useProjectStore.getState().activeProjectId !== fetchingForProject) return
       const data: CommitEntry[] = await res.json()
       setHistory(data ?? [])
       setHasCommits((data ?? []).length > 0)
@@ -78,7 +81,9 @@ export default function AppShell({ onAddFolder, showIdentityCard, onIdentitySave
               if (d.length > 0) { mainData = d; break }
             }
           }
-          setAllBranchEntries(mainData)
+          if (useProjectStore.getState().activeProjectId === fetchingForProject) {
+            setAllBranchEntries(mainData)
+          }
         } catch { /* ignore */ }
       } else {
         setAllBranchEntries([])

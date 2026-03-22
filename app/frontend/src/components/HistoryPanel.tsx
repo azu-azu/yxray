@@ -509,11 +509,11 @@ export function HistoryPanel({
     } catch { /* ignore */ }
   }
 
-  async function fetchRemoteStatus() {
+  async function fetchRemoteStatus({ fast = false }: { fast?: boolean } = {}) {
     if (!projectId || !projectPath) return
     try {
       const res = await fetch(
-        `/api/remote/status?project_id=${encodeURIComponent(projectId)}&folder=${encodeURIComponent(projectPath)}`
+        `/api/remote/status?project_id=${encodeURIComponent(projectId)}&folder=${encodeURIComponent(projectPath)}${fast ? '&fast=true' : ''}`
       )
       if (!res.ok) return
       const data: RemoteStatus = await res.json()
@@ -538,7 +538,7 @@ export function HistoryPanel({
     } catch { /* ignore */ }
   }
 
-  useEffect(() => { fetchRemoteStatus() }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchRemoteStatus({ fast: true }) }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!lastPushTimestamp) return
