@@ -227,73 +227,54 @@ def git_log(folder: str, branch: str | None = None) -> list[dict]:
     - has_parent: True if the commit has a parent (not the initial commit)
 
     Returns [] when the repo has no commits.
-    Uses two-pass approach: first gets headers, then per-SHA gets diff-tree for files.
+    Single-pass: uses --name-only and %P (parent hashes) to avoid N subprocesses.
     """
     if not git_has_commits(folder):
         return []
 
-    # Pass 1: get commit headers
-    cmd = ["git", "-C", folder, "log", "--pretty=format:%H\x1f%s\x1f%an\x1f%aI"]
+    sep = "\x1f"
+    cmd = [
+        "git",
+        "-C",
+        folder,
+        "log",
+        f"--pretty=format:%H{sep}%s{sep}%an{sep}%aI{sep}%P",
+        "--name-only",
+    ]
     if branch is not None:
         cmd.append(branch)
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0 or not result.stdout.strip():
         return []
 
     entries: list[dict] = []
+    current: dict | None = None
+
     for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split("\x1f", 3)
-        if len(parts) < 4:
-            continue
-        sha, message, author, timestamp = parts
-
-        # Pass 2a: check has_parent via rev-parse of parent ref
-        has_parent = (
-            subprocess.run(
-                ["git", "-C", folder, "rev-parse", "--verify", f"{sha}~1"],
-                capture_output=True,
-                text=True,
-            ).returncode
-            == 0
-        )
-
-        # Pass 2b: get files changed in this commit (diff-tree)
-        diff_result = subprocess.run(
-            [
-                "git",
-                "-C",
-                folder,
-                "diff-tree",
-                "--no-commit-id",
-                "-r",
-                "--name-only",
-                sha,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        files_changed = [
-            f
-            for f in diff_result.stdout.splitlines()
-            if f and Path(f).suffix in WORKFLOW_SUFFIXES
-        ]
-
-        entries.append(
-            {
+        if sep in line:
+            # Header line for a new commit
+            if current is not None:
+                entries.append(current)
+            parts = line.split(sep, 4)
+            if len(parts) < 5:
+                current = None
+                continue
+            sha, message, author, timestamp, parents = parts
+            current = {
                 "sha": sha,
                 "message": message,
                 "author": author,
                 "timestamp": timestamp,
-                "files_changed": files_changed,
-                "has_parent": has_parent,
+                "files_changed": [],
+                "has_parent": bool(parents.strip()),
             }
-        )
+        elif line.strip() and current is not None:
+            # File name line
+            if Path(line.strip()).suffix in WORKFLOW_SUFFIXES:
+                current["files_changed"].append(line.strip())
+
+    if current is not None:
+        entries.append(current)
 
     return entries
 
