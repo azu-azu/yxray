@@ -67,17 +67,11 @@ const [loading, setLoading] = useState(true)
     setLoading(true)
     setStatusError(null)
     try {
-      const [githubRes, gitlabRes] = await Promise.all([
-        fetch(
-          `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}&provider=github`
-        ),
-        fetch(
-          `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}&provider=gitlab`
-        ),
-      ])
+      const githubRes = await fetch(
+        `/api/remote/status?project_id=${encodeURIComponent(activeProject.id)}&folder=${encodeURIComponent(activeProject.path)}&provider=github`
+      )
       if (!githubRes.ok) throw new Error('Failed to fetch remote status')
       const githubData = await githubRes.json()
-      const gitlabData = gitlabRes.ok ? await gitlabRes.json() : null
       setRemoteStatus({
         ...githubData,
       })
