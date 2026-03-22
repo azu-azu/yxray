@@ -198,7 +198,7 @@ Plans:
 **Goal:** Users on an experiment branch can open a GitHub Pull Request or GitLab Merge Request directly from the Remote panel without leaving the desktop app
 **Requirements**: PR-API, PR-ENDPOINT, PR-UI
 **Depends on:** Phase 17 (needs activeBranch Zustand state from Phase 17)
-**Plans:** 3/4 plans executed
+**Plans:** 3/4 plans complete
 
 Plans:
 - [ ] 18.1-01-PLAN.md — Backend services: GitHub PR + GitLab MR create/check functions in github_api.py + gitlab_api.py, TDD (Wave 1)
@@ -231,4 +231,4 @@ Plans:
 | 16.1. Git History UX + Graph View | 4/4 | Complete    | 2026-03-15 | - |
 | 17. Branch Management | 5/5 | Complete    | 2026-03-15 | - |
 | 18. CI Polish | 3/3 | Complete    | 2026-03-15 | - |
-| 18.1. Creation of PR | 3/4 | In Progress|  |
+| 18.1. Creation of PR | 3/4 | Complete    | 2026-03-22 |
