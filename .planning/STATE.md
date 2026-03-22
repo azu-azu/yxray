@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
 status: planning
-stopped_at: Phase 21 context gathered
-last_updated: "2026-03-22T22:18:10.691Z"
+stopped_at: Completed 21-01-PLAN.md — Nyquist wave_0 remediation
+last_updated: "2026-03-22T22:37:13.568Z"
 last_activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
 progress:
   total_phases: 14
-  completed_phases: 13
-  total_plans: 51
-  completed_plans: 51
+  completed_phases: 14
+  total_plans: 52
+  completed_plans: 52
   percent: 0
 ---
 
@@ -100,6 +100,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 20-tech-debt-cleanup P02 | 2 | 2 tasks | 4 files |
 | Phase 20 P01 | 8 | 2 tasks | 3 files |
 | Phase 20-tech-debt-cleanup P03 | 30 | 3 tasks | 3 files |
+| Phase 21-nyquist-wave0-remediation P01 | 4 | 10 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,8 @@ Recent decisions affecting current work:
 - [Phase 20-01]: @overload stubs in config_store.py are documentation-only: zero runtime behavior change, eliminates Union[dict,str,None] ambiguity for type checkers
 - [Phase 20-01]: autostart and tray imports moved to module level in main.py so unittest.mock.patch targets resolve correctly
 - [Phase 20-tech-debt-cleanup]: post_or_update_note() re-reads GITLAB_TOKEN at call time for patch.dict testability; CI_MERGE_REQUEST_IID used (not ID); Python owns MARKER in build_comment() output
+- [Phase 21-01]: test_port_probe.py: patch('socket.socket') with MagicMock for env-agnostic happy-path test; ephemeral ports 19900-19910 for real-socket tests to avoid port 7433 conflicts
+- [Phase 21-01]: Phase 16.1 VALIDATION.md: corrected app/tests/test_git_ops.py (non-existent) to tests/test_history.py — all 4 pushed_shas/is_pushed tests confirmed in correct location
 
 ### Roadmap Evolution
 
@@ -241,6 +244,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-22T22:18:10.687Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-nyquist-wave0-remediation/21-CONTEXT.md
+Last session: 2026-03-22T22:37:13.565Z
+Stopped at: Completed 21-01-PLAN.md — Nyquist wave_0 remediation
+Resume file: None
