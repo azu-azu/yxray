@@ -288,7 +288,19 @@ def pr_create(body: PRCreateRequest) -> dict:
     """
     try:
         token = remote_auth.get_token(body.provider)
+        if not token:
+            return {
+                "success": False,
+                "error": "Not connected to " + body.provider.capitalize(),
+            }
         repo_url = config_store.get_remote_repo(body.project_id, body.provider)
+        if not repo_url:
+            return {
+                "success": False,
+                "error": "No remote repo configured. Push to "
+                + body.provider.capitalize()
+                + " first.",
+            }
         if body.provider == "github":
             owner, repo = github_api.parse_github_owner_repo(repo_url)
             result = github_api.create_pull_request(

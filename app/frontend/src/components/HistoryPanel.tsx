@@ -497,6 +497,7 @@ export function HistoryPanel({
   // PR state
   const [prState, setPrState] = useState<PRState>('idle')
   const [prUrl, setPrUrl] = useState<string | null>(null)
+  const [prError, setPrError] = useState<string | null>(null)
   const [showPRForm, setShowPRForm] = useState(false)
   const [prTitle, setPrTitle] = useState('')
   const [prDescription, setPrDescription] = useState('')
@@ -614,6 +615,7 @@ export function HistoryPanel({
     if (remoteStatus?.gitlab_connected) providers.push('gitlab')
     if (providers.length === 0) return
     setPrState('loading')
+    setPrError(null)
     for (const provider of providers) {
       try {
         const res = await fetch('/api/remote/pr/create', {
@@ -628,6 +630,7 @@ export function HistoryPanel({
           setShowPRForm(false)
           return
         }
+        if (data.error) setPrError(data.error)
       } catch { /* try next provider */ }
     }
     setPrState('error')
@@ -640,6 +643,7 @@ export function HistoryPanel({
   useEffect(() => {
     setPrState('idle')
     setPrUrl(null)
+    setPrError(null)
     setShowPRForm(false)
     setPrTitle('')
     setPrDescription('')
@@ -775,7 +779,7 @@ export function HistoryPanel({
               {pushState === 'pushing' ? 'Publishing...' : '↑ Publish branch'}
             </Button>
           )}
-          {remoteConnected && isExperiment && (
+          {remoteConnected && isExperiment && entries.length > 0 && entries[0].is_pushed && (
             prState === 'done' && prUrl ? (
               <a
                 href={prUrl}
@@ -851,7 +855,7 @@ export function HistoryPanel({
             rows={2}
           />
           {prState === 'error' && (
-            <p className="text-xs text-red-500">Failed to create PR. Please try again.</p>
+            <p className="text-xs text-red-500">{prError ?? 'Failed to create PR. Please try again.'}</p>
           )}
           <div className="flex gap-2">
             <Button size="sm" onClick={handleCreatePR} disabled={prTitle.trim() === '' || prState === 'loading'}>

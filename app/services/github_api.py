@@ -7,6 +7,7 @@ import re
 import httpx
 
 GITHUB_API_BASE = "https://api.github.com"
+_TIMEOUT = 15  # seconds
 
 
 def _github_headers(token: str) -> dict[str, str]:
@@ -32,6 +33,7 @@ def get_github_username(token: str) -> str:
     resp = httpx.get(
         f"{GITHUB_API_BASE}/user",
         headers=_github_headers(token),
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()["login"]
@@ -42,6 +44,7 @@ def github_repo_exists(token: str, owner: str, repo_name: str) -> bool:
     resp = httpx.get(
         f"{GITHUB_API_BASE}/repos/{owner}/{repo_name}",
         headers=_github_headers(token),
+        timeout=_TIMEOUT,
     )
     return resp.status_code == 200
 
@@ -55,6 +58,7 @@ def create_github_repo(token: str, name: str) -> dict:
         f"{GITHUB_API_BASE}/user/repos",
         headers=_github_headers(token),
         json={"name": name, "private": True, "auto_init": False},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -104,6 +108,7 @@ def create_pull_request(
         f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls",
         headers=_github_headers(token),
         json={"title": title, "head": head, "base": base, "body": body},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -120,6 +125,7 @@ def get_open_pr_for_branch(
         f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls",
         headers=_github_headers(token),
         params={"head": f"{owner}:{branch}", "state": "open"},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     items = resp.json()

@@ -7,6 +7,7 @@ import re
 import httpx
 
 GITLAB_BASE = "https://gitlab.com/api/v4"
+_TIMEOUT = 15  # seconds
 
 
 def validate_gitlab_token(token: str) -> dict | None:
@@ -17,6 +18,7 @@ def validate_gitlab_token(token: str) -> dict | None:
     resp = httpx.get(
         f"{GITLAB_BASE}/user",
         headers={"PRIVATE-TOKEN": token},
+        timeout=_TIMEOUT,
     )
     if resp.status_code == 200:
         return resp.json()
@@ -32,6 +34,7 @@ def create_gitlab_project(token: str, name: str) -> dict:
         f"{GITLAB_BASE}/projects",
         headers={"PRIVATE-TOKEN": token},
         json={"name": name, "visibility": "private"},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -63,6 +66,7 @@ def get_gitlab_project_id(token: str, namespace_path: str) -> int:
     resp = httpx.get(
         f"{GITLAB_BASE}/projects/{encoded}",
         headers={"PRIVATE-TOKEN": token},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()["id"]
@@ -89,6 +93,7 @@ def create_merge_request(
             "target_branch": target_branch,
             "description": description,
         },
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -103,6 +108,7 @@ def get_open_mr_for_branch(token: str, project_id: int, branch: str) -> dict | N
         f"{GITLAB_BASE}/projects/{project_id}/merge_requests",
         headers={"PRIVATE-TOKEN": token},
         params={"source_branch": branch, "state": "opened"},
+        timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     items = resp.json()
