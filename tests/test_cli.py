@@ -29,7 +29,9 @@ from tests.fixtures.cli import (
     POSITION_YXMD_B,
 )
 
-runner = CliRunner()  # click 8.2+: stdout/stderr always separate (mix_stderr removed)
+runner = CliRunner(
+    mix_stderr=False
+)  # separate stdout and stderr so JSON tests parse cleanly
 
 
 # ---------------------------------------------------------------------------

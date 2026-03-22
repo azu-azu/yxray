@@ -8,4 +8,6 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 dist/
+build/
+file_version_info.txt
 *.egg-info/

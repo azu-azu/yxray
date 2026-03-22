@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ci-templates/.gitlab-ci.yml
+#
+# SETUP: Copy this file to your Alteryx workflow repo root as .gitlab-ci.yml.
+# See ci-templates/README.md for full setup instructions.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Trigger: Every Merge Request that touches a .yxmd or .yxwz file.
+#
+# Steps
+#   1. Install Python + acd
+#   2. Generate diff_comment.md + diff_<name>.html via Python helper
+#   3. Post diff_comment.md as an MR note via the GitLab API
+#   4. Expose HTML reports as job artifacts (one-click open in browser via
+#      the "View exposed artifact" button GitLab adds to the MR automatically)
+#
+# Key GitLab advantage over GitHub:
+#   `artifacts: expose_as` creates a direct browser-openable link inside the MR.
+#   This works for private repos — no htmlpreview.github.io workaround needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - diff
+
+alteryx-diff:
+  stage: diff
+  image: python:3.11-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl
+
+  # Run on every Merge Request. The Python script will exit early
+  # safely if no Alteryx files were modified.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  variables:
+    # Aliases so the Python script is identical to the GitHub version.
+    BASE_REF: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    HEAD_SHA: $CI_COMMIT_SHA
+    # Full git history needed for git show <base>:<file>
+    GIT_DEPTH: "0"
+
+  script:
+    # ── Install acd ─────────────────────────────────────────────────────────
+    # Public repo: install directly.
+    # Private repo: use a deploy token or project access token stored in a
+    # CI/CD variable, e.g.:
+    #   pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/<ns>/<acd-repo>.git
+    - pip install --quiet git+https://github.com/Laxmi884/alteryx_diff.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
+    - acd --help # smoke-test: fails the job immediately if acd isn't on PATH
+
+    # ── Fetch base branch (needed for git show) ────────────────────────────
+    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+
+    # ── Generate diff_comment.md + diff_*.html ─────────────────────────────
+    - python3 .gitlab/scripts/generate_diff_comment.py
+
+    # ── Post the comment as an MR note via the GitLab REST API ────────────
+    # Post MR Comment (Gracefully skips if GITLAB_TOKEN is missing)
+    - |
+      if [ -n "$GITLAB_TOKEN" ]; then
+        echo "Token found, attempting to post comment..."
+        # Extract markdown to a variable, escaping json carefully or sending it gracefully
+        python3 -c 'import json,sys; sys.stdout.write(json.dumps({"body": open("diff_comment.md").read()}))' > diff_payload.json
+        curl --silent --fail-with-body \
+             --request POST \
+             --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+             --header "Content-Type: application/json" \
+             --data @diff_payload.json \
+             "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+      else
+        echo "⚠️ GITLAB_TOKEN is not set. Skipping MR comment post."
+        echo "To enable automated comments, create a Project Access Token and add it to CI/CD Variables as GITLAB_TOKEN."
+      fi
+
+  artifacts:
+    # ── HTML reports ─────────────────────────────────────────────────────────
+    # `expose_as` tells GitLab to display a "View exposed artifact" button
+    # directly inside the MR page. Clicking it opens the directory in the
+    # browser with no download or ZIP — works on private projects.
+    paths:
+      - "diff_reports/"
+      - "diff_comment.md"
+    expose_as: "Alteryx Diff Report"
+    when: always # upload even if the script exits non-zero
+    expire_in: "30 days"

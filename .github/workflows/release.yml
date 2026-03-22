@@ -1,0 +1,63 @@
+name: Build and Release
+
+"on":
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Build React frontend
+        working-directory: app/frontend
+        run: |
+          npm ci --legacy-peer-deps
+          npm run build
+
+      - name: Generate version info
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $version = "$env:TAG_NAME".TrimStart('v') + ".0"
+          uv run pyivf-make_version --source-format yaml --metadata-source version_info.yml --outfile file_version_info.txt --version "$version"
+
+      - name: Build EXE
+        run: uv run pyinstaller app.spec --noconfirm
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/AlterxyGitCompanion.exe
+          body: |
+            ## Alteryx Git Companion
+
+            ### Installation
+
+            Download `AlterxyGitCompanion.exe` and double-click to run.
+
+            **Windows SmartScreen warning:** Windows may show a SmartScreen warning because the app is not yet code-signed. Click **More info** then **Run anyway** to proceed.

@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ci-templates/.github/workflows/pr-diff-report.yml
+#
+# SETUP: Copy this file to .github/workflows/ in your Alteryx workflow repo.
+# See ci-templates/README.md for full setup instructions.
+#
+# Trigger: Every PR that touches a .yxmd or .yxwz file.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Steps
+#   1. Checkout (full history)
+#   2. Set up Python 3.11
+#   3. Install acd from GitHub
+#   4. Generate diff_comment.md + diff_<name>.html via Python helper
+#   5. Post or update diff report PR comment (find-or-update via <!-- acd-diff-report --> marker)
+#      ↳ comment contains a direct link to the Actions run artifact
+#   6. Upload HTML files as a downloadable workflow artifact
+#      ↳ reviewers click the Actions run link in the comment → Artifacts section
+#
+# Permissions:
+#   contents: read       – clone + git show base-branch file versions
+#   pull-requests: write – post PR comments
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Alteryx Workflow Diff Report
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**.yxmd"
+      - "**.yxwz"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  alteryx-diff:
+    name: Alteryx Canvas Diff
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Python runtime ──────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Install acd ─────────────────────────────────────────────────────
+      #
+      # PUBLIC REPO (current): installs directly from GitHub.
+      # PRIVATE REPO: add secret GH_PAT (fine-grained PAT, Contents: read) and use:
+      #   pip install git+https://${{ secrets.GH_PAT }}@github.com/Laxmi884/alteryx_diff.git
+      - name: Install acd
+        run: |
+          pip install --quiet git+https://github.com/Laxmi884/alteryx_diff.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
+          acd --help
+
+      # ── 4. Generate diff comment + HTML reports ────────────────────────────
+      # Outputs:
+      #   diff_comment.md      – Markdown PR comment (with artifact download link)
+      #   diff_<stem>.html     – Interactive HTML report per changed file
+      - name: Generate diff comment
+        run: python3 .github/scripts/generate_diff_comment.py
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 5. Post or update diff report PR comment ───────────────────────────
+      # Uses find-or-update pattern: embeds <!-- acd-diff-report --> marker
+      # in the comment body so future pushes update the same comment rather
+      # than creating a new one. per_page: 100 avoids first-page miss on
+      # PRs with many comments (GitHub paginates at 30 by default).
+      - name: Post or update diff report PR comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs   = require('fs');
+            const path = require('path');
+
+            const MARKER      = '<!-- acd-diff-report -->';
+            const commentFile = path.join(process.env.GITHUB_WORKSPACE, 'diff_comment.md');
+            const sha         = context.payload.pull_request.head.sha.substring(0, 7);
+            const ts          = new Date().toUTCString();
+
+            let body;
+            if (fs.existsSync(commentFile)) {
+              body = fs.readFileSync(commentFile, 'utf8');
+              // body already starts with MARKER — Python helper owns the marker.
+              // Do NOT prepend MARKER here; doing so causes double-marker and breaks detection.
+            } else {
+              body = [
+                MARKER,
+                '## Alteryx Workflow Diff Report',
+                '',
+                '> Could not generate diff report. Check the Actions log for details.',
+                '',
+                'Commit: `' + sha + '` | ' + ts,
+              ].join('\n');
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+              per_page:     100,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info('Updated existing comment: ' + existing.html_url);
+            } else {
+              const result = await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created new comment: ' + result.data.html_url);
+            }
+
+      # ── 6. Upload HTML reports as a downloadable artifact ──────────────────
+      # The PR comment contains a direct link to this Actions run. Reviewers
+      # click it → scroll to Artifacts → download the ZIP containing all HTML
+      # reports. The HTML files are self-contained (offline-capable, no CDN).
+      - name: Upload HTML diff reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: alteryx-diff-html-pr${{ github.event.pull_request.number }}-run${{ github.run_number }}
+          path: "diff_*.html"
+          if-no-files-found: ignore
+          retention-days: 30

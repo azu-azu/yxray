@@ -1,23 +1,29 @@
 # Feature Research
 
-**Domain:** XML workflow diff tool — visual programming comparison for Alteryx .yxmd files
-**Researched:** 2026-02-28
-**Confidence:** MEDIUM (primary sources: Simulink docs HIGH; Alteryx community MEDIUM; XML diff tools MEDIUM; governance requirements MEDIUM)
+**Domain:** Desktop companion app — Git-based version control for non-technical Alteryx analysts (local web server, Python FastAPI + React, bundled .exe)
+**Researched:** 2026-03-13
+**Confidence:** MEDIUM-HIGH (primary sources: official tool docs, GitHub Desktop docs, Tower feature pages, community analysis; research is current but some Alteryx-specific UX data inferred from analogous tools)
 
 ---
 
 ## Research Basis
 
 Sources consulted:
-- Alteryx built-in Compare Workflows (official docs + community)
-- KNIME Workflow Comparison feature (community forum)
-- Simulink Comparison Tool (MathWorks official docs, R2025a)
-- DeltaXML XML Compare (official docs)
-- xmldiff library (PyPI/GitHub)
-- Beyond Compare XML mode (community forums)
-- Regulated industry audit trail requirements (21 CFR Part 11, GxP, SOX)
-- Graph visualization patterns (Cytoscape.js docs)
-- Git CI integration patterns (GitHub Actions ecosystem)
+- GitHub Desktop official docs (commit flow, branch management, auth)
+- Tower Git Client feature overview (official)
+- GitKraken Launchpad and Workspaces (official docs)
+- Sourcetree UX patterns (community + official)
+- Figma version history UX analysis (official blog + community)
+- Zeplin design version control (official docs)
+- Abstract branching models for design tools (Medium)
+- DVC (Data Version Control) non-developer UI approaches
+- Google Cloud Pipeline versioning UX
+- Windows system tray notification patterns (Microsoft Learn)
+- PyInstaller + FastAPI desktop app patterns (community)
+- Git Credential Manager browser-based auth (GitHub blog)
+- UXPin Git for designers analysis
+- Quora thread: "Why haven't version control systems targeted non-technical users?"
+- Alteryx governance and workflow management patterns (USEReady, community)
 
 ---
 
@@ -25,132 +31,136 @@ Sources consulted:
 
 ### Table Stakes (Users Expect These)
 
-Features any workflow diff tool must have. Missing these = product feels broken.
+Features Alteryx analysts expect if the app is positioned as "Git for your workflows." Missing any of these = app feels broken or incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Tool addition/removal detection | Core definition of "diff" — every diff tool does this | LOW | Alteryx built-in does this; ACD must match at minimum |
-| Configuration change detection | Users care about WHAT changed in a tool, not just THAT it changed | MEDIUM | Alteryx built-in does this at surface level; ACD must go deeper (expression text, field lists, filter logic) |
-| Connection change detection | Rewiring is a functional change; missing it = missed critical diffs | MEDIUM | Alteryx built-in flags connection mismatches; ACD must detect add/remove/rewire with anchor port identity |
-| Color-coded summary by change type | Every diff tool since `diff` uses color: green=add, red=remove, yellow=modify | LOW | Standard industry convention; deviating confuses users |
-| Noise filtering / normalization | Position drift, whitespace, attribute reorder = top complaint in every visual-programming diff tool community | HIGH | This is the hardest table-stakes feature. Simulink defaults to hiding nonfunctional changes. Alteryx community explicitly cites this as why raw Git diffs are useless. |
-| Human-readable output (not raw XML) | Raw XML diffs are unreadable to analytics developers without deep XML knowledge | MEDIUM | All competitors (Simulink, KNIME, Alteryx built-in) produce readable reports, not deltas |
-| Graceful error handling for malformed input | Users will run this on partially-saved or corrupted files | LOW | Descriptive error messages required; silent failures destroy trust |
-| Performance acceptable for large workflows | Workflows with 100-500 tools exist in production; users will not wait 60 seconds | MEDIUM | PROJECT.md targets <5s for 500 tools; Simulink and DeltaXML both handle large files |
-| Summary view before detail view | Users need to scan "is this a big change or small change" before reading details | LOW | Simulink, KNIME, and DeltaXML all lead with a summary/overview before per-item details |
-| CLI invocation with two file arguments | This is a developer tool; GUI-only tools get bypassed in scripts and pipelines | LOW | Primary interface per PROJECT.md |
+| Folder/repo registration ("Add a project folder") | Users expect to point the app at their workflows folder and have it "just work." No understanding of git init required. | LOW | GitHub Desktop and Tower both do this. App must auto-detect if folder is already a git repo or offer to initialize one. |
+| File change detection with visual indicator | Users need to see "something changed" without refreshing or polling manually. Dropbox/Google Drive conditioning creates this expectation. | MEDIUM | Use Python `watchdog` (cross-platform `inotify`/`ReadDirectoryChangesW`). Show badge/count on changed files. |
+| One-click "Save a version" (commit) flow | The mental model is "save a snapshot." Users should not need to know what staging is. | LOW | GitHub Desktop's checkbox-select-then-commit is the gold standard. Pre-fill commit message with timestamp + filename if user leaves it blank. |
+| Descriptive commit message prompt | Every git GUI requires a message. Non-technical users need a prompt/example, not a blank box. | LOW | GitHub Desktop uses "Copilot generate" as an optional assist. For ACD companion, a placeholder like "What changed? (e.g. Fixed customer filter logic)" is sufficient. |
+| View change history / timeline | Users expect to see a list of past versions, like Google Docs version history. | LOW | Show commits as a timeline: date, message, author. Tower and GitHub Desktop both do this well. |
+| "Push to backup" / sync to remote | Users understand "save to the cloud." The word "push" is acceptable if explained once during onboarding. | MEDIUM | GitHub Desktop uses "Publish branch" and "Push origin." GitKraken uses "Push." For ACD: "Back Up Now" or "Sync" is more accessible. |
+| Visual diff of any past version vs current | Users expect to click any history entry and see what changed — powered by the existing ACD diff engine. | MEDIUM | This is the key integration point with v1.0. The diff report (HTML) is embedded in an iframe or opened in a browser tab. |
+| Multi-folder/multi-project management | Analytics teams often maintain multiple project folders (by client, department, or use case). | LOW | GitKraken Workspaces and GitHub Desktop's repository switcher are the pattern. Show a left-panel project list. |
+| Windows-only .exe installer | Target users are Windows-based Alteryx users. No Python install required. | HIGH | PyInstaller + FastAPI is a validated pattern. Port conflict on startup is the main known risk (default port 7433). |
+| Always-visible app status | Users need ambient awareness of "is the app running and watching my files?" | LOW | System tray icon with tooltip state. This is the Dropbox/OneDrive interaction pattern non-technical users already understand. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that set ACD apart. None of the existing tools fully deliver these for the Alteryx context.
+Features that make this tool genuinely better than GitHub Desktop or Sourcetree for Alteryx analysts specifically.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Interactive graph visualization using canvas X/Y coordinates | Existing tools (Simulink, KNIME, Alteryx built-in) open the host application. ACD produces a standalone, self-contained HTML with an interactive graph — no Alteryx Designer required. Governance teams reviewing diffs do NOT have Alteryx licenses. | HIGH | Confirmed gap: Alteryx built-in requires Designer open. Simulink comparison requires MATLAB. ACD's HTML graph is genuinely differentiated. |
-| Hover/click on graph node to see inline config diff | Every competitor shows the diff in a separate panel or requires clicking through a tree view. Inline detail on the graph itself creates a single mental model for reviewing changes. | HIGH | Simulink shows changes "highlighted in yellow" in the editor; ACD's click-to-expand in the graph itself goes further. |
-| False-positive-zero normalization (GUID, timestamp, whitespace, attribute order) | Alteryx community explicitly documents that position drift and GUID regeneration make raw XML diffs useless. No existing Alteryx-specific diff tool has solved this comprehensively. | HIGH | This is the #1 reason ACD exists. KNIME comparison has known bugs (not listing all changes). DeltaXML solves this for generic XML but is not Alteryx-aware. |
-| Secondary ToolID matching (type + position fallback) | When Alteryx regenerates ToolIDs on save (documented behavior), pure ID-based diff produces false add/remove pairs. No existing Alteryx tool handles this. | HIGH | Confirmed Alteryx-specific problem from PROJECT.md and community. DeltaXML's orderless comparison hints at the algorithm pattern needed. |
-| Self-contained HTML report (no server, no Alteryx, no dependencies) | Report can be emailed, attached to a JIRA ticket, committed to Git as an artifact, or posted as a PR comment. Every competitor requires either the authoring tool or a server. | MEDIUM | DeltaXML's side-by-side HTML requires a server for JS assets. ACD's report should embed all CSS/JS. This enables governance use case without tool installation. |
-| JSON output for machine-readable consumption | CI pipelines, Git hooks, and Alteryx Server integrations need structured output, not HTML parsing. No existing Alteryx diff tool produces JSON. | MEDIUM | git-diff-action and similar CI tools demonstrate that JSON export is the standard for pipeline integration. Enables Phase 3 API layer with no changes to core engine. |
-| `--include-positions` opt-in flag | Users sometimes DO want to see positional changes (e.g., when reviewing intentional canvas reorganizations). Most tools either always show or always hide position changes. Explicit opt-in is more powerful. | LOW | Simulink R2025a added Quick Filters for nonfunctional changes — same insight, but Simulink buries it in the UI. ACD's CLI flag makes it explicit and scriptable. |
-| Governance-ready report structure with timestamp and file identity | Regulated industries (pharma, finance) using Alteryx require ALCOA+ compliance: attributable, contemporaneous, accurate records of what changed. Reports must include compared file paths, file hashes, and diff timestamp. | MEDIUM | GxP/21 CFR Part 11/SOX requirements documented. No existing Alteryx diff tool produces audit-ready output. This is a genuine gap for pharma/finance Alteryx users. |
+| Embedded diff viewer using existing ACD report | No other Git GUI can show what changed *inside* an Alteryx workflow — only raw XML diffs. This is the only tool that understands .yxmd semantically. | MEDIUM | iframe/webview embedding the existing HTML report. The diff engine is already built; this is the UX integration layer. HIGH confidence this is genuinely differentiated — no competitor does Alteryx-aware diffs. |
+| Workflow-aware language throughout ("workflow" not "file", "version" not "commit") | Lowers cognitive friction. Alteryx analysts think in "workflows" and "versions," not "files" and "commits." | LOW | Vocabulary substitution: commit → "Save Version", push → "Back Up", branch → "Workspace Copy", merge → "Combine Changes". Research confirms terminology abstraction is a key non-technical UX strategy (Tower's philosophy, GitKraken's design). |
+| Auto-suggested version notes from detected changes | On open of "Save Version" panel, pre-populate the message with the ACD diff summary: "Modified 2 tools, added 1 connection." User edits to add context, or accepts as-is. | HIGH | Requires running a lightweight diff on save. This is the highest-complexity differentiator but also the most likely to generate delight. Similar to Zeplin's "which artboards changed" auto-detection. |
+| CI integration: auto-post diff report on GitHub PR / GitLab MR | The v1.0 GitHub Actions integration means that when users push through the app, CI automatically posts a visual diff to the PR. This is invisible to the user but a major governance value. | MEDIUM | CI YAML is already written (v1.0). The companion app needs to: (a) surface that CI is configured, (b) show when a PR has been posted. Link to PR from the app's history view. |
+| "Safe" branch creation for experimenting ("Try something out") | Non-technical users fear making mistakes. A "Create a copy to experiment" button (creates a branch) with clear "go back to main" UX makes experimentation feel safe. | MEDIUM | Tower's philosophy: make it hard to lose work. Research confirms undo + safety net is what makes non-technical users trust a git tool. Name the branch based on timestamp + user intent (e.g. `experiment/2026-03-13-test-new-filter`). |
+| Undo last "Save Version" with one click | The most powerful onboarding statement: "You can always undo." Tower's single-click undo via Cmd+Z is cited as its philosophy. For non-technical users, this removes fear of the tool. | LOW | `git reset --soft HEAD~1` under the hood. Surface as "Undo Last Save" in the history view. Clear confirmation dialog with preview of what will be undone. |
+| Conflict-free push with "someone else changed this" explanation | When push fails due to remote changes, display a clear explanation: "Someone else saved a newer version. Here's what they changed." Offer "View their changes" and "Merge" options. | HIGH | Pull conflict resolution is the #1 place non-technical users abandon git GUIs. This is a known pitfall (see PITFALLS.md). Reduce to a clear 2-option dialog rather than a merge editor. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build in Phase 1 — and why.
+Features that seem natural to request but create more problems than value for this user population.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Three-way merge capability | Users coming from Git tools expect merge; Simulink has it | Merge requires understanding of semantic equivalence for Alteryx configs — an unsolved problem. A bad merge silently corrupts workflows. Ship reliable diff first; merge requires 10x the validation effort. | Document that ACD is diff-only. Point to Alteryx Designer's own merge UX for conflict resolution. |
-| Real-time overlay inside Alteryx Designer | Dream feature in community requests | Requires Alteryx plugin SDK, which is undocumented and unsupported. Ties the tool to Alteryx's release cycle. Destroys the "no Alteryx license required" governance use case. | The HTML report IS the overlay. Governance teams open the HTML; developers reference it while working in Designer. |
-| Macro recursion parsing (nested macros) | Workflows frequently call macros; users want recursive diffs | Macros are separate .yxmd files with their own paths. Recursive parsing requires path resolution, which breaks when file paths differ between environments (dev/prod). Creates O(n) file I/O with unclear boundaries. | Phase 2 feature. Phase 1: detect macro calls as tool configurations (the macro path IS a config value), flag when a macro tool's path or input mapping changes. |
-| Web upload UI for drag-and-drop comparison | Non-technical governance users want a UI | Adds server infrastructure, authentication, file storage, and security concerns in Phase 1 when the diff engine itself isn't validated. Classic premature UX investment. | Phase 3 feature. Phase 1 CLI output is sufficient for developers. Self-contained HTML covers governance reviewers. |
-| AI-generated natural language change summary | "Describe what changed in plain English" — compelling pitch | AI summaries for workflow configs are high-hallucination risk. A wrong AI summary ("this change is cosmetic") on a functional change in a regulated pipeline is worse than no summary. | Phase 3+ feature after diff quality is validated. Add only when false-positive rate is demonstrably near-zero. Human-readable structured output (tool name, change type, before/after values) is sufficient and accurate. |
-| Bi-directional merge / cherry-pick | Power users want to pick individual changes from each version | Requires a three-panel UI and semantic understanding of which Alteryx config values are safe to merge independently. Scope is 10x Phase 1. | Defer entirely to Phase 3+. Current scope is read-only analysis, not mutation. |
-| Workflow execution trace / runtime diff | Some users want to compare outputs, not structure | Fundamentally different product (data quality testing, not code review). Requires running both workflows, which needs Alteryx Server licenses and real data. | Out of scope permanently for ACD. Different tool category. |
+| Full Git command passthrough / terminal | Power users want full Git access from within the app | The target users are non-technical. Exposing a terminal undermines the "simple as Dropbox" UX promise and creates support burden when users break things. | Add a "Open in GitHub Desktop" escape hatch for power users who need raw Git access. |
+| Automatic commits on every file save | Seems like "auto-backup" — Dropbox mental model | Auto-commits with no message produce useless history ("Auto-save 14:32:01", "Auto-save 14:32:45"). Non-technical users end up with hundreds of undifferentiated history entries and can't find "the version before I broke it." | File watcher detects changes and shows a "You have unsaved changes" badge. User triggers commit intentionally with a message. |
+| Three-way merge editor | Users who encounter conflicts want to resolve them | A merge editor for .yxmd XML is meaningless to an Alteryx analyst. They can't read raw XML diffs. | Surface conflicts as: "Both you and [name] changed this file. Here's what each version looks like." Show two ACD diff reports (vs. common ancestor). Let user choose which version to keep. This is conflict resolution without a text editor. |
+| Branch visualization graph (commit tree) | GitHub Desktop and GitKraken both show it; users expect it | The commit DAG is incomprehensible to non-developers. It adds visual complexity without value for users who only need "what's my current version" and "what were past versions." | Show a simple flat timeline per workflow file. Branch state shown as a label, not a graph. |
+| In-app text/XML editor | Some users want to edit workflow files directly | .yxmd files are binary XML designed to be edited only in Alteryx Designer. Editing them manually risks corruption. | Block direct editing. Surface a "Open in Alteryx Designer" button from any file in the app. |
+| Scheduled automatic push | "Back up every night" seems like good governance | Scheduled pushes without user-authored messages produce commit history that fails audit requirements. In regulated industries (banks, insurance), commits must be attributable with intentional messages per ALCOA+ standard. | Offer a daily reminder notification: "You have unsaved changes from today. Save a version before closing?" |
+| Full GitHub/GitLab web integration (issues, PRs, review) | GitKraken Launchpad does this; seems natural | Alteryx analysts don't use GitHub for issue tracking or code review workflows. Adding PR review UX adds complexity with near-zero value for this persona. | Show one thing from CI: "A diff report was posted on your PR" with a link. Nothing more. |
+| Git LFS for large workflow files | .yxmd files can be large; LFS seems right | LFS requires server-side LFS support and adds configuration complexity. Most Git hosts support it, but setup friction is high. .yxmd files are typically under 1MB for even large workflows. | Only recommend LFS if file sizes consistently exceed 50MB. Document the decision. Default to standard git. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[XML Parsing + Validation]
-    └──required by──> [Normalization Layer]
-                          └──required by──> [Diff Engine]
-                                                ├──required by──> [Tool Diff (add/remove/modify)]
-                                                ├──required by──> [Connection Diff]
-                                                └──required by──> [Config Change Detection]
+[App Launch / Port Detection]
+    └──required by──> [Local Web Server (FastAPI + React)]
+                          └──required by──> [All UI features]
 
-[Tool Diff] ──feeds──> [HTML Report Generator]
-[Connection Diff] ──feeds──> [HTML Report Generator]
-[Config Change Detection] ──feeds──> [HTML Report Generator]
+[Folder Registration]
+    └──required by──> [File Watcher]
+                          └──required by──> [Change Detection Badge]
+                                                └──required by──> [Save Version Flow]
 
-[HTML Report Generator]
-    ├──required by──> [Color-coded Summary]
-    ├──required by──> [Per-tool Detail Sections]
-    └──required by──> [Interactive Graph Visualization]
+[Save Version Flow]
+    ├──required by──> [History Timeline]
+    └──required by──> [Undo Last Save]
 
-[Interactive Graph Visualization]
-    └──enhanced by──> [Hover/Click Inline Config Diff]
+[ACD Diff Engine (v1.0)]
+    └──required by──> [Embedded Diff Viewer]
+                          └──enhanced by──> [Auto-suggested Version Notes]
 
-[Diff Engine] ──parallel output──> [JSON Summary Export]
+[Remote Configuration (GitHub/GitLab)]
+    └──required by──> [Push / Sync]
+                          └──required by──> [CI Integration Link]
 
-[Secondary ToolID Matching] ──required by──> [Diff Engine]
-    (without this, ToolID regeneration causes false add/remove pairs)
+[Branch Create ("Experiment")]
+    └──required by──> [Merge / Combine Changes]
+                          ──conflicts with──> [Conflict-free Guarantee]
+                          (conflicts are unavoidable when two people change the same file)
 
-[Normalization Layer] ──conflicts with──> [--include-positions flag]
-    (positions suppressed by default; flag disables position normalization only)
+[System Tray Icon]
+    └──enhanced by──> [File Watcher]
+    └──enhanced by──> [CI Integration Status]
 
-[JSON Summary Export] ──enables (Phase 3)──> [CI/CD GitHub Action]
-[JSON Summary Export] ──enables (Phase 3)──> [REST API / Alteryx Server webhook]
+[Onboarding Flow]
+    └──required before──> [Folder Registration]
+    └──required before──> [Remote Authentication]
 ```
 
 ### Dependency Notes
 
-- **Normalization Layer requires XML Parsing:** Cannot normalize what isn't parsed into a structured model. The object model (ToolID, type, position, config, connections) must be clean before normalization can identify what's noise vs. signal.
-- **Secondary ToolID Matching requires Diff Engine:** The fallback matching (type + position heuristic) is part of the diff algorithm, not the parser. It activates when ID-based matching fails to find a counterpart.
-- **Interactive Graph requires HTML Report:** The graph is embedded IN the HTML report — not a separate artifact. Pyvis or D3.js is bundled into the HTML output.
-- **JSON Export is independent of HTML:** Both can be generated from the same diff result object. JSON adds no complexity once the diff engine exists; it's a second serializer.
-- **`--include-positions` conflicts with normalization:** The normalization layer strips position attributes by default. The flag must bypass only the position-stripping step, not all normalization (GUIDs and whitespace normalization remain active regardless).
+- **File Watcher requires Folder Registration:** Watchdog cannot watch a path that isn't registered. Registration also runs `git init` if needed — these are the same step.
+- **Embedded Diff Viewer requires ACD Diff Engine:** The companion app is a UI layer over the existing v1.0 engine. The engine must be bundled in the .exe via PyInstaller.
+- **Auto-suggested Version Notes requires Diff Engine at commit time:** Diffs run synchronously when the "Save Version" panel opens. Must be fast enough to not feel blocking (<1 second for typical .yxmd files).
+- **Remote Authentication required before Push:** GitHub OAuth browser flow or GitLab PAT entry must complete before any push is attempted. Auth state must persist across app restarts (OS credential store, not plaintext file).
+- **Branch Create and Merge are linked:** Creating an experimental branch is only useful if there's a path back. Both features must ship together.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1)
+### Launch With (v1.1 — companion app MVP)
 
-Minimum viable product — what validates the core diff engine and report quality.
+Minimum viable product — what validates that non-technical users can do intentional version control with no Git knowledge.
 
-- [ ] XML parsing and validation with descriptive errors on malformed input — without this, nothing works
-- [ ] Normalization layer: strip GUIDs, timestamps, whitespace, attribute reordering — without this, every Git commit produces hundreds of false positives
-- [ ] Secondary ToolID matching by type + position fallback — without this, any Alteryx save that regenerates IDs produces false add/remove pairs
-- [ ] Tool diff: detect additions, removals, and modifications with before/after config values — core diff output
-- [ ] Connection diff: detect additions, removals, and anchor rewirings — functional change detection
-- [ ] HTML report with color-coded summary section — green/red/yellow convention; scannable at a glance
-- [ ] HTML report with expandable per-tool detail sections — detail on demand
-- [ ] Interactive graph visualization using canvas X/Y coordinates, color-coded by change type — the key differentiator; makes the report a visual tool review rather than XML reading
-- [ ] Hover/click on graph nodes for inline config diff — completes the "see it in context" use case
-- [ ] Self-contained HTML (all JS/CSS embedded) — enables email/attach/commit without server
-- [ ] `--include-positions` flag — gives users opt-in control, prevents the "why doesn't it show position changes?" support question
-- [ ] Performance target: <5 seconds for 500-tool workflows — validates production viability
+- [ ] Single-folder repo management (register one folder, watch for .yxmd changes) — foundation of everything
+- [ ] Auto `git init` on first registration if folder is not already a repo — removes the "what is git init" barrier
+- [ ] File change detection with badge/count indicator — real-time awareness that mimics Dropbox/OneDrive
+- [ ] Save Version flow: select changed files, write message, commit — the core non-technical Git action
+- [ ] History timeline with date, message, author per commit — users need to see what they've saved
+- [ ] Embedded diff viewer: click any history entry, see ACD diff report in-frame — the key integration with v1.0; this is the "wow" feature
+- [ ] Undo Last Save (one-click) — the safety net that makes users trust the tool
+- [ ] System tray icon with app status (watching / not running) — ambient presence, Dropbox-style
+- [ ] First-run onboarding: what is this app, how to add a project folder — non-technical users need guided entry
+- [ ] .exe bundled installer: launch, open browser at localhost:7433 — Windows-only, no Python install required
 
-### Add After Validation (v1.x)
+### Add After Validation (v1.1.x)
 
-Add once core diff quality is confirmed accurate in real workflows.
+Add once core commit/history/diff loop is validated with at least one real user team.
 
-- [ ] JSON summary output (`--json` flag) — trigger: first user asks to integrate with a Git hook or CI script; adding this is a second serializer with no engine changes
-- [ ] Governance-ready report metadata (file paths, file hashes, timestamp) — trigger: first regulated-industry team uses ACD for audit; adds 10 lines to the report template
-- [ ] Configurable noise rules (user-defined attributes to ignore) — trigger: users encounter Alteryx-version-specific metadata that ACD doesn't normalize by default
+- [ ] Multi-folder project management — trigger: users report managing multiple project folders
+- [ ] Remote auth (GitHub OAuth + GitLab PAT) and Push — trigger: users want "backup to cloud" or CI integration
+- [ ] CI integration link (show when a diff report was posted on a PR) — trigger: remote push is live
+- [ ] Commit message auto-suggestion from diff summary — trigger: user feedback that blank message field is intimidating
+- [ ] "Create experiment copy" (branch creation) — trigger: users ask "how do I try something without breaking the main version"
 
 ### Future Consideration (v2+)
 
-Defer until product-market fit is established.
+Defer until product-market fit for the companion app is established.
 
-- [ ] Macro recursion parsing — defer because path resolution across environments is complex; validate that single-workflow diff solves 80% of the use case first
-- [ ] REST API / Alteryx Server webhook integration — defer because it requires server infrastructure and auth; validate CLI value proposition first (PROJECT.md explicitly Phase 3)
-- [ ] Git PR comment bot — defer because it requires GitHub Actions wrapper + hosted service; validate JSON output value first
-- [ ] Web upload UI — defer because it requires server, auth, file storage; CLI + HTML covers current users
-- [ ] AI natural language change summary — defer because hallucination risk is unacceptable for regulated workflows; requires validated near-zero false-positive rate first
+- [ ] Conflict resolution UX ("someone else changed this") — defer until multi-user push conflicts are observed in real usage
+- [ ] Team/collaboration features (see others' commits, blame) — defer; current target is single-analyst workflow
+- [ ] GitHub/GitLab web UI deep integration (PR review, issue tracking) — defer; out of scope for Alteryx analyst persona
+- [ ] Mobile or web-hosted version — defer; .exe is the deployment model; web requires auth and hosting infrastructure
+- [ ] Scheduled version reminders (notification: "You have changes today") — defer; validate core commit flow first
 
 ---
 
@@ -158,88 +168,164 @@ Defer until product-market fit is established.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| XML parsing + normalization | HIGH | MEDIUM | P1 |
-| Secondary ToolID matching | HIGH | MEDIUM | P1 |
-| Tool diff (add/remove/modify) | HIGH | LOW | P1 |
-| Connection diff | HIGH | LOW | P1 |
-| Color-coded HTML summary | HIGH | LOW | P1 |
-| Interactive graph with canvas coords | HIGH | HIGH | P1 |
-| Hover/click inline config diff | HIGH | MEDIUM | P1 |
-| Self-contained HTML output | HIGH | LOW | P1 |
-| `--include-positions` flag | MEDIUM | LOW | P1 |
-| Performance <5s for 500 tools | HIGH | MEDIUM | P1 |
-| JSON output flag | MEDIUM | LOW | P2 |
-| Governance metadata in report | MEDIUM | LOW | P2 |
-| Configurable noise rules | MEDIUM | MEDIUM | P2 |
-| Macro recursion parsing | HIGH (long-term) | HIGH | P3 |
-| REST API layer | HIGH (long-term) | HIGH | P3 |
-| Web upload UI | MEDIUM | HIGH | P3 |
-| Three-way merge | LOW (Phase 1) | HIGH | Defer |
-| AI natural language summary | LOW (risky) | MEDIUM | Defer |
+| Folder registration + git init | HIGH | LOW | P1 |
+| File watcher (.yxmd change detection) | HIGH | LOW | P1 |
+| Save Version flow (commit) | HIGH | LOW | P1 |
+| History timeline | HIGH | LOW | P1 |
+| Embedded ACD diff viewer | HIGH | MEDIUM | P1 |
+| Undo Last Save | HIGH | LOW | P1 |
+| System tray icon + app status | HIGH | LOW | P1 |
+| First-run onboarding | HIGH | LOW | P1 |
+| .exe bundled installer | HIGH | HIGH | P1 |
+| Multi-folder management | MEDIUM | LOW | P2 |
+| Remote auth + push/sync | HIGH | MEDIUM | P2 |
+| CI integration link | MEDIUM | LOW | P2 |
+| Commit message auto-suggestion | MEDIUM | HIGH | P2 |
+| Branch create ("experiment copy") | MEDIUM | MEDIUM | P2 |
+| Conflict resolution UX | HIGH (when needed) | HIGH | P3 |
+| Scheduled version reminders | MEDIUM | LOW | P3 |
+| Team collaboration / blame | LOW (solo analysts) | HIGH | Defer |
+| Full GitHub/GitLab PR review | LOW | HIGH | Defer |
 
 **Priority key:**
-- P1: Must have for launch — validates core value proposition
-- P2: Should have — add after first internal validation cycle
-- P3: Nice to have — future phase (Phase 2/3 per PROJECT.md)
-- Defer: Explicitly out of scope; document the deliberate choice
+- P1: Must have for v1.1 launch
+- P2: Should have, add in v1.1.x after validation
+- P3: Nice to have, plan for v1.2+
+- Defer: Explicitly out of scope; not worth the complexity for target persona
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Alteryx Built-in Compare | Simulink Comparison Tool | KNIME Workflow Compare | DeltaXML XML Compare | ACD (our approach) |
-|---------|--------------------------|--------------------------|------------------------|----------------------|-------------------|
-| Detects tool add/remove | Yes | Yes | Yes | Yes (element level) | Yes |
-| Detects config changes | Yes (surface) | Yes (block params) | Partial (known bugs) | Yes (attribute level) | Yes (expression/filter text) |
-| Detects connection changes | Yes | Yes | Partial | Yes (element structure) | Yes (with port identity) |
-| Hides position noise by default | No (shows all) | Yes (nonfunctional filter) | Unknown | Configurable | Yes (default; opt-in flag) |
-| ToolID regeneration handling | No | N/A (different problem) | N/A | N/A | Yes (secondary matching) |
-| GUID/timestamp normalization | No | N/A | Unknown | Configurable | Yes (always on) |
-| Standalone HTML output | No (requires Designer) | No (requires MATLAB) | No (requires KNIME) | Yes (but JS assets external) | Yes (fully self-contained) |
-| Interactive graph visualization | Yes (requires Designer) | Yes (requires MATLAB) | Yes (requires KNIME) | No | Yes (embedded in HTML) |
-| Hover/click inline detail | Requires Designer UI | Requires MATLAB UI | Requires KNIME UI | No | Yes (in HTML report) |
-| JSON machine-readable output | No | No | No | Yes (DeltaV2 XML delta) | Yes (Phase 1.x) |
-| CLI invocation | Yes (`/diff` flag) | No | No | Yes | Yes (primary interface) |
-| Governance metadata in report | No | No | No | Partial | Yes (Phase 1.x) |
-| Macro/nested workflow handling | No | Partial (library blocks) | Partial (components) | N/A | Phase 2 |
-| No license required to view report | No | No | No | Depends on output | Yes (HTML only) |
+What the best tools in the non-technical Git GUI space do, and what ACD companion app should learn from each.
 
-**Key insight from competitor analysis:** The gap ACD fills is specifically "governance team wants to review what changed before workflow promotion, without Alteryx Designer installed." Every existing tool requires the authoring environment to view a meaningful diff. ACD's self-contained HTML report is the only approach that works for license-limited reviewers.
+| Feature Area | GitHub Desktop | Tower | GitKraken | Sourcetree | ACD Companion (our approach) |
+|---|---|---|---|---|---|
+| Commit flow | Checkbox file selection + message field + "Commit to [branch]" button. Clean, linear. Optional Copilot message generation. | Granular staging (file, hunk, line level). Commit templates. | Drag-and-drop staging. Large commit button. | Standard staging area; more technical feel. | Simplified: auto-select all .yxmd changes. Single message field with placeholder text. |
+| Terminology | Uses "push", "pull", "branch" — standard Git terms | Uses "push", "pull", "branch" — does not abstract | Uses "push", "pull" — does not abstract | Uses Git terms throughout | Abstracts: "Save Version", "Back Up", "Experiment Copy". One-time explanation in onboarding. |
+| Undo/safety | Discarded changes go to Trash folder (recoverable). No single-click undo for commits. | Cmd+Z undoes virtually all Git operations including deletes, rebase, merge. Safety philosophy is explicit. | Undo available for most operations. | No prominent undo. | Undo Last Save (one-click). Also: "discard changes" moves .yxmd to a .acd-backup folder rather than deleting. |
+| Branch management | "Current Branch" dropdown, clear branch list, protected branch warnings. | Full branch management, drag-and-drop merge/cherry-pick. Branches are prominent. | Visual branch tree (can be overwhelming for beginners). | Full branch management with visual graph. | Hide branch complexity. One "Create Experiment Copy" button. Show current branch/workspace as a label not a dropdown. |
+| Diff viewer | Line-level text diff with syntax highlighting. No domain-specific understanding. | Integrated side-by-side diff with image diff support. Still text-based. | Inline diff with hunk selection. Text-based. | Text diff. | **Embedded ACD HTML report** — semantic diff with interactive graph. This is the unique value. No competitor can show what changed inside a .yxmd file meaningfully. |
+| Auth flow | Browser-based OAuth. "Sign in with GitHub" launches browser, redirects back. Clear success state. | Account setup via preferences. Supports OAuth and PAT. | OAuth via browser. Supports GitHub, GitLab, Bitbucket. | PAT-based; setup involves GitHub.com settings; known friction point for beginners. | GitHub: browser OAuth (same as GitHub Desktop). GitLab: PAT with inline instructions and link to GitLab settings. Passwords never stored in app (OS credential store only). |
+| Onboarding | "Let's get started" dialog: clone, create new, or add existing repo. Three clear options. | 150-page guide + in-app checklist. Beginner video series. | Interactive tutorial for first-time users. | Tutorial available but not forced. | Single-screen onboarding: "Point me at your Alteryx workflows folder." One choice, not three. |
+| Multi-repo management | Repository list in left panel + switcher. Clean. | Repository list in sidebar. | Workspaces: group repos by team/project. | Sidebar with bookmarks. | Project list in left panel. Each project = one workflows folder. |
+| Background awareness | No background process; app must be open. | No background process. | No background process. | No background process. | **System tray icon** — runs as background service. File watcher active when app is "watching". This is a key differentiator vs all listed GUI tools. |
+
+### Key Lessons from Competitor Analysis
+
+**From GitHub Desktop:** The three-option "get started" screen (clone / create / add existing) is too much for non-technical users. ACD companion app should offer one path: "Add a folder."
+
+**From Tower:** The Cmd+Z safety net philosophy is essential for non-technical adoption. Users must feel they cannot lose work. Undo Last Save must be in the MVP.
+
+**From GitKraken:** The Launchpad (unified PR/issue view) is powerful for developers but wrong for Alteryx analysts. Do not import that pattern. Instead, the equivalent for ACD is the history timeline per workflow file — simple and focused.
+
+**From Sourcetree:** PAT authentication is the biggest UX failure point for non-technical users. Multiple community threads document confusion with PATs and OAuth. GitHub Desktop's browser-OAuth flow is superior for this audience.
+
+**From Figma:** Non-technical users adopted version history only through named versions and visual comparisons. Auto-save with unnamed versions creates noise. Named saves (commit messages) with a visual diff are the right model.
+
+**From domain-specific tools (DVC, Google Cloud Pipelines):** Data pipeline versioning is an unsolved non-developer UX problem. Most tools still require CLI knowledge. The companion app has an opportunity to be the first genuinely non-technical version control tool for a data analytics workflow type.
 
 ---
 
-## What the PRD May Have Missed
+## UX Design Patterns to Implement
 
-Based on research findings not explicitly called out in PROJECT.md:
+Specific interaction patterns supported by research that should be incorporated.
 
-1. **Governance metadata in the report header**: The PRD specifies the report format (color-coded summary, expandable tool sections, graph) but does not mention including file hashes, compared file paths, and report generation timestamp. Regulated-industry users require this for audit trails. Low complexity to add; high compliance value.
+### Pattern 1: "You have changes" Badge (File Watcher)
+**What:** System tray icon and in-app sidebar show a badge with count of changed .yxmd files since last version save.
+**Rationale:** Dropbox and Google Drive conditioned non-technical users to expect ambient change awareness. The badge creates a soft prompt: "you should save a version."
+**When to show:** Immediately when a .yxmd file is modified (on file close in Alteryx Designer, watchdog fires).
+**Confidence:** HIGH — universal pattern in file sync tools.
 
-2. **Port/anchor identity in connection diffs**: "Connection added/removed/rewired" is stated, but connection diffs require identifying WHICH anchor port changed (e.g., Input #1 vs. Input #2 for a Join tool). A rewiring where the connection endpoint moves from the Left input to the Right input is a major functional change. The diff engine needs to capture source tool + source anchor + destination tool + destination anchor as the connection identity tuple.
+### Pattern 2: Guided "Save Version" Panel
+**What:** Opening "Save Version" shows a pre-populated list of changed workflows. Each row shows filename, modification time, and a checkbox. A message field has placeholder text: "What changed? (e.g. Fixed top 10 customer filter)". A large "Save Version" button completes the commit.
+**Rationale:** GitHub Desktop's commit panel is the closest model. Remove staging area jargon entirely. The message placeholder is actionable — it tells users what kind of message is useful.
+**Confidence:** HIGH — based on GitHub Desktop UX docs and general Git GUI best practices.
 
-3. **Before/after values, not just "modified"**: The PRD says "detect configuration-level changes" but the report value is showing the BEFORE and AFTER values side-by-side. "Filter expression changed" is not actionable. "Filter expression changed FROM `[Revenue] > 1000` TO `[Revenue] > 5000`" is. This must be a first-class output requirement for the HTML report.
+### Pattern 3: History as Timeline (Not Graph)
+**What:** For each registered project, show a flat vertical list of version saves: date/time, message, author (from git config). Clicking any entry opens the ACD diff report comparing that version to the previous one.
+**Rationale:** The commit DAG (branch visualization) is incomprehensible to non-developers. GitKraken and Sourcetree both use it; neither is appropriate for Alteryx analysts. A flat timeline matches Google Docs version history — a familiar mental model for this audience.
+**Confidence:** HIGH — research on non-technical user behavior with git GUIs consistently identifies the DAG as a barrier.
 
-4. **Configuring what "noise" means**: Different Alteryx versions inject different metadata. A future-proofing mechanism (even just a list of always-ignored XPath patterns) prevents the tool from breaking when Alteryx updates its save format.
+### Pattern 4: Vocabulary Layer
+**What:** The app uses domain vocabulary throughout. Git terms are used internally but never surfaced in UI copy.
 
-5. **The `--include-positions` flag needs documentation**: Users WILL ask "why doesn't it show that I moved this tool?" The flag must be discoverable in `--help` output with a clear explanation of WHY positions are excluded by default.
+| Git Term | App Language |
+|----------|-------------|
+| commit | Save Version |
+| push | Back Up / Sync |
+| pull | Get Latest |
+| branch | Experiment Copy / Workspace |
+| merge | Combine Changes |
+| repository | Project |
+| staging area | (hidden entirely) |
+| remote | Backup location |
+| HEAD | Current version |
+| diff | What changed |
+
+**Rationale:** Tower, GitHub Desktop, and Sourcetree all use native Git terminology. Research on non-technical user adoption consistently shows terminology is the first barrier. The replacement vocabulary is drawn from how Alteryx analysts already talk about their work.
+**Confidence:** MEDIUM — based on design tool research (Figma, Abstract) and general Git accessibility writing. No direct Alteryx user research available.
+
+### Pattern 5: Browser Auto-Open on Launch
+**What:** When the .exe launches, it starts the FastAPI server on port 7433 and automatically opens `http://localhost:7433` in the default browser. If the port is already in use, it tries 7434, 7435, up to 7443. Shows a tray notification: "ACD Companion is running."
+**Rationale:** PyInstaller + FastAPI apps require browser-open behavior because users cannot be expected to know what a localhost URL is or why they need to type it. This is the standard pattern for local web app tools (Jupyter, Ollama desktop, etc).
+**Confidence:** HIGH — validated pattern in PyInstaller + FastAPI community.
+
+### Pattern 6: OAuth Browser Auth for GitHub
+**What:** "Back Up to GitHub" triggers a browser-based OAuth flow (opens github.com/login/oauth/authorize in default browser). On success, GitHub redirects to a localhost callback URL that the FastAPI server handles. App shows "Connected as [username]" and stores the token in the OS credential store (Windows Credential Manager via `keyring`).
+**Rationale:** GitHub Desktop moved from in-app credentials to browser OAuth precisely because non-technical users cannot manage PATs. The browser-based flow leverages existing GitHub sessions. Sourcetree's PAT-based flow is the worst-practice example to avoid.
+**Confidence:** HIGH — GitHub Desktop docs explicitly confirm this evolution. GitHub blog post on Credential Manager confirms browser OAuth as the recommended approach.
+
+### Pattern 7: Undo Last Save with Preview
+**What:** In the history timeline, the most recent save shows an "Undo" button. Clicking it shows a confirmation: "This will un-save your last version ('[message]' from [time]). Your file changes will still be there — only the version save will be removed." Two buttons: "Cancel" and "Undo Save."
+**Rationale:** Tower's Cmd+Z undo is the gold standard. For a browser-based UI, a confirmation dialog with clear explanation is safer than keyboard shortcuts. The key copy is "Your file changes will still be there" — this is the anxiety non-technical users have.
+**Confidence:** HIGH — Tower feature page explicit. GitHub Desktop has a weaker version (discard to Trash). The explicit reassurance copy is inferred from UX writing principles.
+
+### Pattern 8: Conflict Triage (not merge editor)
+**What:** When push fails due to remote changes, show: "Someone else saved a newer version of [filename.yxmd]. Here's what they changed." Embed an ACD diff report comparing the remote version to the common ancestor. Offer two buttons: "Keep My Version" and "Use Their Version." No three-way merge editor.
+**Rationale:** A merge editor for XML is unusable for non-technical Alteryx users. The binary choice (my version or theirs) is the right level of abstraction for v1. True three-way semantic merge is explicitly deferred (listed in PROJECT.md Out of Scope).
+**Confidence:** MEDIUM — inferred from research on non-technical user conflict resolution failure patterns. No direct Alteryx user research available.
+
+---
+
+## What the Milestone Scope May Miss
+
+Based on research, potential gaps not explicit in the milestone description:
+
+1. **Port conflict handling is a launch-blocker risk.** Community reports for PyInstaller + FastAPI apps consistently identify port-already-in-use as the silent failure mode. The app must handle port conflicts gracefully (try fallback ports, show clear error if all fail). This is not a nice-to-have; it is a P1 reliability requirement.
+
+2. **Git user identity setup.** Non-technical users will not have `git config --global user.name` and `user.email` set. If the app tries to commit without these, git silently fails or errors. The app must detect missing identity and prompt with a first-run "Who are you?" step (name + email, pre-filled from OS username).
+
+3. **.yxmd files from Alteryx Server vs. Designer.** Workflows saved by Alteryx Server may have different GUID/timestamp patterns than Designer-saved files. The file watcher should only watch for .yxmd changes; it should not attempt to watch `.yxdb`, `.yxzp`, or macros (`.yxmc`) unless explicitly configured. Scope creep here leads to false-positive change detection.
+
+4. **Large initial commit.** If a user registers a folder that already has 50+ .yxmd files and no git history, the first "Save Version" will be a massive commit. The UI should warn: "This is your first save — it will capture all [N] workflows as the starting point." with a "Continue" confirmation.
+
+5. **Antivirus / Windows Defender false positives.** PyInstaller-bundled .exe files are frequently flagged by Windows Defender as PUA (potentially unwanted applications) or have SmartScreen warnings. This is a known deployment friction for non-technical Windows users at financial institutions. Plan for code signing or explicit user-facing instructions to bypass the warning.
+
+6. **Network drive support.** Many Alteryx teams store workflows on network drives (e.g., `\\server\shared\workflows\`). Python's `watchdog` has known issues with network drives (SMB shares). This must be explicitly tested or explicitly documented as unsupported.
 
 ---
 
 ## Sources
 
-- [Alteryx Compare Workflows — Official Docs](https://help.alteryx.com/current/en/designer/workflows/compare-workflows.html) — MEDIUM confidence
-- [Simulink Model Comparison — MathWorks Docs](https://www.mathworks.com/help/simulink/ug/understand-model-comparison-results.html) — HIGH confidence
-- [DeltaXML Output Formats](https://docs.deltaxignia.com/xml-compare/16.1/output-formats) — HIGH confidence
-- [DeltaXML Features and Properties](https://docs.deltaxml.com/xml-compare/latest/features-and-properties) — HIGH confidence (403 on direct fetch; inferred from search snippet)
-- [KNIME Workflow Comparison Feature](https://forum.knime.com/t/the-workflow-comparison-feature/39087) — MEDIUM confidence (community forum)
-- [Alteryx Version Control Challenges — phData](https://www.phdata.io/blog/version-control-in-alteryx/) — MEDIUM confidence
-- [Alteryx Community Workflow Compare Request](https://community.alteryx.com/t5/Alteryx-Designer-Ideas/Workflow-Compare-Tool/idi-p/10678) — LOW confidence (page content not loaded)
-- [GxP Audit Trail Requirements — 21 CFR Part 11](https://www.fdaguidelines.com/21-cfr-part-11-audit-trail-requirements-explained-for-gxp-systems/) — MEDIUM confidence
-- [Cytoscape.js Interactive Graph](https://js.cytoscape.org) — HIGH confidence (official docs)
-- [xmldiff PyPI/GitHub](https://github.com/Shoobx/xmldiff) — HIGH confidence (official repo)
-- [Alteryx Metadata Parser](https://github.com/shiv-io/Alteryx-Metadata-Parser) — MEDIUM confidence (community tool)
-- [SimDiff — Simulink Diff tool comparison](https://www.ensoftcorp.com/products/simdiff) — LOW confidence (vendor claims only)
+- [GitHub Desktop: Committing and reviewing changes](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/making-changes-in-a-branch/committing-and-reviewing-changes-to-your-project) — HIGH confidence (official docs)
+- [Tower Git Client: All Features](https://www.git-tower.com/features/all-features) — HIGH confidence (official product page)
+- [GitKraken Launchpad Overview](https://help.gitkraken.com/gitkraken-desktop/gitkraken-launchpad/) — HIGH confidence (official help docs)
+- [GitKraken Desktop Workspaces](https://help.gitkraken.com/gitkraken-desktop/workspaces/) — HIGH confidence (official help docs)
+- [Sourcetree vs GitKraken — Slant comparison](https://www.slant.co/versus/7569/13489/~sourcetree_vs_gitkraken-client) — MEDIUM confidence (community comparison)
+- [Git Credential Manager — GitHub blog](https://github.blog/security/application-security/git-credential-manager-authentication-for-everyone/) — HIGH confidence (official blog)
+- [GitHub Desktop authentication via browser flow (Issue #9231)](https://github.com/desktop/desktop/issues/9231) — HIGH confidence (official GitHub issue tracker)
+- [Figma Version Control: UX Writer perspective](https://www.figma.com/blog/version-control-how-a-ux-writer-weighs-one-word-against-another/) — MEDIUM confidence (official Figma blog)
+- [Figma Version Control for UX writing — 7 methods](https://uxcontent.com/7-ways-ux-writers-manage-version-control-in-figma/) — MEDIUM confidence
+- [Zeplin Design Version Control](https://blog.zeplin.io/design-delivery/ux-design-version-control/) — MEDIUM confidence
+- [Abstract Branching Models for Design Version Control](https://projekt202.medium.com/branching-models-and-best-practices-for-abstract-design-version-control-cd909a01cc13) — MEDIUM confidence
+- [PyInstaller + FastAPI .exe patterns](https://aiechoes.substack.com/p/building-production-ready-desktop) — MEDIUM confidence (community)
+- [iancleary/pyinstaller-fastapi](https://github.com/iancleary/pyinstaller-fastapi) — MEDIUM confidence (community reference impl)
+- [Windows Notification Area guidelines](https://learn.microsoft.com/en-us/windows/win32/shell/notification-area) — HIGH confidence (Microsoft official)
+- [Git Watcher — real-time diff desktop app](https://github.com/demian85/git-watcher) — LOW confidence (community tool, reference only)
+- [UXPin: Git for Designers](https://www.uxpin.com/studio/blog/git-for-designers/) — MEDIUM confidence
 
 ---
 
-*Feature research for: Alteryx Canvas Diff (ACD) — XML workflow diff tool for .yxmd files*
-*Researched: 2026-02-28*
+*Feature research for: ACD Companion App — Desktop Git UI for non-technical Alteryx analysts*
+*Researched: 2026-03-13*

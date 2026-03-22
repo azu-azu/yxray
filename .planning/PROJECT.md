@@ -34,7 +34,16 @@ Accurate detection of functional changes — zero false positives from layout no
 
 ### Active
 
-*(No requirements active — planning next milestone with `/gsd:new-milestone`)*
+<!-- Current scope for v1.1 Alteryx Git Companion -->
+
+- [ ] Windows .exe desktop companion app (PyInstaller + FastAPI + React, no Python install required)
+- [ ] Auto-start on Windows login with system tray icon showing change badge
+- [ ] File watcher with automatic polling fallback for network/SMB drives
+- [ ] Save Version flow (commit), history timeline, embedded ACD diff viewer, undo last save
+- [ ] Multi-project folder management
+- [ ] GitHub OAuth + GitLab PAT remote auth and push (OS credential store)
+- [ ] Basic branch management (experiment copies, no DAG visualization)
+- [ ] CI polish: GitHub comment deduplication + inline PNG graph, GitLab cleanup, setup README
 
 ### Out of Scope
 
@@ -85,5 +94,17 @@ Accurate detection of functional changes — zero false positives from layout no
 | JSONRenderer schema separate from CLI --json | Preserves JSONRenderer contract tests; CLI --json uses _cli_json_output() with different schema | ⚠️ Revisit — creates two incompatible JSON schemas; wire JSONRenderer to CLI in v1.1 |
 | GUID_VALUE_KEYS starts empty | Populate only from confirmed real .yxmd files, not speculation | ⚠️ Revisit — still empty at v1.0 ship; needs real-file validation |
 
+## Current Milestone: v1.1 Alteryx Git Companion
+
+**Goal:** Make Git-based version control accessible to non-technical Alteryx analysts via a desktop companion app and polished CI integration.
+
+**Target features:**
+- Desktop companion app (local web server, system tray, auto-start on boot)
+- File watcher with network/SMB drive support via polling fallback
+- Save Version / History / Diff / Undo — the core version control loop
+- GitHub OAuth + GitLab PAT remote backup
+- Basic experiment copy (branch) management
+- CI polish: GitHub inline graph PNG, comment deduplication, GitLab cleanup, setup README
+
 ---
-*Last updated: 2026-03-07 after v1.0 milestone*
+*Last updated: 2026-03-13 after v1.1 milestone start*
