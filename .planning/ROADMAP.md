@@ -278,5 +278,5 @@ Plans:
 | 18. CI Polish | 3/3 | Complete    | 2026-03-15 | - |
 | 18.1. Creation of PR | 3/4 | Complete    | 2026-03-22 |
 | 19. Close Audit Gaps | 1/1 | Complete    | 2026-03-22 | — |
-| 20. Tech Debt Cleanup | v1.1 | 0/3 | Pending | — |
+| 20. Tech Debt Cleanup | 2/3 | In Progress|  | — |
 | 21. Nyquist Wave-0 Remediation | v1.1 | 0/1 | Pending | — |

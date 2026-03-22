@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
 status: planning
-stopped_at: Completed Phase 19 — all requirements verified, v1.1 milestone complete
-last_updated: "2026-03-22T04:32:40.299Z"
+stopped_at: Completed 20-02-PLAN.md — ONBOARD-02 and REMOTE-02 frontend fixes
+last_updated: "2026-03-22T18:23:44.424Z"
 last_activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
 progress:
-  total_phases: 12
+  total_phases: 14
   completed_phases: 12
-  total_plans: 48
-  completed_plans: 48
+  total_plans: 51
+  completed_plans: 50
   percent: 0
 ---
 
@@ -97,6 +97,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18.1-creation-of-pr P02 | 4 | 1 tasks | 4 files |
 | Phase 18.1-creation-of-pr P03 | 3 | 2 tasks | 1 files |
 | Phase 19-close-audit-gaps P01 | 136 | 2 tasks | 3 files |
+| Phase 20-tech-debt-cleanup P02 | 2 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -214,6 +215,8 @@ Recent decisions affecting current work:
 - [Phase 18.1-03]: prTitle/prDescription are shared state (not per-provider) — GitHub/GitLab tabs are mutually exclusive views; only one form visible at a time
 - [Phase 19-close-audit-gaps]: APP-04b: traced to Phase 15 (app/tray.py on_open handler) — not Phase 19; Windows-only human verification applies
 - [Phase 19-close-audit-gaps]: BRANCH-01/02/03: traced to Phase 17 with retrospective code-level verification — no new code required, only documentary record
+- [Phase 20-tech-debt-cleanup]: addProjectError rendered as fixed overlay in App root — visible on both WelcomeScreen and AppShell views
+- [Phase 20-tech-debt-cleanup]: activeTab controlled state drives Tabs value prop — removes fragile document.querySelector coupling to data-value attribute
 
 ### Roadmap Evolution
 
@@ -232,6 +235,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-22T04:29:18.310Z
-Stopped at: Completed Phase 19 — all requirements verified, v1.1 milestone complete
+Last session: 2026-03-22T18:23:44.421Z
+Stopped at: Completed 20-02-PLAN.md — ONBOARD-02 and REMOTE-02 frontend fixes
 Resume file: None
