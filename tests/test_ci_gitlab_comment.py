@@ -6,12 +6,23 @@ We use sys.path insertion to import it without installation — mirrors
 test_ci_github_comment.py.
 """
 
+import importlib.util
 import os
 import sys
 from unittest.mock import patch
 
-sys.path.insert(0, "/Users/laxmikantmukkawar/alteryx/.gitlab/scripts")
-import generate_diff_comment  # noqa: E402
+# Load the GitLab script under an isolated module name to avoid colliding with
+# test_ci_github_comment.py, which imports a module with the same name from a
+# different path. importlib prevents sys.modules cross-contamination.
+_GITLAB_SCRIPT = (
+    "/Users/laxmikantmukkawar/alteryx/.gitlab/scripts/generate_diff_comment.py"
+)
+_spec = importlib.util.spec_from_file_location(
+    "gitlab_generate_diff_comment", _GITLAB_SCRIPT
+)
+generate_diff_comment = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(generate_diff_comment)
+sys.modules["gitlab_generate_diff_comment"] = generate_diff_comment
 
 MARKER = "<!-- acd-diff-report -->"
 

@@ -683,35 +683,35 @@ export function HistoryPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
         <div className="flex items-center gap-2">
-          <div>
-            <h2 className="text-sm font-semibold">Saved Versions</h2>
-            {remoteConnected && (aheadCount > 0 || behindCount > 0) && (
-              <div className="mt-0.5 flex items-center gap-1.5">
-                {aheadCount > 0 && (
-                  <span className="text-xs text-muted-foreground">↑ {aheadCount} ahead</span>
-                )}
-                {aheadCount > 0 && behindCount > 0 && (
-                  <span className="text-xs text-muted-foreground">·</span>
-                )}
-                {behindCount > 0 && (
-                  <button
-                    className="text-xs text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-0.5"
-                    onClick={() => setBehindExpanded((v) => !v)}
-                    title="Show remote commits not yet pulled"
-                  >
-                    ↓ {behindCount} behind
-                    <span className="text-[10px]">{behindExpanded ? '▲' : '▼'}</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <h2 className="text-sm font-semibold">Saved Versions</h2>
           {onBranchSwitch && (
-            <BranchChip
-              projectId={projectId}
-              projectPath={projectPath}
-              onBranchSwitch={onBranchSwitch}
-            />
+            <div className="flex flex-col">
+              <BranchChip
+                projectId={projectId}
+                projectPath={projectPath}
+                onBranchSwitch={onBranchSwitch}
+              />
+              {remoteConnected && (
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span className={`text-xs ${aheadCount > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                    ↑ {aheadCount} ahead
+                  </span>
+                  <span className="text-xs text-muted-foreground">·</span>
+                  {behindCount > 0 ? (
+                    <button
+                      className="text-xs text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-0.5"
+                      onClick={() => setBehindExpanded((v) => !v)}
+                      title="Show remote commits not yet pulled"
+                    >
+                      ↓ {behindCount} behind
+                      <span className="text-[10px]">{behindExpanded ? '▲' : '▼'}</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">↓ 0 behind</span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
