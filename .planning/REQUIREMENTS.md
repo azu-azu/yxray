@@ -49,9 +49,9 @@
 
 ### BRANCH — Experiment Copies
 
-- [x] **BRANCH-01**: User can create an experiment copy (branch) with auto-generated name (experiment/YYYY-MM-DD-description)
-- [x] **BRANCH-02**: User can switch between experiment copies
-- [x] **BRANCH-03**: Current workspace shown as a label in the UI (no DAG visualization)
+- [ ] **BRANCH-01**: User can create an experiment copy (branch) with auto-generated name (experiment/YYYY-MM-DD-description)
+- [ ] **BRANCH-02**: User can switch between experiment copies
+- [ ] **BRANCH-03**: Current workspace shown as a label in the UI (no DAG visualization)
 
 ### CI — CI Integration Polish
 
@@ -99,7 +99,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | APP-02 | Phase 15 | Complete |
 | APP-03 | Phase 10 | Complete |
 | APP-04a | Phase 10 | Complete |
-| APP-04b | Phase 15 | Pending |
+| APP-04b | Phase 19 | Pending |
 | APP-05 | Phase 15 | Complete |
 | ONBOARD-01 | Phase 11 | Complete |
 | ONBOARD-02 | Phase 11 | Complete |
@@ -119,17 +119,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REMOTE-04 | Phase 16 | Complete |
 | REMOTE-05 | Phase 16 | Complete |
 | REMOTE-06 | Phase 16 | Complete |
-| BRANCH-01 | Phase 17 | Complete |
-| BRANCH-02 | Phase 17 | Complete |
-| BRANCH-03 | Phase 17 | Complete |
+| BRANCH-01 | Phase 19 | Pending |
+| BRANCH-02 | Phase 19 | Pending |
+| BRANCH-03 | Phase 19 | Pending |
 | CI-01 | Phase 18 | Complete |
 | CI-02 | Phase 18 | Complete |
 | CI-03 | Phase 18 | Complete |
 | CI-04 | Phase 18 | Complete |
 
 **Coverage:**
-- v1.1 requirements: 29 total
-- Mapped to phases: 29
+- v1.1 requirements: 31 total (APP-04 split into APP-04a + APP-04b)
+- Mapped to phases: 31
 - Unmapped: 0 ✓
 
 ---

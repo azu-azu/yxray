@@ -206,6 +206,19 @@ Plans:
 - [ ] 18.1-03-PLAN.md — Frontend: inline PR form + humanized branch title + existing-PR link in RemotePanel.tsx (Wave 3)
 - [ ] 18.1-04-PLAN.md — Human verification checkpoint: end-to-end PR creation flow (Wave 4)
 
+### Phase 19: Close Audit Gaps — Branch Verification + APP-04b
+**Goal**: Formally verify Phase 17 Branch Management by running gsd-verifier to produce VERIFICATION.md, and resolve the orphaned APP-04b requirement by confirming the existing implementation and updating REQUIREMENTS.md
+**Requirements**: BRANCH-01, BRANCH-02, BRANCH-03, APP-04b
+**Gap Closure:** Closes gaps from v1.1 audit — Phase 17 unverified, APP-04b checkbox unchecked
+**Success Criteria** (what must be TRUE):
+  1. Phase 17 VERIFICATION.md exists with code-level audit confirming BRANCH-01, BRANCH-02, BRANCH-03 are satisfied
+  2. APP-04b checkbox updated to [x] in REQUIREMENTS.md with note that implementation exists in app/tray.py and Windows-only human verification applies
+  3. REQUIREMENTS.md coverage count updated to 31 (reflecting APP-04 split into APP-04a and APP-04b)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 19-01-PLAN.md — Run gsd-verifier for Phase 17, update APP-04b checkbox + traceability, fix coverage count
+
 ## Progress
 
 **Execution Order:** 10 → 11 → 12 → 13 → 14 → 15 → 16 → 16.1 → 17 → 18 (Phase 18 independent)
@@ -232,3 +245,4 @@ Plans:
 | 17. Branch Management | 5/5 | Complete    | 2026-03-15 | - |
 | 18. CI Polish | 3/3 | Complete    | 2026-03-15 | - |
 | 18.1. Creation of PR | 3/4 | Complete    | 2026-03-22 |
+| 19. Close Audit Gaps | v1.1 | 0/1 | Pending | — |
