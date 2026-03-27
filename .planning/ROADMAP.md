@@ -263,7 +263,12 @@ Plans:
   5. `_GRAPH_FRAGMENT_TEMPLATE` in `graph_renderer.py` has no inline `style=""` attributes and no `!important` overrides — all styling via CSS variables
   6. Light/dark toggle persists to `localStorage`; no Python class signatures changed
   7. All existing tests pass; `examples/diff_report.html` regenerates without errors
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Rewrite _TEMPLATE: CSS token system, header, stat cards, section headers, tool rows, detail panels, governance footer
+- [ ] 22-02-PLAN.md — Rewrite _GRAPH_FRAGMENT_TEMPLATE: remove inline styles and !important, add CSS variable classes
+- [ ] 22-03-PLAN.md — Integration tests + regenerate examples/diff_report.html
 
 ## Progress
 
