@@ -251,6 +251,20 @@ Plans:
 Plans:
 - [ ] 21-01-PLAN.md — Fix Phase 10 port tests (mock socket) + flip wave_0_complete: true in all 9 VALIDATION.md files
 
+### Phase 22: HTML Report Redesign
+**Goal**: The generated HTML diff report is visually stunning and modern — a dark-first developer-grade design with CSS variable theming, stat cards, styled section headers, and polished diff panels — while remaining fully self-contained (zero CDN)
+**Depends on**: Phase 7 (HTML Report), Phase 8 (Visual Graph)
+**Design Spec**: `docs/superpowers/specs/2026-03-27-html-report-redesign-design.md`
+**Success Criteria** (what must be TRUE):
+  1. `_TEMPLATE` in `html_renderer.py` renders dark mode by default with CSS custom properties as the theming system
+  2. Summary section shows 4 stat cards (added/removed/modified/connections) with accent colors, not flat badges
+  3. Section headers have a 3px left accent bar, count pill, and Expand All / Collapse All buttons
+  4. Modified tool rows expand to a Before/After diff panel with monospace values and colored left borders
+  5. `_GRAPH_FRAGMENT_TEMPLATE` in `graph_renderer.py` has no inline `style=""` attributes and no `!important` overrides — all styling via CSS variables
+  6. Light/dark toggle persists to `localStorage`; no Python class signatures changed
+  7. All existing tests pass; `examples/diff_report.html` regenerates without errors
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:** 10 → 11 → 12 → 13 → 14 → 15 → 16 → 16.1 → 17 → 18 (Phase 18 independent)
@@ -280,3 +294,4 @@ Plans:
 | 19. Close Audit Gaps | 1/1 | Complete    | 2026-03-22 | — |
 | 20. Tech Debt Cleanup | 3/3 | Complete    | 2026-03-22 | — |
 | 21. Nyquist Wave-0 Remediation | 1/1 | Complete    | 2026-03-22 | — |
+| 22. HTML Report Redesign | 0/? | In Progress | — | — |
