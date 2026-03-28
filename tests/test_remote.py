@@ -839,3 +839,45 @@ def test_clear_remote_repo_noop_when_missing(tmp_path, monkeypatch):
 
     # Should not raise
     config_store.clear_remote_repo("nonexistent-proj", "github")
+
+
+# ---------------------------------------------------------------------------
+# ST9: Router returns repo_deleted when git_push raises RepoNotFoundError
+# ---------------------------------------------------------------------------
+
+
+def test_push_repo_deleted():
+    """POST /api/remote/push returns repo_deleted error when remote repo is gone."""
+    _require_remote()
+    from app.services import git_ops
+
+    with (
+        patch(
+            "app.routers.remote.remote_auth.get_github_token",
+            return_value="tok",
+        ),
+        patch(
+            "app.routers.remote.config_store.get_remote_repo",
+            return_value={"github_url": "https://github.com/user/repo.git"},
+        ),
+        patch(
+            "app.routers.remote.git_ops.git_push",
+            side_effect=git_ops.RepoNotFoundError("remote: Repository not found."),
+        ),
+        patch("app.routers.remote.config_store.clear_remote_repo") as mock_clear,
+    ):
+        resp = _client.post(
+            "/api/remote/push",
+            json={
+                "project_id": "proj-1",
+                "folder": "/fake/folder",
+                "provider": "github",
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"success": False, "error": "repo_deleted"}, (
+        f"Expected repo_deleted response, got {data}"
+    )
+    mock_clear.assert_called_once_with("proj-1", "github")

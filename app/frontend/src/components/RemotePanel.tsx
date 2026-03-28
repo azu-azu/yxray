@@ -18,7 +18,7 @@ interface GitHubFlow {
 }
 
 type PushState = 'idle' | 'pushing' | 'done' | 'error'
-type PushErrorKind = 'generic' | 'auth_expired' | null
+type PushErrorKind = 'generic' | 'auth_expired' | 'repo_deleted' | null
 type PullState = 'idle' | 'pulling' | 'done' | 'up_to_date' | 'error'
 
 export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } = {}) {
@@ -201,7 +201,9 @@ const [loading, setLoading] = useState(true)
         onPushComplete?.()
       } else {
         const errorMsg: string = data.error ?? ''
-        if (errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('401')) {
+        if (errorMsg === 'repo_deleted') {
+          setPushError('repo_deleted')
+        } else if (errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('401')) {
           setPushError('auth_expired')
         } else {
           setPushError('generic')
@@ -325,6 +327,12 @@ const [loading, setLoading] = useState(true)
             >
               Reconnect
             </button>
+          </div>
+        )}
+        {pushState === 'error' && pushError === 'repo_deleted' && (
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-red-500">Repository was deleted. A new one will be created on your next push.</p>
+            <Button variant="outline" size="sm" onClick={() => handlePush(provider)}>Retry</Button>
           </div>
         )}
         {pushState === 'error' && pushError === 'generic' && (
