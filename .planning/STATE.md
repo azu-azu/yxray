@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
-status: planning
-stopped_at: Completed 21-01-PLAN.md — Nyquist wave_0 remediation
-last_updated: "2026-03-22T22:40:21.232Z"
-last_activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
+status: verifying
+stopped_at: Completed 22-03-PLAN.md — Integration verification and report regeneration
+last_updated: "2026-03-28T00:25:01.029Z"
+last_activity: 2026-03-27
 progress:
-  total_phases: 14
-  completed_phases: 14
-  total_plans: 52
-  completed_plans: 52
+  total_phases: 15
+  completed_phases: 15
+  total_plans: 55
+  completed_plans: 55
   percent: 0
 ---
 
@@ -21,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** Accurate detection of functional changes — zero false positives from layout noise, zero missed configuration changes.
-**Current focus:** v1.1 Phase 10 — App Scaffold (ready to plan)
+**Current focus:** Phase 22 — html-report-redesign
 
 ## Current Position
 
-Phase: 10 of 18 (App Scaffold)
-Plan: — of — in current phase
-Status: Ready to plan
-Last activity: 2026-03-13 — Roadmap created for v1.1 (9 phases, 28 requirements mapped)
+Phase: 22
+Plan: Not started
+Status: Phase complete — ready for verification
+Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
 ## Performance Metrics
 
 **Velocity (v1.0 reference):**
+
 - Total plans completed: 27
 - Average duration: 4 min
 - Total execution time: ~108 min
@@ -46,6 +47,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | v1.0 phases 1-9 | 27 | ~108 min | 4 min |
 
 **Recent Trend:**
+
 - v1.1 not started
 - Trend: —
 
@@ -101,6 +103,9 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 20 P01 | 8 | 2 tasks | 3 files |
 | Phase 20-tech-debt-cleanup P03 | 30 | 3 tasks | 3 files |
 | Phase 21-nyquist-wave0-remediation P01 | 4 | 10 tasks | 10 files |
+| Phase 22-html-report-redesign P02 | 3 | 1 tasks | 1 files |
+| Phase 22 P01 | 217 | 1 tasks | 1 files |
+| Phase 22-html-report-redesign P03 | 5 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -226,6 +231,10 @@ Recent decisions affecting current work:
 - [Phase 20-tech-debt-cleanup]: post_or_update_note() re-reads GITLAB_TOKEN at call time for patch.dict testability; CI_MERGE_REQUEST_IID used (not ID); Python owns MARKER in build_comment() output
 - [Phase 21-01]: test_port_probe.py: patch('socket.socket') with MagicMock for env-agnostic happy-path test; ephemeral ports 19900-19910 for real-socket tests to avoid port 7433 conflicts
 - [Phase 21-01]: Phase 16.1 VALIDATION.md: corrected app/tests/test_git_ops.py (non-existent) to tests/test_history.py — all 4 pushed_shas/is_pushed tests confirmed in correct location
+- [Phase 22-html-report-redesign]: isDark() uses classList.contains('light') to match Plan 01 theme system; MutationObserver watches class attribute
+- [Phase 22]: Theme system uses html.light class (not data-theme): dark on :root default, light overrides on html.light
+- [Phase 22]: expandAll/collapseAll fixed to query section-* container divs instead of h2 heading which has no .tool-row children
+- [Phase 22-html-report-redesign]: No code changes required — Plans 01 and 02 integrated cleanly with zero test failures on first run
 
 ### Roadmap Evolution
 
@@ -244,6 +253,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-22T22:37:13.565Z
-Stopped at: Completed 21-01-PLAN.md — Nyquist wave_0 remediation
+Last session: 2026-03-28T00:14:33.732Z
+Stopped at: Completed 22-03-PLAN.md — Integration verification and report regeneration
 Resume file: None

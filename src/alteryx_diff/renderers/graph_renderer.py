@@ -29,114 +29,321 @@ from alteryx_diff.renderers._graph_builder import (
 _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 <h2>Workflow Graph</h2>
 
-<div id="graph-view-toggle" style="display:flex;gap:8px;margin-bottom:10px;">
+<div id="graph-view-toggle" class="graph-view-toggle">
   <button id="btn-split" class="view-toggle-btn" onclick="switchView('split')">Split View</button>
   <button id="btn-overlay" class="view-toggle-btn" onclick="switchView('overlay')">Overlay View</button>
 </div>
 
-<div id="split-view" style="display:flex;height:600px;gap:0;border:1px solid #dee2e6;border-radius:4px;overflow:hidden;">
-  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
-    <div style="padding:6px 10px;font-weight:600;font-size:0.85em;background:#f1f5f9;border-bottom:1px solid #dee2e6;border-right:1px solid #dee2e6;">Before</div>
-    <div id="split-view-left" style="flex:1;height:100%;background:#f8fafc;"></div>
+<div id="split-view" class="split-view">
+  <div class="split-pane">
+    <div class="split-header">Before</div>
+    <div id="split-view-left" class="split-graph-canvas"></div>
   </div>
-  <div style="width:280px;display:flex;flex-direction:column;border-left:1px solid #dee2e6;border-right:1px solid #dee2e6;">
-    <div style="padding:6px 10px;font-weight:600;font-size:0.85em;background:#f1f5f9;border-bottom:1px solid #dee2e6;position:sticky;top:0;z-index:1;">Changes</div>
-    <div id="split-change-rows" style="flex:1;overflow-y:auto;padding:4px 0;"></div>
+  <div class="split-changes-col">
+    <div class="split-changes-header">Changes</div>
+    <div id="split-change-rows" class="split-change-rows"></div>
   </div>
-  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
-    <div style="padding:6px 10px;font-weight:600;font-size:0.85em;background:#f1f5f9;border-bottom:1px solid #dee2e6;">After</div>
-    <div id="split-view-right" style="flex:1;height:100%;background:#f8fafc;"></div>
+  <div class="split-pane">
+    <div class="split-header">After</div>
+    <div id="split-view-right" class="split-graph-canvas"></div>
   </div>
 </div>
 
-<div id="split-controls" style="display:flex;gap:8px;align-items:center;padding:8px 0;margin-top:4px;">
+<div id="split-controls" class="split-controls">
   <button id="fit-both-btn" class="ctrl-btn" onclick="if(networkLeft)networkLeft.fit();if(networkRight)networkRight.fit();">Fit Both</button>
   <button id="split-fullscreen-btn" class="ctrl-btn">Fullscreen</button>
-  <span style="font-size:0.8em;color:#64748b;">
-    <span style="display:inline-block;width:12px;height:12px;background:#6ee7b7;border:1px solid #059669;border-radius:50%;margin-right:3px;"></span>Added
-    <span style="display:inline-block;width:12px;height:12px;background:#fca5a5;border:1px solid #dc2626;border-radius:50%;margin:0 3px;"></span>Removed
-    <span style="display:inline-block;width:12px;height:12px;background:#fcd34d;border:1px solid #b45309;border-radius:50%;margin:0 3px;"></span>Modified
-    <span style="display:inline-block;width:12px;height:12px;background:#e2e8f0;border:1px solid #94a3b8;border-radius:50%;margin:0 3px;"></span>Unchanged
+  <span class="graph-legend">
+    <span class="legend-dot legend-dot-added"></span>Added
+    <span class="legend-dot legend-dot-removed"></span>Removed
+    <span class="legend-dot legend-dot-modified"></span>Modified
+    <span class="legend-dot legend-dot-unchanged"></span>Unchanged
   </span>
 </div>
 
-<div id="diff-panel" style="position:fixed;top:0;right:-420px;width:400px;height:100%;background:#fff;border-left:1px solid #dee2e6;box-shadow:-2px 0 8px rgba(0,0,0,0.1);overflow-y:auto;transition:right 0.2s ease;z-index:1000;padding:16px;box-sizing:border-box;border-radius:8px 0 0 8px;"></div>
-<div id="graph-overlay" style="display:none;position:fixed;inset:0;z-index:999;"></div>
+<div id="diff-panel" class="diff-panel"></div>
+<div id="graph-overlay" class="graph-overlay"></div>
 
-<div id="overlay-view" style="display:none;">
-  <div id="graph-controls" style="margin-bottom:8px;display:flex;gap:8px;align-items:center;padding:8px 0;">
+<div id="overlay-view" class="overlay-view">
+  <div id="graph-controls" class="graph-controls">
     <button id="fit-btn" class="ctrl-btn">Fit to Screen</button>
     <button id="fullscreen-btn" class="ctrl-btn">Fullscreen</button>
     <button id="toggle-changes" class="ctrl-btn">Show Only Changes</button>
-    <span style="font-size:0.8em;color:#64748b;">
-      <span data-legend="added" style="display:inline-block;width:12px;height:12px;background:#6ee7b7;border:1px solid #059669;border-radius:50%;margin-right:3px;"></span>Added
-      <span data-legend="removed" style="display:inline-block;width:12px;height:12px;background:#fca5a5;border:1px solid #dc2626;border-radius:50%;margin:0 3px;"></span>Removed
-      <span data-legend="modified" style="display:inline-block;width:12px;height:12px;background:#fcd34d;border:1px solid #b45309;border-radius:50%;margin:0 3px;"></span>Modified
-      <span data-legend="connection" style="display:inline-block;width:12px;height:12px;background:#93c5fd;border:1px solid #1d4ed8;border-radius:50%;margin:0 3px;"></span>Connection change
-      <span data-legend="unchanged" style="display:inline-block;width:12px;height:12px;background:#e2e8f0;border:1px solid #94a3b8;border-radius:50%;margin:0 3px;"></span>Unchanged
+    <span class="graph-legend">
+      <span data-legend="added" class="legend-dot legend-dot-added"></span>Added
+      <span data-legend="removed" class="legend-dot legend-dot-removed"></span>Removed
+      <span data-legend="modified" class="legend-dot legend-dot-modified"></span>Modified
+      <span data-legend="connection" class="legend-dot legend-dot-connection"></span>Connection change
+      <span data-legend="unchanged" class="legend-dot legend-dot-unchanged"></span>Unchanged
     </span>
   </div>
-  <div id="graph-container" style="width:100%;height:620px;border:1px solid #dee2e6;border-radius:4px;background:#f8fafc;position:relative;"></div>
+  <div id="graph-container" class="graph-container"></div>
 </div>
 
 <style>
-.view-toggle-btn { padding:6px 16px; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer; font-size:0.88em; background:transparent; }
-.view-toggle-btn.active { background:#3b82f6; color:#fff; border-color:#3b82f6; }
-#diff-panel.open { right: 0 !important; }
-#diff-panel.open ~ #graph-overlay { display: block !important; }
-.panel-title { font-size:1em; font-weight:600; margin:0 0 12px; border-bottom:2px solid #eee; padding-bottom:8px; }
-.panel-field-row { margin:8px 0; }
-.panel-field-name { font-weight:600; font-size:0.82em; color:#555; margin-bottom:3px; }
-.panel-before { background:#fff5f5; border-left:3px solid #dc3545; padding:4px 8px; margin:2px 0; }
-.panel-after  { background:#f5fff5; border-left:3px solid #28a745; padding:4px 8px; margin:2px 0; }
-.panel-before-label { font-weight:600; color:#dc3545; }
-.panel-after-label  { font-weight:600; color:#28a745; }
-.value-mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-all; font-size:0.88em; }
-#graph-section:fullscreen { background: #f8fafc; padding: 12px; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; }
-#graph-section:fullscreen #graph-view-toggle { flex-shrink: 0; }
-#graph-section:fullscreen #split-view { flex: 1; height: auto !important; min-height: 0; }
-#graph-section:fullscreen #split-controls { flex-shrink: 0; display: flex !important; }
-#graph-section:fullscreen #graph-container { height: calc(100vh - 120px); }
-.split-change-row { display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; font-size:0.82em; }
-.split-change-row:hover { background:#f8fafc; }
-.split-change-badge { display:inline-block; width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+/* Graph section header — matches main template section header style */
+#graph-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 10px 14px;
+  border-left: 3px solid var(--accent-conn);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 24px 0 12px;
+}
+
+.graph-view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.view-toggle-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.view-toggle-btn:hover {
+  background: var(--surface-2);
+}
+.view-toggle-btn.active {
+  background: var(--accent-conn);
+  color: #fff;
+  border-color: var(--accent-conn);
+}
+
+.split-view {
+  display: flex;
+  height: 600px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.split-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.split-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.split-graph-canvas {
+  flex: 1;
+  height: 100%;
+  background: var(--bg);
+}
+
+.split-changes-col {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.split-changes-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.split-change-rows {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.split-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  margin-top: 4px;
+}
+
+.graph-legend {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin: 0 3px;
+}
+.legend-dot-added { background: #6ee7b7; border: 1px solid #059669; }
+.legend-dot-removed { background: #fca5a5; border: 1px solid #dc2626; }
+.legend-dot-modified { background: #fcd34d; border: 1px solid #b45309; }
+.legend-dot-connection { background: #93c5fd; border: 1px solid #1d4ed8; }
+.legend-dot-unchanged { background: #e2e8f0; border: 1px solid #94a3b8; }
+
+.diff-panel {
+  position: fixed;
+  top: 0;
+  right: -420px;
+  width: 400px;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+  overflow-y: auto;
+  transition: right 0.2s ease;
+  z-index: 1000;
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 8px 0 0 8px;
+  color: var(--text);
+}
+.diff-panel.open { right: 0; }
+
+.graph-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+.diff-panel.open ~ .graph-overlay { display: block; }
+
+.overlay-view { display: none; }
+
+.graph-controls {
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.graph-container {
+  width: 100%;
+  height: 620px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  position: relative;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  color: var(--text);
+}
+
+.panel-field-row { margin: 8px 0; }
+
+.panel-field-name {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.panel-before {
+  background: var(--accent-removed-bg);
+  border-left: 3px solid var(--accent-removed);
+  padding: 6px 10px;
+  margin: 4px 0;
+}
+.panel-after {
+  background: var(--accent-added-bg);
+  border-left: 3px solid var(--accent-added);
+  padding: 6px 10px;
+  margin: 4px 0;
+}
+.panel-before-label { font-weight: 600; color: var(--accent-removed); }
+.panel-after-label { font-weight: 600; color: var(--accent-added); }
+.value-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.split-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+}
+.split-change-row:hover { background: var(--surface-2); }
+
+.split-change-badge {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.split-change-empty {
+  padding: 12px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Fullscreen styles */
+#graph-section:fullscreen {
+  background: var(--bg);
+  padding: 12px;
+  box-sizing: border-box;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+#graph-section:fullscreen .graph-view-toggle { flex-shrink: 0; }
+#graph-section:fullscreen .split-view { flex: 1; height: auto; min-height: 0; }
+#graph-section:fullscreen .split-controls { flex-shrink: 0; display: flex; }
+#graph-section:fullscreen .graph-container { height: calc(100vh - 120px); }
+
+/* Responsive */
 @media (max-width: 800px) {
-  #split-view { flex-direction: column; height: auto; }
-  #split-view > div { width: 100% !important; }
+  .split-view { flex-direction: column; height: auto; }
+  .split-view > div { width: 100%; }
 }
-@media (prefers-color-scheme: dark) {
-  #graph-section:fullscreen { background: #0f172a; }
-  #graph-section:fullscreen #split-view { border-color: #334155 !important; }
-  #graph-container { background: #0f172a !important; border-color: #334155 !important; }
-  #diff-panel { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; }
-  .panel-title { border-color: #334155 !important; color: #e2e8f0; }
-  .panel-field-name { color: #94a3b8 !important; }
-  .panel-before { background: #2d1518 !important; }
-  .panel-after { background: #132318 !important; }
-  .value-mono { color: #e2e8f0; }
-  #split-view-left { background: #0f172a !important; }
-  #split-view-right { background: #0f172a !important; }
-  #split-change-rows { background: #1e293b; color: #e2e8f0; }
-  .split-change-row { border-bottom-color: #334155; }
-  .split-change-row:hover { background: #334155; }
-}
-[data-theme=dark] #graph-section:fullscreen { background: #0f172a; }
-[data-theme=dark] #graph-container { background: #0f172a !important; border-color: #334155 !important; }
-[data-theme=dark] #diff-panel { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; }
-[data-theme=dark] .panel-title { border-color: #334155 !important; color: #e2e8f0; }
-[data-theme=dark] .panel-field-name { color: #94a3b8 !important; }
-[data-theme=dark] .panel-before { background: #2d1518 !important; }
-[data-theme=dark] .panel-after { background: #132318 !important; }
-[data-theme=dark] .value-mono { color: #e2e8f0; }
-[data-theme=dark] #split-view-left { background: #0f172a !important; }
-[data-theme=dark] #split-view-right { background: #0f172a !important; }
-[data-theme=dark] #split-change-rows { background: #1e293b; color: #e2e8f0; }
-[data-theme=dark] .split-change-row { border-bottom-color: #334155; }
-[data-theme=dark] .split-change-row:hover { background: #334155; }
-[data-theme=light] #graph-container { background: #f8fafc !important; border-color: #dee2e6 !important; }
-[data-theme=light] #diff-panel { background: #fff !important; border-color: #dee2e6 !important; color: inherit !important; }
-[data-theme=light] #split-view-left { background: #f8fafc !important; }
-[data-theme=light] #split-view-right { background: #f8fafc !important; }
 </style>
 <script>
 (function() {
@@ -215,10 +422,7 @@ var DARK_COLORS = {
 };
 
 function isDark() {
-  var t = document.documentElement.getAttribute('data-theme');
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return !document.documentElement.classList.contains('light');
 }
 
 function applyThemeColors() {
@@ -242,13 +446,8 @@ function applyThemeColors() {
 
 applyThemeColors();
 new MutationObserver(function(ms) {
-  ms.forEach(function(m) { if (m.attributeName === 'data-theme') applyThemeColors(); });
-}).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
-if (window.matchMedia) {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
-    if (!document.documentElement.hasAttribute('data-theme')) applyThemeColors();
-  });
-}
+  ms.forEach(function(m) { if (m.attributeName === 'class') applyThemeColors(); });
+}).observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
 // ─────────────────────────────────────────────────────────────────────────
 
 // Show-only-changes toggle
@@ -505,9 +704,7 @@ function buildCenterPanel() {
   });
   if (entries.length === 0) {
     var empty = document.createElement('div');
-    empty.style.padding = '12px 10px';
-    empty.style.color = '#64748b';
-    empty.style.fontSize = '0.85em';
+    empty.className = 'split-change-empty';
     empty.textContent = 'No changes.';
     container.appendChild(empty);
     return;

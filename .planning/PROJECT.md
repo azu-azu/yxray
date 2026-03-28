@@ -107,4 +107,4 @@ Accurate detection of functional changes — zero false positives from layout no
 - CI polish: GitHub inline graph PNG, comment deduplication, GitLab cleanup, setup README
 
 ---
-*Last updated: 2026-03-13 after v1.1 milestone start*
+*Last updated: 2026-03-28 — Phase 22 complete: HTML report visual redesign (dark-first CSS variable theming, stat cards, polished diff panels, zero CDN)*

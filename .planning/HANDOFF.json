@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-03-27T23:47:11Z",
+  "phase": "22",
+  "phase_name": "html-report-redesign",
+  "phase_dir": ".planning/phases/22-html-report-redesign",
+  "plan": null,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Brainstorm and design visual redesign", "status": "done", "commit": "36d63a8"}
+  ],
+  "remaining_tasks": [
+    {"id": 2, "name": "Create implementation plan", "status": "not_started"},
+    {"id": 3, "name": "Rewrite _TEMPLATE in html_renderer.py", "status": "not_started"},
+    {"id": 4, "name": "Rewrite _GRAPH_FRAGMENT_TEMPLATE in graph_renderer.py", "status": "not_started"},
+    {"id": 5, "name": "Run tests and verify", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "Style 1 dark-first developer aesthetic", "rationale": "User chose it; suits developer/analyst audience", "phase": "22"},
+    {"decision": "Dark is default theme", "rationale": "Replaces current light-as-default", "phase": "22"},
+    {"decision": "Zero CDN constraint preserved", "rationale": "Report must work offline, all inline", "phase": "22"},
+    {"decision": "Python signatures unchanged", "rationale": "Pure CSS/HTML/JS change inside template strings", "phase": "22"},
+    {"decision": "graph_renderer.py in scope", "rationale": "Remove !important overrides, migrate to CSS vars; JS logic untouched", "phase": "22"}
+  ],
+  "uncommitted_files": [
+    ".planning/phases/18.1-creation-of-pr/18.1-04-SUMMARY.md",
+    "app/frontend/.vite/"
+  ],
+  "next_action": "Run /gsd:plan-phase 22 to create implementation plan",
+  "context_notes": "Design spec is fully approved and committed. This is a pure visual refactor — Python classes, Jinja2 vars, and JS logic are frozen. Only CSS/HTML inside the two template strings change. Spec at docs/superpowers/specs/2026-03-27-html-report-redesign-design.md"
+}
