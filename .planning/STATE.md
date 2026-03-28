@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Alteryx Git Companion
 status: executing
-stopped_at: Completed 22-02-PLAN.md — graph fragment CSS variable rewrite
-last_updated: "2026-03-28T00:09:54.070Z"
+stopped_at: Completed 22-01-PLAN.md — HTML report _TEMPLATE redesign
+last_updated: "2026-03-28T00:11:11.581Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 15
   completed_phases: 14
   total_plans: 55
-  completed_plans: 53
+  completed_plans: 54
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 ## Current Position
 
 Phase: 22 (html-report-redesign) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-03-28
 
@@ -104,6 +104,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 20-tech-debt-cleanup P03 | 30 | 3 tasks | 3 files |
 | Phase 21-nyquist-wave0-remediation P01 | 4 | 10 tasks | 10 files |
 | Phase 22-html-report-redesign P02 | 3 | 1 tasks | 1 files |
+| Phase 22 P01 | 217 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -230,6 +231,8 @@ Recent decisions affecting current work:
 - [Phase 21-01]: test_port_probe.py: patch('socket.socket') with MagicMock for env-agnostic happy-path test; ephemeral ports 19900-19910 for real-socket tests to avoid port 7433 conflicts
 - [Phase 21-01]: Phase 16.1 VALIDATION.md: corrected app/tests/test_git_ops.py (non-existent) to tests/test_history.py — all 4 pushed_shas/is_pushed tests confirmed in correct location
 - [Phase 22-html-report-redesign]: isDark() uses classList.contains('light') to match Plan 01 theme system; MutationObserver watches class attribute
+- [Phase 22]: Theme system uses html.light class (not data-theme): dark on :root default, light overrides on html.light
+- [Phase 22]: expandAll/collapseAll fixed to query section-* container divs instead of h2 heading which has no .tool-row children
 
 ### Roadmap Evolution
 
@@ -248,6 +251,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-28T00:09:54.065Z
-Stopped at: Completed 22-02-PLAN.md — graph fragment CSS variable rewrite
+Last session: 2026-03-28T00:11:11.577Z
+Stopped at: Completed 22-01-PLAN.md — HTML report _TEMPLATE redesign
 Resume file: None
