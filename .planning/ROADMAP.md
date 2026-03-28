@@ -299,4 +299,4 @@ Plans:
 | 19. Close Audit Gaps | 1/1 | Complete    | 2026-03-22 | — |
 | 20. Tech Debt Cleanup | 3/3 | Complete    | 2026-03-22 | — |
 | 21. Nyquist Wave-0 Remediation | 1/1 | Complete    | 2026-03-22 | — |
-| 22. HTML Report Redesign | 0/? | 3/3 | Complete   | 2026-03-28 |
+| 22. HTML Report Redesign | 0/? | 3/3 | Complete    | 2026-03-28 |
