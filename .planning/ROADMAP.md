@@ -268,7 +268,7 @@ Plans:
 Plans:
 - [x] 22-01-PLAN.md — Rewrite _TEMPLATE: CSS token system, header, stat cards, section headers, tool rows, detail panels, governance footer
 - [x] 22-02-PLAN.md — Rewrite _GRAPH_FRAGMENT_TEMPLATE: remove inline styles and !important, add CSS variable classes
-- [ ] 22-03-PLAN.md — Integration tests + regenerate examples/diff_report.html
+- [x] 22-03-PLAN.md — Integration tests + regenerate examples/diff_report.html
 
 ## Progress
 
@@ -299,4 +299,4 @@ Plans:
 | 19. Close Audit Gaps | 1/1 | Complete    | 2026-03-22 | — |
 | 20. Tech Debt Cleanup | 3/3 | Complete    | 2026-03-22 | — |
 | 21. Nyquist Wave-0 Remediation | 1/1 | Complete    | 2026-03-22 | — |
-| 22. HTML Report Redesign | 0/? | 2/3 | In Progress|  |
+| 22. HTML Report Redesign | 0/? | 3/3 | Complete   | 2026-03-28 |
