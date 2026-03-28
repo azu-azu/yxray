@@ -253,14 +253,13 @@ def remote_status(
     repo_info = config_store.get_remote_repo(project_id) if project_id else {}
     repo_url: str | None = repo_info.get(f"{provider}_url")
 
-    ahead, behind = 0, 0
     if token and repo_url and not fast:
         with contextlib.suppress(Exception):
             git_ops.git_fetch(folder, repo_url, token)
-            ahead, behind = git_ops.git_ahead_behind(folder)
-    else:
-        with contextlib.suppress(Exception):
-            ahead, behind = git_ops.git_ahead_behind(folder)
+
+    ahead, behind = 0, 0
+    with contextlib.suppress(Exception):
+        ahead, behind = git_ops.git_ahead_behind(folder)
 
     return {
         "ahead": ahead,

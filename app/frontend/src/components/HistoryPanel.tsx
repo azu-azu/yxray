@@ -537,7 +537,21 @@ export function HistoryPanel({
     } catch { /* ignore */ }
   }
 
-  useEffect(() => { fetchRemoteStatus({ fast: true }) }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!projectId) return
+    fetchRemoteStatus({ fast: true })  // immediate: show cached counts
+    fetchRemoteStatus()                // background: fetch from remote for fresh counts
+
+    // Local refresh every 10s — reads local remote-tracking refs, no network
+    const localTimer = setInterval(() => fetchRemoteStatus({ fast: true }), 10_000)
+    // Remote fetch every 3 min — actual git fetch, matches VS Code's autofetch default
+    const remoteTimer = setInterval(() => fetchRemoteStatus(), 3 * 60 * 1000)
+
+    return () => {
+      clearInterval(localTimer)
+      clearInterval(remoteTimer)
+    }
+  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!lastPushTimestamp) return
