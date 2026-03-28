@@ -68,3 +68,15 @@ def set_remote_repo(project_id: str, provider: str, url: str) -> None:
         cfg["remote_repos"][project_id] = {}
     cfg["remote_repos"][project_id][f"{provider}_url"] = url
     save_config(cfg)
+
+
+def clear_remote_repo(project_id: str, provider: str) -> None:
+    """Clear the stored remote repo URL for the given project and provider."""
+    cfg = load_config()
+    remote_repos = cfg.get("remote_repos", {})
+    project_repos = remote_repos.get(project_id, {})
+    key = f"{provider}_url"
+    if key in project_repos:
+        project_repos[key] = None
+        cfg["remote_repos"][project_id] = project_repos
+        save_config(cfg)

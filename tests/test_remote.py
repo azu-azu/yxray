@@ -742,3 +742,100 @@ def test_config_store_get_remote_repo_missing(tmp_path, monkeypatch):
 
     result = config_store.get_remote_repo("nonexistent-proj")
     assert result == {}, f"Expected empty dict for missing project, got {result}"
+
+
+# ---------------------------------------------------------------------------
+# ST9: RepoNotFoundError in git_ops + clear_remote_repo in config_store
+# ---------------------------------------------------------------------------
+
+
+def test_git_push_raises_repo_not_found_on_github_message(tmp_path):
+    """git_push raises RepoNotFoundError when GitHub reports repo not found."""  # noqa: E501
+    _require_git_ops()
+
+    from app.services import git_ops
+
+    mock_result = MagicMock()
+    mock_result.returncode = 128
+    mock_result.stdout = ""
+    mock_result.stderr = (  # noqa: E501
+        "remote: Repository not found.\n"
+        "fatal: repository 'https://github.com/user/repo.git/' not found"
+    )
+    mock_result.args = ["git", "push"]
+
+    with (
+        patch("app.services.git_ops.subprocess.run", return_value=mock_result),
+        pytest.raises(git_ops.RepoNotFoundError),
+    ):
+        git_ops.git_push("/fake/folder", "https://github.com/user/repo.git", "tok")
+
+
+def test_git_push_raises_repo_not_found_on_gitlab_message(tmp_path):
+    """git_push raises RepoNotFoundError when GitLab reports repo not found."""
+    _require_git_ops()
+    from app.services import git_ops
+
+    mock_result = MagicMock()
+    mock_result.returncode = 128
+    mock_result.stdout = ""
+    mock_result.stderr = (
+        "remote: ERROR: Repository not found.\n"
+        "fatal: Could not read from remote repository."
+    )
+    mock_result.args = ["git", "push"]
+
+    with (
+        patch("app.services.git_ops.subprocess.run", return_value=mock_result),
+        pytest.raises(git_ops.RepoNotFoundError),
+    ):
+        git_ops.git_push("/fake/folder", "https://gitlab.com/user/repo.git", "tok")
+
+
+def test_git_push_raises_called_process_error_for_other_failures(tmp_path):
+    """git_push raises CalledProcessError for non-repo-not-found failures."""
+    _require_git_ops()
+    import subprocess as _subprocess
+
+    from app.services import git_ops
+
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stdout = ""
+    mock_result.stderr = "error: failed to push some refs to remote"
+    mock_result.args = ["git", "push"]
+
+    with (
+        patch("app.services.git_ops.subprocess.run", return_value=mock_result),
+        pytest.raises(_subprocess.CalledProcessError),
+    ):
+        git_ops.git_push("/fake/folder", "https://github.com/user/repo.git", "tok")
+
+
+def test_clear_remote_repo_clears_url(tmp_path, monkeypatch):
+    """clear_remote_repo sets the URL to None after set_remote_repo."""
+    monkeypatch.setattr(
+        "app.services.config_store._config_path", lambda: tmp_path / "config.json"
+    )
+    from app.services import config_store
+
+    config_store.set_remote_repo(
+        "proj-xyz", "github", "https://github.com/user/repo.git"
+    )
+    config_store.clear_remote_repo("proj-xyz", "github")
+
+    result = config_store.get_remote_repo("proj-xyz")
+    assert result.get("github_url") is None, (
+        f"Expected github_url to be None after clear, got {result}"
+    )
+
+
+def test_clear_remote_repo_noop_when_missing(tmp_path, monkeypatch):
+    """clear_remote_repo does not raise when project_id is not in config."""
+    monkeypatch.setattr(
+        "app.services.config_store._config_path", lambda: tmp_path / "config.json"
+    )
+    from app.services import config_store
+
+    # Should not raise
+    config_store.clear_remote_repo("nonexistent-proj", "github")

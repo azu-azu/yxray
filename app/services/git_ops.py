@@ -11,6 +11,10 @@ import tempfile
 from pathlib import Path
 
 
+class RepoNotFoundError(Exception):
+    """Raised when the remote repository does not exist (has been deleted)."""
+
+
 def is_git_repo(folder: str) -> bool:
     """Return True if the folder is inside a git repository."""
     result = subprocess.run(
@@ -415,6 +419,9 @@ def git_push(folder: str, remote_url: str, token: str) -> None:
             env=env,
         )
         if result.returncode != 0:
+            stderr_lower = (result.stderr or "").lower()
+            if "repository not found" in stderr_lower:
+                raise RepoNotFoundError(result.stderr.strip())
             raise subprocess.CalledProcessError(
                 result.returncode, result.args, result.stdout, result.stderr
             )
