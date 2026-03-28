@@ -166,7 +166,7 @@ def push(body: PushRequest) -> dict:
             return {"success": False, "error": f"Failed to create repo: {exc}"}
 
     try:
-        git_ops.git_push(body.folder, repo_url, token)
+        git_ops.git_push(body.folder, repo_url, token, push_all=created)
         return {"success": True, "repo_url": repo_url, "created": created}
     except git_ops.RepoNotFoundError:
         config_store.clear_remote_repo(body.project_id, body.provider)

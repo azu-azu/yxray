@@ -360,9 +360,11 @@ def git_pull(folder: str, remote_url: str, token: str) -> dict:
             os.unlink(askpass_path)
 
 
-def git_push(folder: str, remote_url: str, token: str) -> None:
-    """Push current branch to remote_url using GIT_ASKPASS credential injection.
+def git_push(folder: str, remote_url: str, token: str, push_all: bool = False) -> None:
+    """Push to remote_url using GIT_ASKPASS credential injection.
 
+    When push_all=True, pushes all local branches (used when creating a new repo
+    so experiment branches aren't left behind).
     Keeps token out of .git/config and process command-line arguments.
     Uses a temporary GIT_ASKPASS script so the token is never passed on the
     command line or embedded in the remote URL.
@@ -425,6 +427,16 @@ def git_push(folder: str, remote_url: str, token: str) -> None:
             raise subprocess.CalledProcessError(
                 result.returncode, result.args, result.stdout, result.stderr
             )
+
+        # Push all other local branches when creating a fresh repo so
+        # experiment branches aren't silently left behind.
+        if push_all:
+            subprocess.run(
+                ["git", "-C", folder, "push", "--all", "origin"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
     finally:
         with contextlib.suppress(OSError):
             os.unlink(askpass_path)
@@ -467,18 +479,37 @@ def git_pushed_shas(folder: str) -> set[str]:
 def git_ahead_behind(folder: str) -> tuple[int, int]:
     """Return (ahead, behind) commit counts vs. upstream tracking branch.
 
-    Returns (0, 0) if no upstream is set.
+    First tries @{u} (configured tracking branch). Falls back to
+    origin/<current_branch> so counts work even when the tracking ref
+    was lost (e.g. after repo deletion and recreation).
+    Returns (0, 0) if no upstream can be determined.
     """
-    # Get the name of the upstream tracking branch
     upstream_result = subprocess.run(
         ["git", "-C", folder, "rev-parse", "--abbrev-ref", "@{u}"],
         capture_output=True,
         text=True,
     )
-    if upstream_result.returncode != 0:
-        return (0, 0)
-
-    upstream = upstream_result.stdout.strip()
+    if upstream_result.returncode == 0:
+        upstream = upstream_result.stdout.strip()
+    else:
+        # Fallback: derive upstream from current branch name
+        branch_result = subprocess.run(
+            ["git", "-C", folder, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        if branch_result.returncode != 0:
+            return (0, 0)
+        current_branch = branch_result.stdout.strip()
+        upstream = f"origin/{current_branch}"
+        # Verify the remote ref actually exists before comparing
+        check = subprocess.run(
+            ["git", "-C", folder, "rev-parse", "--verify", upstream],
+            capture_output=True,
+            text=True,
+        )
+        if check.returncode != 0:
+            return (0, 0)
 
     # Count commits ahead (local has but upstream does not)
     ahead_result = subprocess.run(
