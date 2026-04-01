@@ -71,7 +71,7 @@ def git_changed_workflows(folder: str) -> list[str]:
         return [
             f.name
             for f in Path(folder).iterdir()
-            if f.is_file() and f.suffix in WORKFLOW_SUFFIXES
+            if f.is_file() and any(s in WORKFLOW_SUFFIXES for s in f.suffixes)
         ]
 
     result = subprocess.run(
@@ -87,7 +87,7 @@ def git_changed_workflows(folder: str) -> list[str]:
         # Handle rename format: "ORIG_PATH -> NEW_PATH" — take the new path
         if " -> " in filename:
             filename = filename.split(" -> ")[-1].strip()
-        if Path(filename).suffix in WORKFLOW_SUFFIXES:
+        if any(s in WORKFLOW_SUFFIXES for s in Path(filename).suffixes):
             changed.append(filename)
     return changed
 

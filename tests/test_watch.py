@@ -280,3 +280,53 @@ def test_watch_status_total_workflows():
         r = client.get("/api/watch/status")
     assert r.status_code == 200
     assert r.json()["proj-1"]["total_workflows"] == 5
+
+
+def test_git_changed_workflows_double_extension(tmp_path):
+    """git_changed_workflows detects files like workflow.yxmd.rtf as Alteryx workflows.
+
+    macOS TextEdit saves files with an extra .rtf extension, producing
+    double-extension filenames like 'test.yxmd.rtf'. Path.suffix returns
+    '.rtf' (not in WORKFLOW_SUFFIXES), but Path.suffixes returns
+    ['.yxmd', '.rtf'] — the .yxmd IS present.
+    The fix uses any(s in WORKFLOW_SUFFIXES for s in Path(filename).suffixes).
+    """
+    import subprocess
+
+    from app.services.git_ops import git_changed_workflows
+
+    # Set up a real git repo
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    # Create an initial commit so there's a HEAD
+    (tmp_path / "placeholder.txt").write_text("init")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "initial"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    # Add an untracked double-extension file: workflow.yxmd.rtf
+    double_ext_file = tmp_path / "workflow.yxmd.rtf"
+    double_ext_file.write_text("<root/>")
+
+    result = git_changed_workflows(str(tmp_path))
+
+    filenames = [r.split("/")[-1] if "/" in r else r for r in result]
+    assert "workflow.yxmd.rtf" in filenames, (
+        f"Expected 'workflow.yxmd.rtf' in changed workflows, got {result}"
+    )
