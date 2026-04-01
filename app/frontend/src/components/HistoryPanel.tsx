@@ -592,7 +592,15 @@ export function HistoryPanel({
     }
     if (failed.length > 0) {
       const names = failed.map((p) => p === 'github' ? 'GitHub' : 'GitLab').join(' and ')
-      setPushError(`${names} backup failed. Check your connection and try again.`)
+      const noCommitsMsg = results
+        .filter((r) => r.status === 'rejected')
+        .map((r) => (r as PromiseRejectedResult).reason?.message ?? '')
+        .find((msg) => msg === 'no_commits')
+      if (noCommitsMsg === 'no_commits') {
+        setPushError('Save your workflow first before pushing to GitHub/GitLab.')
+      } else {
+        setPushError(`${names} backup failed. Check your connection and try again.`)
+      }
       setTimeout(() => { setPushState('idle'); setPushError(null) }, 5000)
     }
   }

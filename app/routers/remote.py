@@ -168,6 +168,8 @@ def push(body: PushRequest) -> dict:
     try:
         git_ops.git_push(body.folder, repo_url, token, push_all=created)
         return {"success": True, "repo_url": repo_url, "created": created}
+    except git_ops.NoPushableCommitsError:
+        return {"success": False, "error": "no_commits"}
     except git_ops.RepoNotFoundError:
         config_store.clear_remote_repo(body.project_id, body.provider)
         return {"success": False, "error": "repo_deleted"}

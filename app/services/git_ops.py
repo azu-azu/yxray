@@ -15,6 +15,10 @@ class RepoNotFoundError(Exception):
     """Raised when the remote repository does not exist (has been deleted)."""
 
 
+class NoPushableCommitsError(Exception):
+    """Raised when the local repo has no commits to push."""
+
+
 def is_git_repo(folder: str) -> bool:
     """Return True if the folder is inside a git repository."""
     result = subprocess.run(
@@ -369,6 +373,11 @@ def git_push(folder: str, remote_url: str, token: str, push_all: bool = False) -
     Uses a temporary GIT_ASKPASS script so the token is never passed on the
     command line or embedded in the remote URL.
     """
+    if not git_has_commits(folder):
+        raise NoPushableCommitsError(
+            "Repository has no commits. Save your workflow first."
+        )
+
     # Write a temporary askpass script that echoes the token.
     # On Windows, write a .bat; on Unix, write a shell script.
     fd, askpass_path = tempfile.mkstemp(

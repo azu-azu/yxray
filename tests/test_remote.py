@@ -765,6 +765,7 @@ def test_git_push_raises_repo_not_found_on_github_message(tmp_path):
     mock_result.args = ["git", "push"]
 
     with (
+        patch("app.services.git_ops.git_has_commits", return_value=True),
         patch("app.services.git_ops.subprocess.run", return_value=mock_result),
         pytest.raises(git_ops.RepoNotFoundError),
     ):
@@ -786,6 +787,7 @@ def test_git_push_raises_repo_not_found_on_gitlab_message(tmp_path):
     mock_result.args = ["git", "push"]
 
     with (
+        patch("app.services.git_ops.git_has_commits", return_value=True),
         patch("app.services.git_ops.subprocess.run", return_value=mock_result),
         pytest.raises(git_ops.RepoNotFoundError),
     ):
@@ -806,6 +808,7 @@ def test_git_push_raises_called_process_error_for_other_failures(tmp_path):
     mock_result.args = ["git", "push"]
 
     with (
+        patch("app.services.git_ops.git_has_commits", return_value=True),
         patch("app.services.git_ops.subprocess.run", return_value=mock_result),
         pytest.raises(_subprocess.CalledProcessError),
     ):
@@ -844,6 +847,54 @@ def test_clear_remote_repo_noop_when_missing(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # ST9: Router returns repo_deleted when git_push raises RepoNotFoundError
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 260401-rd4: NoPushableCommitsError guard in git_push + router handler
+# ---------------------------------------------------------------------------
+
+
+def test_git_push_raises_no_commits_error():
+    """git_ops.git_push raises NoPushableCommitsError when repo has no commits."""
+    _require_git_ops()
+    from app.services import git_ops
+
+    with (
+        patch("app.services.git_ops.git_has_commits", return_value=False),
+        pytest.raises(git_ops.NoPushableCommitsError),
+    ):
+        git_ops.git_push("/fake/folder", "https://github.com/u/r.git", "token")
+
+
+def test_push_endpoint_no_commits():
+    """POST /api/remote/push returns no_commits error when repo has no commits."""
+    _require_remote()
+    from app.services import git_ops
+
+    with (
+        patch(
+            "app.routers.remote.remote_auth.get_github_token",
+            return_value="tok",
+        ),
+        patch(
+            "app.routers.remote.config_store.get_remote_repo",
+            return_value={"github_url": "https://github.com/u/r.git"},
+        ),
+        patch(
+            "app.routers.remote.git_ops.git_push",
+            side_effect=git_ops.NoPushableCommitsError("no commits"),
+        ),
+    ):
+        resp = _client.post(
+            "/api/remote/push",
+            json={"project_id": "proj-1", "folder": "/fake/folder"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"success": False, "error": "no_commits"}, (
+        f"Expected no_commits response, got {data}"
+    )
 
 
 def test_push_repo_deleted():
