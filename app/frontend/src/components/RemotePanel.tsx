@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/store/useProjectStore'
 import { Cloud } from 'lucide-react'
+import { pushWorkflows, type PushErrorKind } from '@/hooks/usePushWorkflows'
 
 interface RemoteStatus {
   ahead: number
@@ -18,7 +19,7 @@ interface GitHubFlow {
 }
 
 type PushState = 'idle' | 'pushing' | 'done' | 'error'
-type PushErrorKind = 'generic' | 'auth_expired' | 'repo_deleted' | 'no_commits' | null
+type PushErrorKindOrNull = PushErrorKind | null
 type PullState = 'idle' | 'pulling' | 'done' | 'up_to_date' | 'error'
 
 export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } = {}) {
@@ -49,9 +50,9 @@ const [loading, setLoading] = useState(true)
 
   // Push state
   const [githubPushState, setGithubPushState] = useState<PushState>('idle')
-  const [githubPushError, setGithubPushError] = useState<PushErrorKind>(null)
+  const [githubPushError, setGithubPushError] = useState<PushErrorKindOrNull>(null)
   const [gitlabPushState, setGitlabPushState] = useState<PushState>('idle')
-  const [gitlabPushError, setGitlabPushError] = useState<PushErrorKind>(null)
+  const [gitlabPushError, setGitlabPushError] = useState<PushErrorKindOrNull>(null)
 
   // Pull state
   const [githubPullState, setGithubPullState] = useState<PullState>('idle')
@@ -184,36 +185,14 @@ const [loading, setLoading] = useState(true)
     setPushState('pushing')
     setPushError(null)
     try {
-      const res = await fetch('/api/remote/push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: activeProject.id,
-          folder: activeProject.path,
-          provider,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setPushState('done')
-        await fetchStatus()
-        setTimeout(() => setPushState('idle'), 3000)
-        onPushComplete?.()
-      } else {
-        const errorMsg: string = data.error ?? ''
-        if (errorMsg === 'no_commits') {
-          setPushError('no_commits')
-        } else if (errorMsg === 'repo_deleted') {
-          setPushError('repo_deleted')
-        } else if (errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('401')) {
-          setPushError('auth_expired')
-        } else {
-          setPushError('generic')
-        }
-        setPushState('error')
-      }
-    } catch {
-      setPushError('generic')
+      await pushWorkflows(activeProject.id, activeProject.path, provider)
+      setPushState('done')
+      await fetchStatus()
+      setTimeout(() => setPushState('idle'), 3000)
+      onPushComplete?.()
+    } catch (err) {
+      const kind = (err instanceof Error ? err.message : 'generic') as PushErrorKind
+      setPushError(kind)
       setPushState('error')
     }
   }

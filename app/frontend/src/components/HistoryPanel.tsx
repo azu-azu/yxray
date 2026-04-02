@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Cloud } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BranchChip } from '@/components/BranchChip'
+import { pushWorkflows } from '@/hooks/usePushWorkflows'
 
 function humanizeBranchName(branch: string): string {
   const withoutPrefix = branch.replace(/^experiment\/(\d{4}-\d{2}-\d{2}-)?/, '')
@@ -571,15 +572,7 @@ export function HistoryPanel({
     if (remoteStatus.github_connected) providers.push('github')
     if (remoteStatus.gitlab_connected) providers.push('gitlab')
     const results = await Promise.allSettled(
-      providers.map((provider) =>
-        fetch('/api/remote/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: projectId, folder: projectPath, provider }),
-        }).then((res) => res.json()).then((data) => {
-          if (!data.success) throw new Error(data.error ?? 'push failed')
-        })
-      )
+      providers.map((provider) => pushWorkflows(projectId, projectPath, provider))
     )
     const anySucceeded = results.some((r) => r.status === 'fulfilled')
     const failed = providers.filter((_, i) => results[i].status === 'rejected')
@@ -592,11 +585,10 @@ export function HistoryPanel({
     }
     if (failed.length > 0) {
       const names = failed.map((p) => p === 'github' ? 'GitHub' : 'GitLab').join(' and ')
-      const noCommitsMsg = results
+      const isNoCommits = results
         .filter((r) => r.status === 'rejected')
-        .map((r) => (r as PromiseRejectedResult).reason?.message ?? '')
-        .find((msg) => msg === 'no_commits')
-      if (noCommitsMsg === 'no_commits') {
+        .some((r) => (r as PromiseRejectedResult).reason?.message === 'no_commits')
+      if (isNoCommits) {
         setPushError('Save your workflow first before pushing to GitHub/GitLab.')
       } else {
         setPushError(`${names} backup failed. Check your connection and try again.`)
