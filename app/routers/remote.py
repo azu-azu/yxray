@@ -143,6 +143,9 @@ def push(body: PushRequest) -> dict:
     if not token:
         return {"success": False, "error": "Not connected"}
 
+    if not git_ops.git_has_commits(body.folder):
+        return {"success": False, "error": "no_commits"}
+
     repo_info = config_store.get_remote_repo(body.project_id)
     repo_url = repo_info.get(f"{body.provider}_url")
     created = False
