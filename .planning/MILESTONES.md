@@ -28,3 +28,32 @@
 - `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
 
 ---
+
+## v1.1 Alteryx Git Companion (Shipped: 2026-04-02)
+
+**Phases completed:** 15 phases (10–22 incl. 16.1, 18.1), 55 plans
+**Timeline:** 2026-03-09 → 2026-04-01 (24 days)
+**Lines of code:** ~6,869 LOC app (Python + TSX/TS) + ~6,992 LOC tests
+**Tests:** 252 collected (243 passing, 1 xfailed)
+**Git commits:** 325
+
+**Delivered:** A Windows desktop companion app (PyInstaller `.exe`) that makes Git-based version control accessible to non-technical Alteryx analysts — file watcher, save/undo/discard, history timeline with embedded ACD diff viewer, GitHub OAuth + GitLab PAT remote backup, experiment branch management, in-app PR/MR creation, and polished CI templates.
+
+**Key accomplishments:**
+1. Windows `.exe` via PyInstaller — bundles FastAPI + React + acd CLI; zero Python install; auto-launches browser on start; auto-starts on Windows boot via system tray
+2. File watcher with automatic polling fallback (5s) for SMB/UNC network drives — no manual configuration
+3. Core version control loop: selective commit (Save Version), flat history timeline, ACD HTML diff embedded in iframe, Undo last save, Discard to `.acd-backup`
+4. Remote backup: GitHub OAuth device flow + GitLab PAT; credentials in OS keyring; single-button push with auto-create remote repo; ahead/behind indicator
+5. Experiment branch management with git graph view, push status cloud icons, and in-app PR/MR creation for both GitHub and GitLab
+6. CI templates: GitHub comment deduplication (find-or-update), inline PNG graph, GitLab MR marker-based dedup, `ci-templates/` distributable with setup README
+7. HTML report visual redesign: dark-first CSS variable theming, stat cards with accent colors, animated chevron tool rows, Before/After diff panels, `localStorage` theme persistence — all self-contained, zero CDN
+
+**Requirements:** 31/31 v1.1 requirements satisfied
+**Audit:** tech_debt — no critical blockers; 24 deferred human-verification items (Windows-only or live browser)
+
+**Archive:**
+- `.planning/milestones/v1.1-ROADMAP.md`
+- `.planning/milestones/v1.1-REQUIREMENTS.md`
+- `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
+
+---
