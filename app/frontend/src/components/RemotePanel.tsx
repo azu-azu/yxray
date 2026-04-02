@@ -18,7 +18,7 @@ interface GitHubFlow {
 }
 
 type PushState = 'idle' | 'pushing' | 'done' | 'error'
-type PushErrorKind = 'generic' | 'auth_expired' | 'repo_deleted' | null
+type PushErrorKind = 'generic' | 'auth_expired' | 'repo_deleted' | 'no_commits' | null
 type PullState = 'idle' | 'pulling' | 'done' | 'up_to_date' | 'error'
 
 export function RemotePanel({ onPushComplete }: { onPushComplete?: () => void } = {}) {
@@ -201,7 +201,9 @@ const [loading, setLoading] = useState(true)
         onPushComplete?.()
       } else {
         const errorMsg: string = data.error ?? ''
-        if (errorMsg === 'repo_deleted') {
+        if (errorMsg === 'no_commits') {
+          setPushError('no_commits')
+        } else if (errorMsg === 'repo_deleted') {
           setPushError('repo_deleted')
         } else if (errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('401')) {
           setPushError('auth_expired')
@@ -328,6 +330,9 @@ const [loading, setLoading] = useState(true)
               Reconnect
             </button>
           </div>
+        )}
+        {pushState === 'error' && pushError === 'no_commits' && (
+          <p className="text-xs text-red-500 mt-1">Save your workflow first before pushing to GitHub/GitLab.</p>
         )}
         {pushState === 'error' && pushError === 'repo_deleted' && (
           <div className="flex items-center gap-2 mt-1">
