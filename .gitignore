@@ -11,3 +11,11 @@ dist/
 build/
 file_version_info.txt
 *.egg-info/
+
+# Open-source exclusions — sensitive/internal files
+.env
+.env.*
+.claude/
+.planning/
+tests/eval/results/
+app/frontend/.vite/
