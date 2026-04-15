@@ -21,7 +21,16 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, "/Users/laxmikantmukkawar/alteryx/.github/scripts")
+_GITHUB_SCRIPTS = "/Users/laxmikantmukkawar/alteryx/.github/scripts"
+if not os.path.isdir(_GITHUB_SCRIPTS):
+    import pytest
+
+    pytest.skip(
+        "ci-templates scripts not available (separate repo)",
+        allow_module_level=True,
+    )
+
+sys.path.insert(0, _GITHUB_SCRIPTS)
 
 import generate_diff_comment as gdc  # noqa: E402
 

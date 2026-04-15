@@ -17,6 +17,14 @@ from unittest.mock import patch
 _GITLAB_SCRIPT = (
     "/Users/laxmikantmukkawar/alteryx/.gitlab/scripts/generate_diff_comment.py"
 )
+if not os.path.isfile(_GITLAB_SCRIPT):
+    import pytest
+
+    pytest.skip(
+        "ci-templates scripts not available (separate repo)",
+        allow_module_level=True,
+    )
+
 _spec = importlib.util.spec_from_file_location(
     "gitlab_generate_diff_comment", _GITLAB_SCRIPT
 )

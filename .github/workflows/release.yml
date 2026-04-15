@@ -26,7 +26,7 @@ jobs:
         run: pip install uv
 
       - name: Install Python dependencies
-        run: uv sync
+        run: uv sync --group build
 
       - name: Set up Node
         uses: actions/setup-node@v4
