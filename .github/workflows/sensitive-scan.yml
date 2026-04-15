@@ -1,0 +1,66 @@
+name: Sensitive Data Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sensitive-scan:
+    name: Scan for sensitive patterns
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for sensitive patterns
+        run: |
+          set +e
+          FAILED=0
+
+          # Company / internal names (add more as needed)
+          PATTERNS=(
+            "sagen"
+            "SAGEN"
+            "SAGEN_REFERENCE_NUMBER"
+            "SIN[^A-Z_]"
+            "SSN[^A-Z_]"
+            "[0-9]{3}-[0-9]{2}-[0-9]{4}"
+          )
+
+          # Files and directories to skip
+          EXCLUDE_DIRS=".git node_modules .venv venv dist"
+
+          EXCLUDE_FLAGS=""
+          for d in $EXCLUDE_DIRS; do
+            EXCLUDE_FLAGS="$EXCLUDE_FLAGS --exclude-dir=$d"
+          done
+
+          for pattern in "${PATTERNS[@]}"; do
+            MATCHES=$(grep -rn $EXCLUDE_FLAGS -E "$pattern" . \
+              --include="*.py" \
+              --include="*.ts" \
+              --include="*.tsx" \
+              --include="*.js" \
+              --include="*.json" \
+              --include="*.yml" \
+              --include="*.yaml" \
+              --include="*.toml" \
+              --include="*.html" \
+              --include="*.md" \
+              2>/dev/null)
+            if [ -n "$MATCHES" ]; then
+              echo "::error::Sensitive pattern found: '$pattern'"
+              echo "$MATCHES"
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "Sensitive patterns detected. Remove them before merging."
+            exit 1
+          fi
+
+          echo "No sensitive patterns found."
