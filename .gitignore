@@ -17,5 +17,10 @@ file_version_info.txt
 .env.*
 .claude/
 .planning/
+docs/
 tests/eval/results/
 app/frontend/.vite/
+
+# Generated output artifacts — not for version control
+/diff_report.html
+/review.html
