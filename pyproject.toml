@@ -1,6 +1,6 @@
 [project]
 name = "alteryx-git-companion"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI diff tool and Git companion for Alteryx .yxmd workflow files"
 readme = "README.md"
 license = {text = "MIT"}
