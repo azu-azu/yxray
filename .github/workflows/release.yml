@@ -51,15 +51,26 @@ jobs:
       - name: Build EXE
         run: uv run pyinstaller app.spec --noconfirm
 
+      - name: Determine pre-release status
+        id: prerelease
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $tag = $env:TAG
+          $isPrerelease = $tag -match '^v0\.' -or $tag -match '-(alpha|beta|rc)(\.\d+)?$'
+          echo "value=$($isPrerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/AlterxyGitCompanion.exe
+          prerelease: ${{ steps.prerelease.outputs.value == 'true' }}
+          files: dist/AlteryxGitCompanion.exe
           body: |
             ## Alteryx Git Companion
 
             ### Installation
 
-            Download `AlterxyGitCompanion.exe` and double-click to run.
+            Download `AlteryxGitCompanion.exe` and double-click to run.
 
             **Windows SmartScreen warning:** Windows may show a SmartScreen warning because the app is not yet code-signed. Click **More info** then **Run anyway** to proceed.

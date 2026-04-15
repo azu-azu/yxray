@@ -56,7 +56,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='AlterxyGitCompanion',
+    name='AlteryxGitCompanion',
     debug=False,
     bootloader_ignore_signals=True,
     strip=False,
