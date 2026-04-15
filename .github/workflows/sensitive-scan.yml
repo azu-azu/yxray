@@ -19,25 +19,13 @@ jobs:
           set +e
           FAILED=0
 
-          # Company / internal names (add more as needed)
-          PATTERNS=(
-            "sagen"
-            "SAGEN"
-            "SAGEN_REFERENCE_NUMBER"
-            "SIN[^A-Z_]"
-            "SSN[^A-Z_]"
-            "[0-9]{3}-[0-9]{2}-[0-9]{4}"
-          )
+          # Files and directories to skip (includes .github so the workflow itself isn't flagged)
+          EXCLUDE_FLAGS="--exclude-dir=.git --exclude-dir=.github --exclude-dir=node_modules --exclude-dir=.venv --exclude-dir=venv --exclude-dir=dist"
 
-          # Files and directories to skip
-          EXCLUDE_DIRS=".git node_modules .venv venv dist"
-
-          EXCLUDE_FLAGS=""
-          for d in $EXCLUDE_DIRS; do
-            EXCLUDE_FLAGS="$EXCLUDE_FLAGS --exclude-dir=$d"
-          done
-
-          for pattern in "${PATTERNS[@]}"; do
+          check_pattern() {
+            local label="$1"
+            local pattern="$2"
+            local MATCHES
             MATCHES=$(grep -rn $EXCLUDE_FLAGS -E "$pattern" . \
               --include="*.py" \
               --include="*.ts" \
@@ -51,11 +39,17 @@ jobs:
               --include="*.md" \
               2>/dev/null)
             if [ -n "$MATCHES" ]; then
-              echo "::error::Sensitive pattern found: '$pattern'"
+              echo "::error::Sensitive pattern found: $label"
               echo "$MATCHES"
               FAILED=1
             fi
-          done
+          }
+
+          check_pattern "company-name-lowercase" "sagen"
+          check_pattern "company-name-uppercase" "SAGEN(_[A-Z_]+)?"
+          check_pattern "bare-SIN-field"          "SIN[^A-Z_]"
+          check_pattern "bare-SSN-field"          "SSN[^A-Z_]"
+          check_pattern "ssn-number-format"       "[0-9]{3}-[0-9]{2}-[0-9]{4}"
 
           if [ "$FAILED" -eq 1 ]; then
             echo ""
