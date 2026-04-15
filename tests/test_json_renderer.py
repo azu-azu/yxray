@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from alteryx_diff.models import AlteryxNode, DiffResult, EdgeDiff
-from alteryx_diff.models.types import AnchorName, ToolID
-from alteryx_diff.renderers import JSONRenderer
+from alteryx_git_companion.models import AlteryxNode, DiffResult, EdgeDiff
+from alteryx_git_companion.models.types import AnchorName, ToolID
+from alteryx_git_companion.renderers import JSONRenderer
 
 # --- fixture helpers ---
 

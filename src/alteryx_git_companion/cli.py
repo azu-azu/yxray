@@ -9,9 +9,9 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from alteryx_diff.exceptions import MalformedXMLError, ParseError
-from alteryx_diff.pipeline import DiffRequest, run
-from alteryx_diff.renderers import GraphRenderer, HTMLRenderer
+from alteryx_git_companion.exceptions import MalformedXMLError, ParseError
+from alteryx_git_companion.pipeline import DiffRequest, run
+from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer
 
 app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
@@ -188,7 +188,8 @@ def _cli_json_output(result: Any, metadata: dict[str, Any]) -> str:
     Distinct from JSONRenderer output ({summary, tools, connections}).
     Kept separate to avoid breaking existing JSONRenderer tests (5 passing).
     """
-    from alteryx_diff.models import (  # local import: avoids circular at module level
+    # local import: avoids circular at module level
+    from alteryx_git_companion.models import (
         DiffResult,
     )
 

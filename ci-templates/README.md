@@ -6,7 +6,7 @@ comment. The report shows which tools were added, removed, or modified — so
 reviewers can see exactly what changed in the workflow without opening Alteryx.
 
 For background on the underlying tool, see the
-[Alteryx Canvas Diff (acd)](https://github.com/Laxmi884/alteryx_diff) repo.
+[Alteryx Canvas Diff (acd)](https://github.com/Laxmi884/alteryx_git_companion) repo.
 
 ---
 
@@ -38,13 +38,13 @@ covers everything, and the HTML diff report links are accessible without login.
 
 **Private repository:** `GITHUB_TOKEN` still covers posting comments. However,
 installing `acd` from the GitHub source requires a personal access token for
-the `alteryx_diff` repo. To set this up:
+the `alteryx_git_companion` repo. To set this up:
 
 1. Create a fine-grained Personal Access Token (PAT):
    - Go to GitHub → Settings → Developer settings → Personal access tokens →
      Fine-grained tokens
    - Click **Generate new token**
-   - Set **Repository access** to `Laxmi884/alteryx_diff` only
+   - Set **Repository access** to `Laxmi884/alteryx_git_companion` only
    - Under **Permissions**, set **Contents** to `Read-only`
    - Click **Generate token** and copy the value immediately
 
@@ -58,12 +58,12 @@ the `alteryx_diff` repo. To set this up:
 
    Find this line:
    ```
-   pip install --quiet git+https://github.com/Laxmi884/alteryx_diff.git
+   pip install --quiet git+https://github.com/Laxmi884/alteryx_git_companion.git
    ```
 
    Replace it with:
    ```
-   pip install --quiet git+https://${{ secrets.GH_PAT }}@github.com/Laxmi884/alteryx_diff.git
+   pip install --quiet git+https://${{ secrets.GH_PAT }}@github.com/Laxmi884/alteryx_git_companion.git
    ```
 
 ### Step 3: GITHUB_TOKEN permissions
@@ -116,7 +116,7 @@ of posting a new one — so the PR stays clean.
 **pip install failed:**
 - For private repos, confirm `GH_PAT` is set in your repo Settings → Secrets
   and variables → Actions, and that the token has `Contents: Read` access to
-  the `alteryx_diff` repository.
+  the `alteryx_git_companion` repository.
 
 ---
 

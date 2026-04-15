@@ -57,10 +57,10 @@ jobs:
       #
       # PUBLIC REPO (current): installs directly from GitHub.
       # PRIVATE REPO: add secret GH_PAT (fine-grained PAT, Contents: read) and use:
-      #   pip install git+https://${{ secrets.GH_PAT }}@github.com/Laxmi884/alteryx_diff.git
+      #   pip install git+https://${{ secrets.GH_PAT }}@github.com/Laxmi884/alteryx_git_companion.git
       - name: Install acd
         run: |
-          pip install --quiet git+https://github.com/Laxmi884/alteryx_diff.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
+          pip install --quiet git+https://github.com/Laxmi884/alteryx_git_companion.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
           acd --help
 
       # ── 4. Generate diff comment + HTML reports ────────────────────────────

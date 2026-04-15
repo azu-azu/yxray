@@ -1,4 +1,4 @@
-"""Typed exception hierarchy for alteryx_diff parse errors.
+"""Typed exception hierarchy for alteryx_git_companion parse errors.
 
 All parsing failures are reported through these exceptions. They carry both
 a plain-English ``message`` and the ``filepath`` that caused the failure,
@@ -20,7 +20,7 @@ __all__ = [
 
 
 class ParseError(Exception):
-    """Base class for all parse-time errors raised by alteryx_diff.
+    """Base class for all parse-time errors raised by alteryx_git_companion.
 
     All subclasses carry ``filepath`` (the file that triggered the error)
     and ``message`` (a plain-English description of the problem).

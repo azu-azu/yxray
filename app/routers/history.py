@@ -10,10 +10,10 @@ import tempfile
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from alteryx_diff.pipeline import DiffRequest
-from alteryx_diff.pipeline import run as pipeline_run
-from alteryx_diff.renderers.graph_renderer import GraphRenderer
-from alteryx_diff.renderers.html_renderer import HTMLRenderer
+from alteryx_git_companion.pipeline import DiffRequest
+from alteryx_git_companion.pipeline import run as pipeline_run
+from alteryx_git_companion.renderers.graph_renderer import GraphRenderer
+from alteryx_git_companion.renderers.html_renderer import HTMLRenderer
 from app.services import git_ops  # noqa: F401 — required for mock.patch targeting
 
 router = APIRouter(prefix="/api/history", tags=["history"])

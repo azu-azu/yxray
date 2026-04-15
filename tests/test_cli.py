@@ -1,4 +1,4 @@
-"""CLI smoke tests for alteryx_diff.cli.
+"""CLI smoke tests for alteryx_git_companion.cli.
 
 Uses CliRunner() — click 8.2+ always separates stdout and stderr streams.
 - result.stdout: only typer.echo() without err=True, and --json output
@@ -19,7 +19,7 @@ import pathlib
 
 from typer.testing import CliRunner
 
-from alteryx_diff.cli import app
+from alteryx_git_companion.cli import app
 from tests.fixtures.cli import (
     IDENTICAL_YXMD,
     MALFORMED_XML,

@@ -10,9 +10,9 @@ ToolIDs 701+ allocated for Phase 7. No collision with:
 
 from __future__ import annotations
 
-from alteryx_diff.models.diff import DiffResult, EdgeDiff, NodeDiff
-from alteryx_diff.models.types import AnchorName, ToolID
-from alteryx_diff.models.workflow import AlteryxNode
+from alteryx_git_companion.models.diff import DiffResult, EdgeDiff, NodeDiff
+from alteryx_git_companion.models.types import AnchorName, ToolID
+from alteryx_git_companion.models.workflow import AlteryxNode
 
 # ---------------------------------------------------------------------------
 # EMPTY_DIFF — no changes between the two workflows

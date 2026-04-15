@@ -19,10 +19,10 @@ import inspect
 
 import pytest
 
-from alteryx_diff.models.types import ToolID
-from alteryx_diff.models.workflow import AlteryxNode, WorkflowDoc
-from alteryx_diff.normalizer import normalize
-from alteryx_diff.normalizer.patterns import GUID_VALUE_KEYS
+from alteryx_git_companion.models.types import ToolID
+from alteryx_git_companion.models.workflow import AlteryxNode, WorkflowDoc
+from alteryx_git_companion.normalizer import normalize
+from alteryx_git_companion.normalizer.patterns import GUID_VALUE_KEYS
 from tests.fixtures.normalization import (
     ATTR_ORDER_PAIR,
     GUID_PAIR,

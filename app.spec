@@ -8,7 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('app/frontend/dist', 'frontend/dist'),
-        ('src/alteryx_diff/static', 'alteryx_diff/static'),
+        ('src/alteryx_git_companion/static', 'alteryx_git_companion/static'),
         ('assets/icon.ico', 'assets'),
         ('assets/icon-watching.ico', 'assets'),
         ('assets/icon-changes.ico', 'assets'),

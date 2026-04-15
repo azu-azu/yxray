@@ -16,9 +16,9 @@ from typing import Any
 
 from jinja2 import Environment
 
-from alteryx_diff.models import DiffResult
-from alteryx_diff.models.workflow import AlteryxConnection, AlteryxNode
-from alteryx_diff.renderers._graph_builder import (
+from alteryx_git_companion.models import DiffResult
+from alteryx_git_companion.models.workflow import AlteryxConnection, AlteryxNode
+from alteryx_git_companion.renderers._graph_builder import (
     build_digraph,
     build_split_node_list,
     canvas_positions,

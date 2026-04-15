@@ -42,7 +42,7 @@ Built for analytics developers and governance teams who need to understand what 
 
 ```bash
 git clone https://github.com/Laxmi884/alteryx-git-companion.git
-cd alteryx_diff
+cd alteryx_git_companion
 
 # Install and activate environment
 uv sync
@@ -62,7 +62,7 @@ acd --help
 
 ```bash
 git clone https://github.com/Laxmi884/alteryx-git-companion.git
-cd alteryx_diff
+cd alteryx_git_companion
 
 pip install .
 
@@ -74,7 +74,7 @@ acd --help
 
 ```bash
 git clone https://github.com/Laxmi884/alteryx-git-companion.git
-cd alteryx_diff
+cd alteryx_git_companion
 
 uv sync --all-groups   # includes dev dependencies
 uv run acd --help
@@ -460,7 +460,7 @@ Built as a Windows onefile `.exe`. The React frontend `dist/` directory and all 
 
 ```bash
 git clone https://github.com/Laxmi884/alteryx-git-companion.git
-cd alteryx_diff
+cd alteryx_git_companion
 
 # Install Python dependencies
 uv sync --all-groups
@@ -605,7 +605,7 @@ All endpoints are served on `http://localhost:<port>` (default 7433).
 
 ```bash
 git clone https://github.com/Laxmi884/alteryx-git-companion.git
-cd alteryx_diff
+cd alteryx_git_companion
 
 # Install all dependencies (runtime + dev)
 uv sync --all-groups
@@ -648,9 +648,9 @@ uv run ruff check --fix src/ tests/
 ### Project structure
 
 ```
-alteryx_diff/
+alteryx_git_companion/
 ├── src/
-│   └── alteryx_diff/
+│   └── alteryx_git_companion/
 │       ├── cli.py              # Typer CLI adapter over pipeline.run()
 │       ├── parser.py           # lxml-based .yxmd loader
 │       ├── exceptions.py       # ParseError hierarchy (MalformedXMLError, etc.)
@@ -696,7 +696,7 @@ alteryx_diff/
 ### Running as a module
 
 ```bash
-uv run python -m alteryx_diff workflow_v1.yxmd workflow_v2.yxmd
+uv run python -m alteryx_git_companion workflow_v1.yxmd workflow_v2.yxmd
 ```
 
 ---

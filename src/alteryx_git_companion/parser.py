@@ -25,12 +25,12 @@ from typing import Any
 
 from lxml import etree
 
-from alteryx_diff.exceptions import (
+from alteryx_git_companion.exceptions import (
     MalformedXMLError,
     MissingFileError,
     UnreadableFileError,
 )
-from alteryx_diff.models import (
+from alteryx_git_companion.models import (
     AlteryxConnection,
     AlteryxNode,
     AnchorName,

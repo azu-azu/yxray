@@ -1,4 +1,4 @@
-"""Node matcher implementation for alteryx_diff.
+"""Node matcher implementation for alteryx_git_companion.
 
 Two-pass node matching:
   Pass 1 (this file): Exact ToolID lookup — O(n), handles common case.
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from alteryx_diff.matcher._cost import _build_cost_matrix
-from alteryx_diff.models import NormalizedNode
+from alteryx_git_companion.matcher._cost import _build_cost_matrix
+from alteryx_git_companion.models import NormalizedNode
 
 COST_THRESHOLD = 0.8
 

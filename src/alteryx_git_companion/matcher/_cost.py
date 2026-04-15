@@ -10,7 +10,7 @@ import math
 
 import numpy as np
 
-from alteryx_diff.models import NormalizedNode
+from alteryx_git_companion.models import NormalizedNode
 
 
 def _position_cost(

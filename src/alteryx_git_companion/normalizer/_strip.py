@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from alteryx_diff.normalizer.patterns import (
+from alteryx_git_companion.normalizer.patterns import (
     GUID_SENTINEL,
     GUID_VALUE_KEYS,
     ISO8601_PATTERN,

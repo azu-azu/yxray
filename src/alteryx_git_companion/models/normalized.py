@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from alteryx_diff.models.types import ConfigHash
-from alteryx_diff.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
+from alteryx_git_companion.models.types import ConfigHash
+from alteryx_git_companion.models.workflow import (
+    AlteryxConnection,
+    AlteryxNode,
+    WorkflowDoc,
+)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

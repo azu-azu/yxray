@@ -34,7 +34,7 @@ Repository = "https://github.com/Laxmi884/alteryx-git-companion"
 Issues = "https://github.com/Laxmi884/alteryx-git-companion/issues"
 
 [project.scripts]
-acd = "alteryx_diff.cli:app"
+acd = "alteryx_git_companion.cli:app"
 
 [dependency-groups]
 dev = [
@@ -88,8 +88,7 @@ module = ["rich.*"]
 ignore_missing_imports = true
 
 [tool.uv_build]
-module-name = "alteryx_diff"
-package-data = {"alteryx_diff" = ["static/*.js"]}
+package-data = {"alteryx_git_companion" = ["static/*.js"]}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

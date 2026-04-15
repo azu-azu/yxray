@@ -24,14 +24,14 @@ import pathlib
 
 import pytest
 
-from alteryx_diff.exceptions import (
+from alteryx_git_companion.exceptions import (
     MalformedXMLError,
     MissingFileError,
     ParseError,
     UnreadableFileError,
 )
-from alteryx_diff.models import AlteryxConnection, AlteryxNode, WorkflowDoc
-from alteryx_diff.parser import parse
+from alteryx_git_companion.models import AlteryxConnection, AlteryxNode, WorkflowDoc
+from alteryx_git_companion.parser import parse
 from tests.fixtures import (
     BINARY_CONTENT,
     EMPTY_FILE,

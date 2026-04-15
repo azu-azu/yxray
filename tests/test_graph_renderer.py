@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 
-from alteryx_diff.models import DiffResult
-from alteryx_diff.models.types import ToolID
-from alteryx_diff.models.workflow import AlteryxNode
-from alteryx_diff.renderers import GraphRenderer, HTMLRenderer
-from alteryx_diff.renderers._graph_builder import COLOR_MAP
+from alteryx_git_companion.models import DiffResult
+from alteryx_git_companion.models.types import ToolID
+from alteryx_git_companion.models.workflow import AlteryxNode
+from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer
+from alteryx_git_companion.renderers._graph_builder import COLOR_MAP
 from tests.fixtures.graph import (
     ALL_CHANGE_TYPES_DIFF,
     ALL_CONNECTIONS,

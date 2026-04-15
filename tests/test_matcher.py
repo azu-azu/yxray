@@ -7,8 +7,8 @@ cross-type isolation -> count invariant.
 
 from __future__ import annotations
 
-from alteryx_diff.matcher import MatchResult, match
-from alteryx_diff.models import NormalizedNode
+from alteryx_git_companion.matcher import MatchResult, match
+from alteryx_git_companion.models import NormalizedNode
 from tests.fixtures.matching import (
     CROSS_TYPE_NEW,
     CROSS_TYPE_OLD,

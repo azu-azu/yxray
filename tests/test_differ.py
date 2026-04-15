@@ -8,8 +8,8 @@ removed connection -> identical workflows.
 
 from __future__ import annotations
 
-from alteryx_diff.differ import diff
-from alteryx_diff.models import AnchorName, ToolID
+from alteryx_git_companion.differ import diff
+from alteryx_git_companion.models import AnchorName, ToolID
 from tests.fixtures.diffing import (
     SCENARIO_ABSENT_KEY_AFTER,
     SCENARIO_ABSENT_KEY_BEFORE,

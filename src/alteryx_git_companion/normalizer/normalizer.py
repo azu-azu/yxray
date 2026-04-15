@@ -25,10 +25,13 @@ import hashlib
 import json
 from typing import Any
 
-from alteryx_diff.models.normalized import NormalizedNode, NormalizedWorkflowDoc
-from alteryx_diff.models.types import ConfigHash
-from alteryx_diff.models.workflow import AlteryxNode, WorkflowDoc
-from alteryx_diff.normalizer._strip import strip_noise
+from alteryx_git_companion.models.normalized import (
+    NormalizedNode,
+    NormalizedWorkflowDoc,
+)
+from alteryx_git_companion.models.types import ConfigHash
+from alteryx_git_companion.models.workflow import AlteryxNode, WorkflowDoc
+from alteryx_git_companion.normalizer._strip import strip_noise
 
 
 def normalize(workflow_doc: WorkflowDoc) -> NormalizedWorkflowDoc:

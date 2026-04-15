@@ -51,7 +51,7 @@ alteryx-diff:
     # Private repo: use a deploy token or project access token stored in a
     # CI/CD variable, e.g.:
     #   pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/<ns>/<acd-repo>.git
-    - pip install --quiet git+https://github.com/Laxmi884/alteryx_diff.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
+    - pip install --quiet git+https://github.com/Laxmi884/alteryx_git_companion.git  # TODO: Replace with: pip install alteryx-canvas-diff  (once published to PyPI)
     - acd --help # smoke-test: fails the job immediately if acd isn't on PATH
 
     # ── Fetch base branch (needed for git show) ────────────────────────────

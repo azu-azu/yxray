@@ -9,9 +9,9 @@ them as opaque strings; real SHA-256 is only required in Phase 3 normalizer test
 
 from __future__ import annotations
 
-from alteryx_diff.models import NormalizedNode
-from alteryx_diff.models.types import ConfigHash, ToolID
-from alteryx_diff.models.workflow import AlteryxNode
+from alteryx_git_companion.models import NormalizedNode
+from alteryx_git_companion.models.types import ConfigHash, ToolID
+from alteryx_git_companion.models.workflow import AlteryxNode
 
 
 def make_node(

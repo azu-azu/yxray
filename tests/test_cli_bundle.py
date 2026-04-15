@@ -5,6 +5,6 @@ from __future__ import annotations
 
 def test_cli_bundle_importable():
     """Confirms acd CLI package is importable — required for PyInstaller bundling."""
-    from alteryx_diff.pipeline.pipeline import run  # noqa: F401
+    from alteryx_git_companion.pipeline.pipeline import run  # noqa: F401
 
     assert callable(run)

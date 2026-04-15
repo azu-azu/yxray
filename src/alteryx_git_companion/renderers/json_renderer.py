@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from alteryx_diff.models import AlteryxNode, DiffResult, EdgeDiff, NodeDiff
+from alteryx_git_companion.models import AlteryxNode, DiffResult, EdgeDiff, NodeDiff
 
 
 class JSONRenderer:

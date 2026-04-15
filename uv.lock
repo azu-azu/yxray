@@ -3,8 +3,8 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
-name = "alteryx-diff"
-version = "0.1.0"
+name = "alteryx-git-companion"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "deepdiff" },
@@ -16,8 +16,6 @@ dependencies = [
     { name = "networkx" },
     { name = "pillow" },
     { name = "platformdirs" },
-    { name = "pyinstaller" },
-    { name = "pyinstaller-versionfile" },
     { name = "scipy" },
     { name = "sse-starlette" },
     { name = "typer" },
@@ -26,6 +24,10 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+build = [
+    { name = "pyinstaller" },
+    { name = "pyinstaller-versionfile" },
+]
 dev = [
     { name = "lxml-stubs" },
     { name = "mypy" },
@@ -46,8 +48,6 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.6" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "platformdirs", specifier = ">=4.0" },
-    { name = "pyinstaller", specifier = ">=6.6" },
-    { name = "pyinstaller-versionfile", specifier = ">=3.0" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "sse-starlette", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.12" },
@@ -56,6 +56,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+build = [
+    { name = "pyinstaller", specifier = ">=6.6" },
+    { name = "pyinstaller-versionfile", specifier = ">=3.0" },
+]
 dev = [
     { name = "lxml-stubs", specifier = ">=0.5" },
     { name = "mypy", specifier = ">=1.15" },

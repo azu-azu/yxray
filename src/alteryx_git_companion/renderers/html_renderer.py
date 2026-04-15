@@ -6,9 +6,9 @@ from typing import Any
 
 from jinja2 import Environment
 
-from alteryx_diff.models import DiffResult, NodeDiff
-from alteryx_diff.models.diff import EdgeDiff
-from alteryx_diff.models.workflow import AlteryxNode
+from alteryx_git_companion.models import DiffResult, NodeDiff
+from alteryx_git_companion.models.diff import EdgeDiff
+from alteryx_git_companion.models.workflow import AlteryxNode
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -373,7 +373,7 @@ function setTheme(theme) {
     localStorage.setItem('alteryx-diff-theme', theme);
     var toggle = document.getElementById('theme-toggle');
     if (toggle) {
-        toggle.textContent = theme === 'dark' ? '\u263D Dark' : '\u2600 Light';
+        toggle.textContent = theme === 'dark' ? '\u263d Dark' : '\u2600 Light';
     }
 }
 

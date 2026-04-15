@@ -4,7 +4,7 @@ Tests verify:
 1. All six dataclasses construct correctly with typed fields
 2. Default values are correct (empty tuples/dicts, not None)
 3. Frozen semantics raise FrozenInstanceError on mutation attempts
-4. Single import surface: all 9 symbols importable from alteryx_diff.models
+4. Single import surface: all 9 symbols importable from alteryx_git_companion.models
 5. NewType aliases wrap correctly at runtime
 """
 
@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from alteryx_diff.models import (
+from alteryx_git_companion.models import (
     AlteryxConnection,
     AlteryxNode,
     AnchorName,
@@ -216,7 +216,7 @@ class TestNewTypeAliases:
         assert isinstance(an, str)
 
     def test_all_symbols_importable(self) -> None:
-        """All 9 symbols are importable from alteryx_diff.models single surface."""
+        """All 9 symbols are importable from alteryx_git_companion.models."""
         symbols: list[Any] = [
             ToolID,
             ConfigHash,

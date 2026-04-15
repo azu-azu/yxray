@@ -1,4 +1,4 @@
-"""Core diff computation for alteryx_diff.
+"""Core diff computation for alteryx_git_companion.
 
 Three computation paths:
   1. Node additions / removals — from MatchResult.added / MatchResult.removed
@@ -14,8 +14,8 @@ from typing import Any
 
 from deepdiff import DeepDiff
 
-from alteryx_diff.matcher.matcher import MatchResult
-from alteryx_diff.models import (
+from alteryx_git_companion.matcher.matcher import MatchResult
+from alteryx_git_companion.models import (
     AlteryxConnection,
     AlteryxNode,
     DiffResult,
