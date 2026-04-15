@@ -1,5 +1,9 @@
 # Alteryx Canvas Diff (ACD) + Git Companion
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![GitHub release](https://img.shields.io/github/v/release/Laxmi884/alteryx-git-companion)](https://github.com/Laxmi884/alteryx-git-companion/releases)
+
 A two-part system that brings **version control and change visibility to Alteryx workflows** — something Alteryx Designer has never natively provided.
 
 | Component | What it is |
@@ -37,7 +41,7 @@ Built for analytics developers and governance teams who need to understand what 
 #### With uv (recommended)
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Laxmi884/alteryx-git-companion.git
 cd alteryx_diff
 
 # Install and activate environment
@@ -57,7 +61,7 @@ acd --help
 #### With pip
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Laxmi884/alteryx-git-companion.git
 cd alteryx_diff
 
 pip install .
@@ -69,7 +73,7 @@ acd --help
 #### From source (editable install)
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Laxmi884/alteryx-git-companion.git
 cd alteryx_diff
 
 uv sync --all-groups   # includes dev dependencies
@@ -455,7 +459,7 @@ Built as a Windows onefile `.exe`. The React frontend `dist/` directory and all 
 #### Development setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Laxmi884/alteryx-git-companion.git
 cd alteryx_diff
 
 # Install Python dependencies
@@ -600,7 +604,7 @@ All endpoints are served on `http://localhost:<port>` (default 7433).
 ### Setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Laxmi884/alteryx-git-companion.git
 cd alteryx_diff
 
 # Install all dependencies (runtime + dev)
@@ -715,3 +719,23 @@ uv run python -m alteryx_diff workflow_v1.yxmd workflow_v2.yxmd
 | v1.1 | Resolve JSON schema divergence; populate GUID field registry from real files |
 | v1.2 | Git Companion: diff viewer improvements, PR description templates |
 | v2.0 | REST API (`POST /diff`), `.yxmc` / `.yxapp` support, macro recursion |
+
+---
+
+## Contributing
+
+Contributions are welcome! Please open an issue to discuss what you'd like to change before submitting a pull request.
+
+1. Fork the repo and create a branch from `main`
+2. Install dev dependencies: `uv sync --all-groups`
+3. Make your changes and add tests where applicable
+4. Ensure all checks pass: `uv run pre-commit run --all-files` and `uv run pytest`
+5. Open a pull request against `main`
+
+Please keep PRs focused — one feature or fix per PR makes review faster.
+
+---
+
+## License
+
+MIT © 2026 Laxmikant Mukkawar — see [LICENSE](LICENSE) for details.
