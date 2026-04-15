@@ -3,6 +3,7 @@ name = "alteryx-diff"
 version = "0.1.0"
 description = "CLI tool to diff Alteryx .yxmd workflow files"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
     "lxml>=5.0",
@@ -26,6 +27,10 @@ dependencies = [
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]
 build-backend = "uv_build"
+
+[project.urls]
+Repository = "https://github.com/Laxmi884/alteryx_diff"
+Issues = "https://github.com/Laxmi884/alteryx_diff/issues"
 
 [project.scripts]
 acd = "alteryx_diff.cli:app"
