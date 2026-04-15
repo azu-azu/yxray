@@ -24,9 +24,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "_static_dir", lambda: dist)
 
     # Re-mount static files with patched dir
-    from app.server import app
     from fastapi import FastAPI
     from fastapi.staticfiles import StaticFiles
+
+    from app.server import app
 
     # Remove existing static mount if present, then re-add with temp path
     # (StaticFiles is already mounted at app creation time, so we patch before import)
