@@ -24,7 +24,8 @@ def test_find_available_port_returns_7433():
 def test_find_available_port_skips_occupied():
     """When start port is bound by another socket, returns next free port."""
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # Do NOT set SO_REUSEADDR on the blocker: on Linux, if both sockets set
+    # SO_REUSEADDR the kernel allows them to share the port, defeating the test.
     blocker.bind(("127.0.0.1", 19900))
     try:
         port, sock = find_available_port(start=19900, count=11)
@@ -42,7 +43,7 @@ def test_find_available_port_raises_when_all_full():
     try:
         for p in range(19900, 19911):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # No SO_REUSEADDR — see test_find_available_port_skips_occupied.
             s.bind(("127.0.0.1", p))
             blockers.append(s)
         with pytest.raises(OSError):

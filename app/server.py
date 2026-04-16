@@ -98,7 +98,7 @@ class SPAStaticFiles(StaticFiles):
 @app.get("/health")
 def health() -> dict[str, str]:
     """Return server health status and application version."""
-    return {"status": "ok", "version": version("alteryx-diff")}
+    return {"status": "ok", "version": version("alteryx-git-companion")}
 
 
 # Mount the React SPA as a catch-all AFTER all API routes.
