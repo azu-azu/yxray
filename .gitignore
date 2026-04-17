@@ -24,3 +24,4 @@ app/frontend/.vite/
 # Generated output artifacts — not for version control
 /diff_report.html
 /review.html
+AUDIT.md
