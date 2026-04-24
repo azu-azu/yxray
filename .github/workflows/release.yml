@@ -62,7 +62,7 @@ jobs:
           echo "value=$($isPrerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@d5382d3e6f2fa7bd53cb749d33091853d4985daf  # v2.3.0
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           prerelease: ${{ steps.prerelease.outputs.value == 'true' }}
           files: dist/AlteryxGitCompanion.exe
