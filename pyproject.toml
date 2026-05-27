@@ -18,10 +18,6 @@ dependencies = [
 requires = ["uv_build>=0.10.7"]
 build-backend = "uv_build"
 
-[project.urls]
-Repository = "https://github.com/azu-azu/yxray"
-Issues = "https://github.com/azu-azu/yxray/issues"
-
 [project.scripts]
 acd = "alteryx_git_companion.cli:app"
 
