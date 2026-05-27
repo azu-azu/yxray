@@ -16,14 +16,6 @@ Alteryx workflow inspector and diff tool. Reads `.yxmd` files as structured data
 
 ---
 
-## Installation
-
-```bash
-pip install git+https://github.com/azu-azu/yxray.git
-```
-
----
-
 ## Usage
 
 ### inspect
