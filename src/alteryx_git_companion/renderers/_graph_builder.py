@@ -41,6 +41,8 @@ BORDER_COLOR_MAP: dict[str, str] = {
 
 LAYOUT_SCALE = 2000  # pixel scale factor for vis-network viewport
 
+_GHOST_STYLE: dict[str, Any] = {"opacity": 0.25, "borderDashes": [4, 4]}
+
 # ToolContainer is a visual-only grouping in Alteryx Designer — it has no data
 # connections and adds noise to the diff graph.
 CONTAINER_TYPE = "AlteryxGuiToolkit.ToolContainer.ToolContainer"
@@ -280,8 +282,7 @@ def build_split_node_list(
                 "y": pos[1],
                 "fixed": False,
                 "status": "ghost_added",
-                "opacity": 0.25,
-                "borderDashes": [4, 4],
+                **_GHOST_STYLE,
                 "color": {"background": "#d1fae5", "border": "#6ee7b7"},
                 "title": n.tool_type + " | added (in new workflow)",
             }
@@ -334,8 +335,7 @@ def build_split_node_list(
                 "y": pos[1],
                 "fixed": False,
                 "status": "ghost_removed",
-                "opacity": 0.25,
-                "borderDashes": [4, 4],
+                **_GHOST_STYLE,
                 "color": {"background": "#fee2e2", "border": "#fca5a5"},
                 "title": n.tool_type + " | removed (was in old workflow)",
             }

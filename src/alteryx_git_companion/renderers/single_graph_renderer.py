@@ -43,6 +43,8 @@ _HTML_TEMPLATE = """\
       --node-bg: #1d4ed8;
       --node-border: #3b82f6;
       --node-font: #e2e8f0;
+      --node-hover: #2563eb;
+      --node-select: #1e40af;
       --edge-color: #475569;
     }
     html.light {
@@ -57,6 +59,8 @@ _HTML_TEMPLATE = """\
       --node-bg: #93c5fd;
       --node-border: #1d4ed8;
       --node-font: #1e293b;
+      --node-hover: #bfdbfe;
+      --node-select: #60a5fa;
       --edge-color: #94a3b8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -207,11 +211,15 @@ var edgesDataset = new vis.DataSet(EDGES_DATA);
 var isDark = true;
 
 function nodeColors() {
-  return isDark
-    ? {background: '#1d4ed8', border: '#3b82f6', fontColor: '#e2e8f0',
-       hoverBg: '#2563eb', selBg: '#1e40af'}
-    : {background: '#93c5fd', border: '#1d4ed8', fontColor: '#1e293b',
-       hoverBg: '#bfdbfe', selBg: '#60a5fa'};
+  var s = getComputedStyle(document.documentElement);
+  function v(name) { return s.getPropertyValue(name).trim(); }
+  return {
+    background: v('--node-bg'),
+    border:     v('--node-border'),
+    fontColor:  v('--node-font'),
+    hoverBg:    v('--node-hover'),
+    selBg:      v('--node-select'),
+  };
 }
 
 function applyColors() {
@@ -333,7 +341,7 @@ function applyTheme(theme) {
     document.documentElement.classList.add('light');
   }
   document.getElementById('theme-btn').textContent = isDark ? 'Light Mode' : 'Dark Mode';
-  var edgeColor = isDark ? '#475569' : '#94a3b8';
+  var edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--edge-color').trim();
   edgesDataset.update(EDGES_DATA.map(function(e) {
     return {id: e.id, color: {color: edgeColor, highlight: edgeColor, hover: edgeColor}};
   }));
