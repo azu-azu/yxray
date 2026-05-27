@@ -38,12 +38,33 @@ from alteryx_git_companion.models import (
     WorkflowDoc,
 )
 
-__all__ = ["parse"]
+__all__ = ["parse", "parse_one"]
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def parse_one(
+    path: pathlib.Path,
+    *,
+    filter_ui_tools: bool = True,
+) -> WorkflowDoc:
+    """Parse a single .yxmd file and return its WorkflowDoc.
+
+    Parameters
+    ----------
+    path:
+        Path to the Alteryx workflow file.
+    filter_ui_tools:
+        When True (default), AlteryxGuiToolkit.* nodes are omitted.
+
+    Raises
+    ------
+    MissingFileError, UnreadableFileError, MalformedXMLError
+    """
+    return _parse_one(path, filter_ui_tools=filter_ui_tools)
 
 
 def parse(

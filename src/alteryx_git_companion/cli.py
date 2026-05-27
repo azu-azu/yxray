@@ -9,9 +9,12 @@ from typing import Any
 import typer
 from rich.console import Console
 
+from typing import Optional
+
 from alteryx_git_companion.exceptions import MalformedXMLError, ParseError
+from alteryx_git_companion.parser import parse_one
 from alteryx_git_companion.pipeline import DiffRequest, run
-from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer
+from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
 
 app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
@@ -158,6 +161,51 @@ def diff(  # noqa: B008
             )
 
     raise typer.Exit(code=1)
+
+
+@app.command()
+def inspect(  # noqa: B008
+    workflow: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help=".yxmd or .yxwz workflow file to inspect"
+    ),
+    output: Optional[pathlib.Path] = typer.Option(  # noqa: B008
+        None,
+        "--output",
+        "-o",
+        help="Output path for the HTML report (default: <workflow>_report.html)",
+    ),
+    filter_ui_tools: bool = typer.Option(  # noqa: B008
+        True,
+        "--no-filter-ui-tools",
+        help=(
+            "Include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, etc.) filtered by default"
+        ),
+    ),
+) -> None:
+    """Inspect a single Alteryx workflow and generate an interactive HTML report.
+
+    Produces a standalone vis-network graph showing all tools and connections.
+    Click any node to view its configuration. No diff — single-workflow view only.
+    """
+    try:
+        with _err_console.status("Parsing workflow...", spinner="dots"):
+            doc = parse_one(workflow, filter_ui_tools=filter_ui_tools)
+    except MalformedXMLError as e:
+        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+    except ParseError as e:
+        typer.echo(f"Error: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+
+    out_path = output or workflow.with_stem(workflow.stem + "_report").with_suffix(".html")
+    html = SingleGraphRenderer().render(doc)
+    out_path.write_text(html, encoding="utf-8")
+    typer.echo(
+        f"Report written to {out_path}"
+        f" ({len(doc.nodes)} nodes, {len(doc.connections)} connections)",
+        err=True,
+    )
 
 
 def _file_sha256(path: pathlib.Path) -> str:
