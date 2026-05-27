@@ -1,6 +1,6 @@
 """Renderer stage for alteryx_git_companion.
 
-Public surface: JSONRenderer, HTMLRenderer, GraphRenderer
+Public surface: JSONRenderer, HTMLRenderer, GraphRenderer, SingleGraphRenderer
 
   from alteryx_git_companion.renderers import JSONRenderer, HTMLRenderer, GraphRenderer
   graph_renderer = GraphRenderer()
@@ -14,5 +14,6 @@ from __future__ import annotations
 from alteryx_git_companion.renderers.graph_renderer import GraphRenderer
 from alteryx_git_companion.renderers.html_renderer import HTMLRenderer
 from alteryx_git_companion.renderers.json_renderer import JSONRenderer
+from alteryx_git_companion.renderers.single_graph_renderer import SingleGraphRenderer
 
-__all__ = ["JSONRenderer", "HTMLRenderer", "GraphRenderer"]
+__all__ = ["JSONRenderer", "HTMLRenderer", "GraphRenderer", "SingleGraphRenderer"]
