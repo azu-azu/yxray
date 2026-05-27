@@ -1,13 +1,10 @@
 [project]
-name = "alteryx-git-companion"
-version = "0.2.0"
-description = "CLI diff tool and Git companion for Alteryx .yxmd workflow files"
+name = "yxray"
+version = "0.1.0"
+description = "Alteryx workflow inspector — visualize .yxmd files as interactive HTML reports"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
-authors = [
-    {name = "Laxmikant Mukkawar"},
-]
 dependencies = [
     "lxml>=6.1.0",
     "networkx>=3.6",
@@ -15,14 +12,6 @@ dependencies = [
     "deepdiff>=8.6.2",
     "jinja2>=3.1.6",
     "typer>=0.12",
-    "fastapi>=0.111",
-    "uvicorn>=0.29",
-    "platformdirs>=4.0",
-    "keyring>=24.0",
-    "httpx>=0.27",
-    "watchdog>=4.0",
-    "sse-starlette>=2.0",
-    "pillow>=12.2.0",
 ]
 
 [build-system]
@@ -30,8 +19,8 @@ requires = ["uv_build>=0.10.7"]
 build-backend = "uv_build"
 
 [project.urls]
-Repository = "https://github.com/Laxmi884/alteryx-git-companion"
-Issues = "https://github.com/Laxmi884/alteryx-git-companion/issues"
+Repository = "https://github.com/azu-azu/yxray"
+Issues = "https://github.com/azu-azu/yxray/issues"
 
 [project.scripts]
 acd = "alteryx_git_companion.cli:app"
@@ -42,12 +31,7 @@ dev = [
     "mypy>=1.15",
     "lxml-stubs>=0.5",
     "ruff>=0.15",
-    "pre-commit>=3.0",
     "scipy-stubs>=1.17.1.0",
-]
-build = [
-    "pyinstaller>=6.6",
-    "pyinstaller-versionfile>=3.0",
 ]
 
 [tool.ruff]
