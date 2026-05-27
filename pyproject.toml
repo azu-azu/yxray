@@ -48,7 +48,6 @@ quote-style = "double"
 [tool.mypy]
 strict = true
 ignore_missing_imports = false
-python_version = "3.11"
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
