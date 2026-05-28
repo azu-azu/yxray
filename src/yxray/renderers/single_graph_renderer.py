@@ -206,9 +206,11 @@ var nodesDataset = null;
 var edgesDataset = null;
 
 // ── Cluster state ─────────────────────────────────────────────────────────
-var clusterMap = {};    // { 'cluster:N': { memberIds, memberEdgeIds, incomingEdgeId, outgoingEdgeIds, bridgeEdgeIds, toolType } }
+var clusterMap = {};       // { 'cluster:N': { memberIds, toolType, bridgeEdgeIds } }
+var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
+var groupMembers = {};     // groupKey -> { memberIds, toolType }  (expanded cluster metadata)
 var clusterCounter = 0;
-var MIN_CLUSTER_CHAIN_LENGTH = 3;
+var MIN_CLUSTER_SIZE = 3;  // minimum nodes to form a cluster
 
 var options = {
   layout: {
@@ -241,21 +243,26 @@ var options = {
 
 // ── Clustering ─────────────────────────────────────────────────────────────
 //
-// Design: all chains are identified first, then edges are remapped in a single
-// pass. This avoids the "dangling node" bug that occurs when two adjacent
-// chains are processed sequentially (the second chain's incoming edge would
-// reference a node that was already removed by the first chain's processing).
+// Design: all clusters are identified first via BFS on the undirected graph,
+// then edges are remapped in a single pass. BFS finds every connected component
+// of same-type nodes (regardless of branching or fan-in/fan-out topology),
+// which is far more effective than the old linear-chain-only approach for
+// large real-world workflows.
+//
+// The single-pass edge remap avoids the "dangling node" bug that occurs when
+// adjacent clusters are processed sequentially.
 
 function buildClusters() {
-  var outMap = {};
-  var inMap = {};
-
-  NODES_DATA.forEach(function(n) { outMap[n.id] = []; inMap[n.id] = []; });
+  // ── Phase 1: BFS over undirected adjacency to find same-type components ──
+  // Use undirected adjacency so that fan-in patterns (multiple same-type nodes
+  // flowing into a single node of the same type) are treated as connected.
+  var adjMap = {};  // nodeId -> [adjacent nodeIds, both directions]
+  NODES_DATA.forEach(function(n) { adjMap[n.id] = []; });
   EDGES_DATA.forEach(function(e) {
-    if (!outMap[e.from]) outMap[e.from] = [];
-    if (!inMap[e.to]) inMap[e.to] = [];
-    outMap[e.from].push(e.to);
-    inMap[e.to].push(e.from);
+    if (!adjMap[e.from]) adjMap[e.from] = [];
+    if (!adjMap[e.to])   adjMap[e.to]   = [];
+    adjMap[e.from].push(e.to);
+    adjMap[e.to].push(e.from);
   });
 
   // tool type suffix from node.title (= full plugin path, e.g. AlteryxBasePluginsGui.Filter.Filter)
@@ -264,43 +271,31 @@ function buildClusters() {
     nodeTypeLookup[n.id] = (n.title || '').split('.').pop();
   });
 
-  // ── Phase 1: detect linear same-type chains ──────────────────────────────
   var visited = {};
-  var chains = [];
+  var chains = [];  // variable name kept for compatibility with Phase 2+
 
   NODES_DATA.forEach(function(n) {
     if (visited[n.id]) return;
     var toolType = nodeTypeLookup[n.id];
 
-    // Walk back to find the real chain start
-    var start = n.id;
-    var guard = 0;
-    while (inMap[start] && inMap[start].length === 1) {
-      var pred = inMap[start][0];
-      if (nodeTypeLookup[pred] === toolType && outMap[pred] && outMap[pred].length === 1) {
-        start = pred;
-        if (++guard > 100000) break;
-      } else { break; }
-    }
-    if (visited[start]) return;
+    // BFS: collect all directly-connected nodes of the same type
+    var component = [];
+    var queue = [n.id];
+    visited[n.id] = true;
 
-    // Walk forward to build chain
-    var chain = [start];
-    var current = start;
-    visited[start] = true;
-
-    while (outMap[current] && outMap[current].length === 1) {
-      var next = outMap[current][0];
-      if (nodeTypeLookup[next] !== toolType) break;
-      if (!inMap[next] || inMap[next].length !== 1) break;
-      if (visited[next]) break;
-      chain.push(next);
-      visited[next] = true;
-      current = next;
+    while (queue.length > 0) {
+      var curr = queue.shift();
+      component.push(curr);
+      (adjMap[curr] || []).forEach(function(neighbor) {
+        if (!visited[neighbor] && nodeTypeLookup[neighbor] === toolType) {
+          visited[neighbor] = true;
+          queue.push(neighbor);
+        }
+      });
     }
 
-    if (chain.length >= MIN_CLUSTER_CHAIN_LENGTH) {
-      chains.push({chain: chain, toolType: toolType});
+    if (component.length >= MIN_CLUSTER_SIZE) {
+      chains.push({chain: component, toolType: toolType});
     }
   });
 
@@ -324,8 +319,8 @@ function buildClusters() {
   chains.forEach(function(c) {
     nodesDataset.add({
       id: c.cid,
-      label: c.toolType + ' chain (' + c.chain.length + ')',
-      title: c.toolType + ' chain — Double-click to expand',
+      label: c.toolType + ' ×' + c.chain.length,
+      title: c.toolType + ' cluster — Double-click to expand',
       shape: 'box',
       borderDashes: [5, 3],
       color: {
@@ -391,6 +386,78 @@ function resolveNode(nodeId) {
   return null;
 }
 
+// Re-collapse a previously expanded cluster. groupKey is the original cluster ID
+// (e.g. 'cluster:1'). Any member node's double-click triggers this.
+function recollapseGroup(groupKey) {
+  var group = groupMembers[groupKey];
+  if (!group) return;
+
+  var memberSet = {};
+  group.memberIds.forEach(function(mid) { memberSet[mid] = true; });
+
+  // Remove all DataSet edges that touch any member node
+  var edgesToRemove = edgesDataset.get().filter(function(e) {
+    return memberSet[e.from] || memberSet[e.to];
+  }).map(function(e) { return e.id; });
+  edgesDataset.remove(edgesToRemove);
+
+  // Remove member nodes
+  nodesDataset.remove(group.memberIds);
+
+  // Re-add cluster node
+  nodesDataset.add({
+    id: groupKey,
+    label: group.toolType + ' \xd7' + group.memberIds.length,
+    title: group.toolType + ' cluster \u2014 Double-click to expand',
+    shape: 'box',
+    borderDashes: [5, 3],
+    color: {
+      background: '#4c1d95', border: '#7c3aed',
+      highlight: {background: '#5b21b6', border: '#7c3aed'},
+      hover: {background: '#5b21b6', border: '#7c3aed'}
+    },
+    font: {color: '#f1f5f9', size: 13}
+  });
+
+  // Re-derive bridge edges from EDGES_DATA (same logic as expandCluster edge step)
+  var presentKeys = {};
+  edgesDataset.get().forEach(function(e) {
+    presentKeys[String(e.from) + '\x00' + String(e.to)] = true;
+  });
+
+  var bridgeEdgeIds = [];
+  EDGES_DATA.forEach(function(e) {
+    var srcIn = memberSet[e.from];
+    var dstIn = memberSet[e.to];
+    if (!srcIn && !dstIn) return;   // unrelated
+    if (srcIn && dstIn) return;     // intra-cluster
+    var src = srcIn ? groupKey : resolveNode(e.from);
+    var dst = dstIn ? groupKey : resolveNode(e.to);
+    if (!src || !dst) return;
+    var key = String(src) + '\x00' + String(dst);
+    if (presentKeys[key]) return;
+    presentKeys[key] = true;
+    var newEid = 'br:' + (++clusterCounter);
+    edgesDataset.add({id: newEid, from: src, to: dst});
+    bridgeEdgeIds.push(newEid);
+    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && clusterMap[dst]) {
+      clusterMap[dst].bridgeEdgeIds.push(newEid);
+    }
+    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && clusterMap[src]) {
+      clusterMap[src].bridgeEdgeIds.push(newEid);
+    }
+  });
+
+  // Restore cluster state
+  clusterMap[groupKey] = {memberIds: group.memberIds, toolType: group.toolType, bridgeEdgeIds: bridgeEdgeIds};
+
+  // Clean up expanded state
+  group.memberIds.forEach(function(mid) { delete expandedGroups[mid]; });
+  delete groupMembers[groupKey];
+
+  network.fit({animation: true});
+}
+
 function expandCluster(cid) {
   var c = clusterMap[cid];
   if (!c) return;
@@ -413,7 +480,12 @@ function expandCluster(cid) {
     });
   });
 
+  // Record expanded group so the user can double-click any member to re-collapse
+  var expandedMemberIds = c.memberIds.slice();
+  var expandedToolType = c.toolType;
   delete clusterMap[cid];
+  groupMembers[cid] = {memberIds: expandedMemberIds, toolType: expandedToolType};
+  expandedMemberIds.forEach(function(mid) { expandedGroups[mid] = cid; });
 
   // Re-derive edges connected to the just-expanded members.
   // We look at every original edge touching a member node, remap its endpoints
@@ -467,9 +539,9 @@ function initNetwork() {
   network.on('click', function(params) {
     if (params.nodes.length === 0) { closePanel(); return; }
     var nodeId = params.nodes[0];
-    if (clusterMap[nodeId]) {
-      // Delay panel open for cluster nodes so the overlay does not block the
-      // second tap of a double-click before vis-network can detect it.
+    // Delay panel open for any node that is double-clickable (cluster or
+    // expanded member) so the overlay does not block the second tap.
+    if (clusterMap[nodeId] || expandedGroups[nodeId]) {
       clearTimeout(_clusterClickTimer);
       _clusterClickTimer = setTimeout(function() {
         _clusterClickTimer = null;
@@ -483,7 +555,12 @@ function initNetwork() {
     clearTimeout(_clusterClickTimer);
     _clusterClickTimer = null;
     if (params.nodes.length === 0) return;
-    expandCluster(params.nodes[0]);
+    var nodeId = params.nodes[0];
+    if (clusterMap[nodeId]) {
+      expandCluster(nodeId);
+    } else if (expandedGroups[nodeId]) {
+      recollapseGroup(expandedGroups[nodeId]);
+    }
   });
 }
 
@@ -537,7 +614,7 @@ function openPanel(nodeId) {
   if (clusterMap[nodeId]) {
     var c = clusterMap[nodeId];
     document.getElementById('panel-title-text').textContent =
-      c.toolType + ' chain (' + c.memberIds.length + ' nodes)';
+      c.toolType + ' ×' + c.memberIds.length + ' nodes';
     var hint = document.createElement('div');
     hint.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
     hint.textContent = 'Double-click the node to expand.';
