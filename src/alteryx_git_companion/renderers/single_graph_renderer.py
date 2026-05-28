@@ -245,7 +245,7 @@ try {
 } catch(err) {
   var errDiv = document.createElement('div');
   errDiv.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;background:#dc2626;color:#fff;padding:16px;z-index:9999;font-family:monospace;white-space:pre-wrap;border-radius:8px;font-size:13px';
-  errDiv.textContent = 'JS ERROR: ' + err.message + '\n' + (err.stack || '');
+  errDiv.textContent = 'JS ERROR: ' + err.message + ' | ' + (err.stack || '');
   document.body.appendChild(errDiv);
 }
 
