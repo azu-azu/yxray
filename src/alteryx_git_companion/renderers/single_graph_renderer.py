@@ -70,8 +70,8 @@ _HTML_TEMPLATE = """\
       color: var(--text);
       height: 100vh;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-rows: auto 1fr;
     }
     header {
       display: flex;
@@ -80,7 +80,6 @@ _HTML_TEMPLATE = """\
       padding: 12px 20px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
-      flex-shrink: 0;
     }
     .header-title {
       font-size: 15px;
@@ -108,9 +107,8 @@ _HTML_TEMPLATE = """\
     }
     .ctrl-btn:hover { background: var(--border); }
     #graph-container {
-      flex: 1;
-      min-height: 0;
       background: var(--bg);
+      overflow: hidden;
     }
     /* Slide-in config panel */
     #config-panel {
@@ -255,15 +253,10 @@ var options = {
 var container = document.getElementById('graph-container');
 var network = null;
 
-function sizeContainer() {
-  var hdr = document.querySelector('header');
-  container.style.height = (window.innerHeight - (hdr ? hdr.offsetHeight : 0)) + 'px';
-}
-
 requestAnimationFrame(function() {
-  sizeContainer();
   network = new vis.Network(container, {nodes: nodesDataset, edges: edgesDataset}, options);
   applyColors();
+  network.fit();
   network.on('click', function(params) {
     if (params.nodes.length === 0) { closePanel(); return; }
     openPanel(params.nodes[0]);
@@ -275,7 +268,6 @@ requestAnimationFrame(function() {
 });
 
 window.addEventListener('resize', function() {
-  sizeContainer();
   if (network) { network.redraw(); network.fit({animation: false}); }
 });
 
