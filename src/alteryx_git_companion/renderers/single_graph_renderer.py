@@ -411,11 +411,11 @@ class SingleGraphRenderer:
 
         edges_json: list[dict[str, Any]] = [
             {
-                "id": f"{int(c.src_tool)}-{int(c.dst_tool)}",
+                "id": i,
                 "from": int(c.src_tool),
                 "to": int(c.dst_tool),
             }
-            for c in doc.connections
+            for i, c in enumerate(doc.connections)
         ]
 
         # Config map: node_id (str) → {label, config} for panel display
