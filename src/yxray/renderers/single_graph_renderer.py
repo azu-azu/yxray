@@ -5,7 +5,8 @@ SingleGraphRenderer.render(doc) produces a full standalone HTML document
 (not a fragment) containing an interactive vis-network graph.
 
 vis-network UMD is inlined via load_vis_js() — zero CDN references.
-Physics is disabled; positions are computed via hierarchical_positions().
+Physics is disabled; layout is handled by vis-network hierarchical engine.
+Clustering collapses same-type linear chains (length >= 3) into single nodes.
 """
 
 from __future__ import annotations
@@ -74,20 +75,9 @@ _HTML_TEMPLATE = """\
       border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
-    .header-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .header-meta {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .header-title { font-size: 15px; font-weight: 600; color: var(--text); }
+    .header-meta { font-size: 12px; color: var(--text-muted); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
     .ctrl-btn {
       padding: 5px 12px;
       border: 1px solid var(--border);
@@ -99,17 +89,30 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
+    .search-wrap { position: relative; display: flex; align-items: center; }
+    .search-input {
+      width: 200px; padding: 5px 28px 5px 10px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface-2); color: var(--text);
+      font-size: 12px; outline: none;
+      transition: border-color 0.15s, width 0.2s;
+    }
+    .search-input:focus { border-color: var(--accent); width: 260px; }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-clear {
+      position: absolute; right: 6px;
+      background: none; border: none;
+      color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1; display: none; padding: 0;
+    }
+    .search-clear:hover { color: var(--text); }
     #graph-wrapper {
       width: 100%;
       height: calc(100vh - 57px);
       background: var(--bg);
       overflow: hidden;
     }
-    #graph-canvas {
-      width: 100%;
-      height: 100%;
-    }
-    /* Slide-in config panel */
+    #graph-canvas { width: 100%; height: 100%; }
     #config-panel {
       position: fixed;
       top: 0; right: -420px;
@@ -139,13 +142,9 @@ _HTML_TEMPLATE = """\
       color: var(--text);
     }
     .panel-close {
-      float: right;
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 18px;
-      line-height: 1;
-      background: none;
-      border: none;
+      float: right; cursor: pointer;
+      color: var(--text-muted); font-size: 18px; line-height: 1;
+      background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
     .config-row { margin: 8px 0; }
@@ -157,13 +156,14 @@ _HTML_TEMPLATE = """\
     }
     .config-val {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
-      color: var(--text);
-      white-space: pre-wrap;
-      word-break: break-all;
-      background: var(--surface-2);
-      padding: 4px 8px;
-      border-radius: 4px;
+      font-size: 12px; color: var(--text);
+      white-space: pre-wrap; word-break: break-all;
+      background: var(--surface-2); padding: 4px 8px; border-radius: 4px;
+    }
+    .cluster-member-header {
+      font-size: 12px; font-weight: 600; color: var(--accent);
+      margin: 10px 0 4px; padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
     }
   </style>
 </head>
@@ -174,6 +174,10 @@ _HTML_TEMPLATE = """\
       <div class="header-meta">{{ node_count }} nodes &middot; {{ edge_count }} connections</div>
     </div>
     <div class="header-right">
+      <div class="search-wrap">
+        <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
+        <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
+      </div>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
@@ -200,6 +204,11 @@ var CONFIG_MAP = {{ config_map_json | safe }};
 var network = null;
 var nodesDataset = null;
 var edgesDataset = null;
+
+// ── Cluster state ─────────────────────────────────────────────────────────
+var clusterMap = {};    // { 'cluster:N': { memberIds, memberEdgeIds, incomingEdgeId, outgoingEdgeIds, bridgeEdgeIds, toolType } }
+var clusterCounter = 0;
+var MIN_CLUSTER_CHAIN_LENGTH = 3;
 
 var options = {
   layout: {
@@ -230,16 +239,251 @@ var options = {
   interaction: {zoomView: true, dragView: true, hover: true, tooltipDelay: 150}
 };
 
+// ── Clustering ─────────────────────────────────────────────────────────────
+//
+// Design: all chains are identified first, then edges are remapped in a single
+// pass. This avoids the "dangling node" bug that occurs when two adjacent
+// chains are processed sequentially (the second chain's incoming edge would
+// reference a node that was already removed by the first chain's processing).
+
+function buildClusters() {
+  var outMap = {};
+  var inMap = {};
+
+  NODES_DATA.forEach(function(n) { outMap[n.id] = []; inMap[n.id] = []; });
+  EDGES_DATA.forEach(function(e) {
+    if (!outMap[e.from]) outMap[e.from] = [];
+    if (!inMap[e.to]) inMap[e.to] = [];
+    outMap[e.from].push(e.to);
+    inMap[e.to].push(e.from);
+  });
+
+  // tool type suffix from node.title (= full plugin path, e.g. AlteryxBasePluginsGui.Filter.Filter)
+  var nodeTypeLookup = {};
+  NODES_DATA.forEach(function(n) {
+    nodeTypeLookup[n.id] = (n.title || '').split('.').pop();
+  });
+
+  // ── Phase 1: detect linear same-type chains ──────────────────────────────
+  var visited = {};
+  var chains = [];
+
+  NODES_DATA.forEach(function(n) {
+    if (visited[n.id]) return;
+    var toolType = nodeTypeLookup[n.id];
+
+    // Walk back to find the real chain start
+    var start = n.id;
+    var guard = 0;
+    while (inMap[start] && inMap[start].length === 1) {
+      var pred = inMap[start][0];
+      if (nodeTypeLookup[pred] === toolType && outMap[pred] && outMap[pred].length === 1) {
+        start = pred;
+        if (++guard > 100000) break;
+      } else { break; }
+    }
+    if (visited[start]) return;
+
+    // Walk forward to build chain
+    var chain = [start];
+    var current = start;
+    visited[start] = true;
+
+    while (outMap[current] && outMap[current].length === 1) {
+      var next = outMap[current][0];
+      if (nodeTypeLookup[next] !== toolType) break;
+      if (!inMap[next] || inMap[next].length !== 1) break;
+      if (visited[next]) break;
+      chain.push(next);
+      visited[next] = true;
+      current = next;
+    }
+
+    if (chain.length >= MIN_CLUSTER_CHAIN_LENGTH) {
+      chains.push({chain: chain, toolType: toolType});
+    }
+  });
+
+  if (chains.length === 0) return;
+
+  // ── Phase 2: assign cluster IDs and build memberToCluster map ────────────
+  chains.forEach(function(c) {
+    c.cid = 'cluster:' + (++clusterCounter);
+  });
+
+  var memberToCluster = {};
+  chains.forEach(function(c) {
+    c.chain.forEach(function(nid) { memberToCluster[nid] = c.cid; });
+  });
+
+  // ── Phase 3: remove all member nodes, add cluster nodes ──────────────────
+  var allMembers = [];
+  chains.forEach(function(c) { allMembers = allMembers.concat(c.chain); });
+  nodesDataset.remove(allMembers);
+
+  chains.forEach(function(c) {
+    nodesDataset.add({
+      id: c.cid,
+      label: c.toolType + ' chain (' + c.chain.length + ')',
+      title: c.toolType + ' chain — Double-click to expand',
+      shape: 'box',
+      borderDashes: [5, 3],
+      color: {
+        background: '#4c1d95', border: '#7c3aed',
+        highlight: {background: '#5b21b6', border: '#7c3aed'},
+        hover: {background: '#5b21b6', border: '#7c3aed'}
+      },
+      font: {color: '#f1f5f9', size: 13}
+    });
+  });
+
+  // ── Phase 4: remap all edges in a single pass ─────────────────────────────
+  // Remove all original edges first, then re-add with remapped endpoints.
+  // Any edge where both src and dst map to the same cluster is an intra-cluster
+  // edge and is simply dropped. Cross-cluster or cluster-to-real edges become
+  // bridge edges.
+  edgesDataset.remove(EDGES_DATA.map(function(e) { return e.id; }));
+
+  var seenEdgeKey = {};
+  var clusterBridges = {};  // cid → [bridge edge ids]
+
+  EDGES_DATA.forEach(function(e) {
+    var src = memberToCluster[e.from] !== undefined ? memberToCluster[e.from] : e.from;
+    var dst = memberToCluster[e.to]   !== undefined ? memberToCluster[e.to]   : e.to;
+    if (src === dst) return;  // intra-cluster: skip
+
+    var key = String(src) + '\x00' + String(dst);
+    if (seenEdgeKey[key]) return;  // dedup (parallel chains can produce duplicate keys)
+    seenEdgeKey[key] = true;
+
+    // Preserve original numeric edge ID only when both endpoints are real nodes
+    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++clusterCounter);
+    edgesDataset.add({id: newEid, from: src, to: dst});
+
+    // Register bridge edge in every involved cluster
+    if (typeof src === 'string' && src.indexOf('cluster:') === 0) {
+      if (!clusterBridges[src]) clusterBridges[src] = [];
+      clusterBridges[src].push(newEid);
+    }
+    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0) {
+      if (!clusterBridges[dst]) clusterBridges[dst] = [];
+      clusterBridges[dst].push(newEid);
+    }
+  });
+
+  // ── Phase 5: store cluster metadata ──────────────────────────────────────
+  chains.forEach(function(c) {
+    clusterMap[c.cid] = {
+      memberIds: c.chain,
+      toolType: c.toolType,
+      bridgeEdgeIds: clusterBridges[c.cid] ? clusterBridges[c.cid].slice() : [],
+    };
+  });
+}
+
+// Returns the node ID (or cluster ID) currently representing nodeId in the
+// DataSet. Returns null if nodeId is not reachable (removed and unclustered).
+function resolveNode(nodeId) {
+  if (nodesDataset.get(nodeId) !== null) return nodeId;
+  for (var cid in clusterMap) {
+    if (clusterMap[cid].memberIds.indexOf(nodeId) !== -1) return cid;
+  }
+  return null;
+}
+
+function expandCluster(cid) {
+  var c = clusterMap[cid];
+  if (!c) return;
+
+  // Remove cluster node + its bridge edges
+  nodesDataset.remove(cid);
+  edgesDataset.remove(c.bridgeEdgeIds);
+
+  // Restore member nodes with current theme colors
+  var col = nodeColors();
+  c.memberIds.forEach(function(mid) {
+    var orig = NODES_DATA.find(function(n) { return n.id === mid; });
+    if (!orig) return;
+    nodesDataset.add({
+      id: orig.id, label: orig.label, title: orig.title, shape: 'box',
+      color: {background: col.bg, border: col.bd,
+              highlight: {background: col.sel, border: col.bd},
+              hover: {background: col.hover, border: col.bd}},
+      font: {color: col.font}
+    });
+  });
+
+  delete clusterMap[cid];
+
+  // Re-derive edges connected to the just-expanded members.
+  // We look at every original edge touching a member node, remap its endpoints
+  // to what currently exists in the DataSet (real node or cluster), and add
+  // the edge if it isn't already present.
+  var memberSet = {};
+  c.memberIds.forEach(function(mid) { memberSet[mid] = true; });
+
+  // Build set of already-present edge keys to avoid duplicates
+  var presentKeys = {};
+  edgesDataset.get().forEach(function(e) {
+    presentKeys[String(e.from) + '\x00' + String(e.to)] = true;
+  });
+
+  EDGES_DATA.forEach(function(e) {
+    if (!memberSet[e.from] && !memberSet[e.to]) return;  // unrelated edge
+    var src = resolveNode(e.from);
+    var dst = resolveNode(e.to);
+    if (!src || !dst || src === dst) return;
+    var key = String(src) + '\x00' + String(dst);
+    if (presentKeys[key]) return;
+    presentKeys[key] = true;
+
+    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++clusterCounter);
+    edgesDataset.add({id: newEid, from: src, to: dst});
+
+    // Register the new bridge edge in any cluster it touches, so a subsequent
+    // expandCluster() call can clean it up correctly.
+    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && clusterMap[dst]) {
+      clusterMap[dst].bridgeEdgeIds.push(newEid);
+    }
+    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && clusterMap[src]) {
+      clusterMap[src].bridgeEdgeIds.push(newEid);
+    }
+  });
+
+  network.fit({animation: true});
+}
+
+// ── Network init ──────────────────────────────────────────────────────────
+var _clusterClickTimer = null;
+
 function initNetwork() {
   if (network) return;
   var canvas = document.getElementById('graph-canvas');
   nodesDataset = new vis.DataSet(NODES_DATA);
   edgesDataset = new vis.DataSet(EDGES_DATA);
+  buildClusters();  // collapse chains before vis.Network sees the graph
   network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
   network.fit();
   network.on('click', function(params) {
     if (params.nodes.length === 0) { closePanel(); return; }
-    openPanel(params.nodes[0]);
+    var nodeId = params.nodes[0];
+    if (clusterMap[nodeId]) {
+      // Delay panel open for cluster nodes so the overlay does not block the
+      // second tap of a double-click before vis-network can detect it.
+      clearTimeout(_clusterClickTimer);
+      _clusterClickTimer = setTimeout(function() {
+        _clusterClickTimer = null;
+        openPanel(nodeId);
+      }, 280);
+    } else {
+      openPanel(nodeId);
+    }
+  });
+  network.on('doubleClick', function(params) {
+    clearTimeout(_clusterClickTimer);
+    _clusterClickTimer = null;
+    if (params.nodes.length === 0) return;
+    expandCluster(params.nodes[0]);
   });
 }
 
@@ -260,35 +504,61 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
-function openPanel(nodeId) {
-  var entry = CONFIG_MAP[String(nodeId)];
-  if (!entry) return;
-  document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
-  var body = document.getElementById('panel-body');
-  body.innerHTML = '';
+function renderConfigRows(entry, container) {
   var keys = Object.keys(entry.config);
   if (keys.length === 0) {
     var empty = document.createElement('div');
-    empty.style.color = 'var(--text-muted)';
-    empty.style.fontSize = '13px';
+    empty.style.cssText = 'color:var(--text-muted);font-size:13px;';
     empty.textContent = 'No configuration data.';
-    body.appendChild(empty);
-  } else {
-    keys.forEach(function(k) {
-      var row = document.createElement('div');
-      row.className = 'config-row';
-      var keyEl = document.createElement('div');
-      keyEl.className = 'config-key';
-      keyEl.textContent = k;
-      var valEl = document.createElement('div');
-      valEl.className = 'config-val';
-      var v = entry.config[k];
-      valEl.textContent = (typeof v === 'object') ? JSON.stringify(v, null, 2) : String(v);
-      row.appendChild(keyEl);
-      row.appendChild(valEl);
-      body.appendChild(row);
-    });
+    container.appendChild(empty);
+    return;
   }
+  keys.forEach(function(k) {
+    var row = document.createElement('div');
+    row.className = 'config-row';
+    var keyEl = document.createElement('div');
+    keyEl.className = 'config-key';
+    keyEl.textContent = k;
+    var valEl = document.createElement('div');
+    valEl.className = 'config-val';
+    var v = entry.config[k];
+    valEl.textContent = (typeof v === 'object') ? JSON.stringify(v, null, 2) : String(v);
+    row.appendChild(keyEl);
+    row.appendChild(valEl);
+    container.appendChild(row);
+  });
+}
+
+function openPanel(nodeId) {
+  var body = document.getElementById('panel-body');
+  body.innerHTML = '';
+
+  // Cluster node — show member list
+  if (clusterMap[nodeId]) {
+    var c = clusterMap[nodeId];
+    document.getElementById('panel-title-text').textContent =
+      c.toolType + ' chain (' + c.memberIds.length + ' nodes)';
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
+    hint.textContent = 'Double-click the node to expand.';
+    body.appendChild(hint);
+    c.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+    document.getElementById('config-panel').classList.add('open');
+    return;
+  }
+
+  var entry = CONFIG_MAP[String(nodeId)];
+  if (!entry) return;
+  document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
+  renderConfigRows(entry, body);
   document.getElementById('config-panel').classList.add('open');
 }
 
@@ -323,6 +593,114 @@ document.addEventListener('fullscreenchange', function() {
   }
 });
 
+// ── Search ────────────────────────────────────────────────────────────────
+var searchActive = false;
+
+function nodeColors() {
+  var s = getComputedStyle(document.documentElement);
+  return {
+    bg:    s.getPropertyValue('--node-bg').trim(),
+    bd:    s.getPropertyValue('--node-border').trim(),
+    font:  s.getPropertyValue('--node-font').trim(),
+    hover: s.getPropertyValue('--node-hover').trim(),
+    sel:   s.getPropertyValue('--node-select').trim(),
+  };
+}
+
+function doSearch(query) {
+  query = query.trim().toLowerCase();
+  if (!query) { clearSearch(); return; }
+  searchActive = true;
+  document.getElementById('search-clear-btn').style.display = 'block';
+
+  var col = nodeColors();
+  var allNodes = nodesDataset.get();
+  var updates = [];
+  var firstMatch = null;
+
+  allNodes.forEach(function(n) {
+    var idStr  = String(n.id).toLowerCase();
+    var label  = (n.label || '').toLowerCase();
+    var matches = idStr === query || label.indexOf(query) !== -1;
+
+    if (matches) {
+      if (firstMatch === null) firstMatch = n.id;
+      if (clusterMap[n.id]) {
+        updates.push({id: n.id, color: {
+          background: '#4c1d95', border: '#f59e0b',
+          highlight: {background: '#5b21b6', border: '#f59e0b'},
+          hover: {background: '#5b21b6', border: '#f59e0b'}
+        }, font: {color: '#f1f5f9'}});
+      } else {
+        updates.push({id: n.id, color: {
+          background: col.bg, border: '#f59e0b',
+          highlight: {background: col.sel, border: '#f59e0b'},
+          hover: {background: col.hover, border: '#f59e0b'}
+        }, font: {color: col.font}});
+      }
+    } else {
+      if (clusterMap[n.id]) {
+        updates.push({id: n.id, color: {
+          background: '#2e1065', border: '#4c1d95',
+          highlight: {background: '#2e1065', border: '#4c1d95'},
+          hover: {background: '#2e1065', border: '#4c1d95'}
+        }, font: {color: '#6b7280'}});
+      } else {
+        updates.push({id: n.id, color: {
+          background: col.bg, border: col.bd,
+          highlight: {background: col.bg, border: col.bd},
+          hover: {background: col.bg, border: col.bd}
+        }, font: {color: '#64748b'}});
+      }
+    }
+  });
+
+  nodesDataset.update(updates);
+  if (firstMatch !== null) {
+    network.focus(firstMatch, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+  }
+}
+
+function clearSearch() {
+  searchActive = false;
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-clear-btn').style.display = 'none';
+  var col = nodeColors();
+  nodesDataset.update(nodesDataset.get().map(function(n) {
+    if (clusterMap[n.id]) {
+      return {id: n.id, color: {
+        background: '#4c1d95', border: '#7c3aed',
+        highlight: {background: '#5b21b6', border: '#7c3aed'},
+        hover: {background: '#5b21b6', border: '#7c3aed'}
+      }, font: {color: '#f1f5f9'}};
+    }
+    return {id: n.id, color: {
+      background: col.bg, border: col.bd,
+      highlight: {background: col.sel, border: col.bd},
+      hover: {background: col.hover, border: col.bd}
+    }, font: {color: col.font}};
+  }));
+}
+
+document.getElementById('search-input').addEventListener('input', function() {
+  doSearch(this.value);
+});
+document.getElementById('search-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { this.blur(); }
+  else if (e.key === 'Escape') { clearSearch(); this.blur(); }
+});
+document.getElementById('search-clear-btn').addEventListener('click', function() {
+  clearSearch();
+  document.getElementById('search-input').focus();
+});
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    var inp = document.getElementById('search-input');
+    inp.focus(); inp.select();
+  }
+});
+
 // ── Theme toggle ──────────────────────────────────────────────────────────
 var isDark = true;
 function applyTheme(theme) {
@@ -341,11 +719,19 @@ function applyTheme(theme) {
   var nodeFont  = s.getPropertyValue('--node-font').trim();
   var nodeHover = s.getPropertyValue('--node-hover').trim();
   var nodeSel   = s.getPropertyValue('--node-select').trim();
-  nodesDataset.update(NODES_DATA.map(function(n) {
-    return {id: n.id, color: {background: nodeBg, border: nodeBd, highlight: {background: nodeSel, border: nodeBd}, hover: {background: nodeHover, border: nodeBd}}, font: {color: nodeFont}};
-  }));
-  edgesDataset.update(EDGES_DATA.map(function(e) {
-    return {id: e.id, color: {color: edgeColor, highlight: edgeColor, hover: edgeColor}};
+  // Iterate only nodes/edges currently in the DataSet.
+  // Using NODES_DATA.map() here would re-create clustered-away nodes because
+  // DataSet.update() inserts missing IDs as new (label-less) items.
+  var nodeUpdates = [];
+  nodesDataset.getIds().forEach(function(id) {
+    if (clusterMap[id]) return;  // cluster node: keep its fixed purple color
+    nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
+      highlight: {background: nodeSel, border: nodeBd},
+      hover: {background: nodeHover, border: nodeBd}}, font: {color: nodeFont}});
+  });
+  nodesDataset.update(nodeUpdates);
+  edgesDataset.update(edgesDataset.getIds().map(function(id) {
+    return {id: id, color: {color: edgeColor, highlight: edgeColor, hover: edgeColor}};
   }));
 }
 document.getElementById('theme-btn').addEventListener('click', function() {
