@@ -24,14 +24,14 @@ import pathlib
 
 import pytest
 
-from alteryx_git_companion.exceptions import (
+from yxray.exceptions import (
     MalformedXMLError,
     MissingFileError,
     ParseError,
     UnreadableFileError,
 )
-from alteryx_git_companion.models import AlteryxConnection, AlteryxNode, WorkflowDoc
-from alteryx_git_companion.parser import parse
+from yxray.models import AlteryxConnection, AlteryxNode, WorkflowDoc
+from yxray.parser import parse
 from tests.fixtures import (
     BINARY_CONTENT,
     EMPTY_FILE,

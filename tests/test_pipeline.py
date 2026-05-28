@@ -1,7 +1,7 @@
 """Integration tests for pipeline.run().
 
 IMPORTANT: This file contains zero imports from sys, argparse, typer,
-or alteryx_git_companion.cli — confirming pipeline is entry-point-agnostic (SC 4).
+or yxray.cli — confirming pipeline is entry-point-agnostic (SC 4).
 """
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ import pathlib
 
 import pytest
 
-from alteryx_git_companion.exceptions import MissingFileError
-from alteryx_git_companion.models import DiffResult
-from alteryx_git_companion.pipeline import DiffRequest, DiffResponse, run
+from yxray.exceptions import MissingFileError
+from yxray.models import DiffResult
+from yxray.pipeline import DiffRequest, DiffResponse, run
 from tests.fixtures.pipeline import IDENTICAL_YXMD, MINIMAL_YXMD_A, MINIMAL_YXMD_B
 
 

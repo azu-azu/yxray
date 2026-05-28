@@ -243,7 +243,7 @@ def test_diff_endpoint_first_commit(client, tmp_path):
 
 def test_diff_endpoint(client, tmp_path):
     """HIST-02: diff endpoint returns 200 HTML when sha has a parent commit."""
-    from alteryx_git_companion.renderers.html_renderer import (
+    from yxray.renderers.html_renderer import (
         HTMLRenderer,  # noqa: PLC0415
     )
 

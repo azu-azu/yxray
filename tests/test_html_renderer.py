@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from alteryx_git_companion.renderers import HTMLRenderer
+from yxray.renderers import HTMLRenderer
 from tests.fixtures.html_report import (
     EMPTY_DIFF,
     SINGLE_ADDED,

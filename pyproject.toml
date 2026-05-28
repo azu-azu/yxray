@@ -19,7 +19,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-acd = "alteryx_git_companion.cli:app"
+acd = "yxray.cli:app"
 
 [dependency-groups]
 dev = [
@@ -68,7 +68,7 @@ module = ["rich.*"]
 ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/alteryx_git_companion"]
+packages = ["src/yxray"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

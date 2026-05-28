@@ -19,8 +19,8 @@ from typing import Any
 
 import networkx as nx
 
-from alteryx_git_companion.models import DiffResult
-from alteryx_git_companion.models.workflow import AlteryxConnection, AlteryxNode
+from yxray.models import DiffResult
+from yxray.models.workflow import AlteryxConnection, AlteryxNode
 
 # Color constants — single source of truth for both Python (graph builder) and JS (template)
 COLOR_MAP: dict[str, str] = {
@@ -191,7 +191,7 @@ def load_vis_js() -> str:
     """
     try:
         return (
-            pkg_resources.files("alteryx_git_companion")
+            pkg_resources.files("yxray")
             .joinpath("static/vis-network.min.js")
             .read_text(encoding="utf-8")
         )

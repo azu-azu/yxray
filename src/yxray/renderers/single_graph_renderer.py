@@ -16,8 +16,8 @@ from typing import Any
 
 from jinja2 import Environment
 
-from alteryx_git_companion.models.workflow import AlteryxNode, WorkflowDoc
-from alteryx_git_companion.renderers._graph_builder import load_vis_js
+from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.renderers._graph_builder import load_vis_js
 
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>

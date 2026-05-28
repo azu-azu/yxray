@@ -25,13 +25,13 @@ import hashlib
 import json
 from typing import Any
 
-from alteryx_git_companion.models.normalized import (
+from yxray.models.normalized import (
     NormalizedNode,
     NormalizedWorkflowDoc,
 )
-from alteryx_git_companion.models.types import ConfigHash
-from alteryx_git_companion.models.workflow import AlteryxNode, WorkflowDoc
-from alteryx_git_companion.normalizer._strip import strip_noise
+from yxray.models.types import ConfigHash
+from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.normalizer._strip import strip_noise
 
 
 def normalize(workflow_doc: WorkflowDoc) -> NormalizedWorkflowDoc:

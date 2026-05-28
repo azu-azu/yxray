@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from alteryx_git_companion.models.types import AnchorName, ToolID
-from alteryx_git_companion.models.workflow import (
+from yxray.models.types import AnchorName, ToolID
+from yxray.models.workflow import (
     AlteryxConnection,
     AlteryxNode,
     WorkflowDoc,

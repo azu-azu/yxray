@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 
-from alteryx_git_companion.models import DiffResult
-from alteryx_git_companion.models.types import ToolID
-from alteryx_git_companion.models.workflow import AlteryxNode
-from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer
-from alteryx_git_companion.renderers._graph_builder import COLOR_MAP
+from yxray.models import DiffResult
+from yxray.models.types import ToolID
+from yxray.models.workflow import AlteryxNode
+from yxray.renderers import GraphRenderer, HTMLRenderer
+from yxray.renderers._graph_builder import COLOR_MAP
 from tests.fixtures.graph import (
     ALL_CHANGE_TYPES_DIFF,
     ALL_CONNECTIONS,
