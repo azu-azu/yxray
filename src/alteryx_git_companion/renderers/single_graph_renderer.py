@@ -258,13 +258,24 @@ var options = {
 };
 
 var container = document.getElementById('graph-container');
-var network = new vis.Network(container, {nodes: nodesDataset, edges: edgesDataset}, options);
-applyColors();
-network.fit();
+var network = null;
+
+requestAnimationFrame(function() {
+  network = new vis.Network(container, {nodes: nodesDataset, edges: edgesDataset}, options);
+  applyColors();
+  network.on('click', function(params) {
+    if (params.nodes.length === 0) { closePanel(); return; }
+    openPanel(params.nodes[0]);
+  });
+  requestAnimationFrame(function() {
+    network.redraw();
+    network.fit();
+  });
+});
 
 // ── Config panel ──────────────────────────────────────────────────────────
 function openPanel(nodeId) {
-  var entry = CONFIG_MAP[nodeId];
+  var entry = CONFIG_MAP[String(nodeId)];
   if (!entry) return;
   document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
   var body = document.getElementById('panel-body');
@@ -299,18 +310,13 @@ function closePanel() {
   document.getElementById('config-panel').classList.remove('open');
 }
 
-network.on('click', function(params) {
-  if (params.nodes.length === 0) { closePanel(); return; }
-  openPanel(params.nodes[0]);
-});
-
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePanel(); });
 
 // ── Controls ──────────────────────────────────────────────────────────────
 document.getElementById('fit-btn').addEventListener('click', function() {
-  network.fit({animation: true});
+  if (network) network.fit({animation: true});
 });
 
 document.getElementById('fullscreen-btn').addEventListener('click', function() {
@@ -327,7 +333,7 @@ document.addEventListener('fullscreenchange', function() {
   if (!document.fullscreenElement) {
     var btn = document.getElementById('fullscreen-btn');
     if (btn) btn.textContent = 'Fullscreen';
-    setTimeout(function() { network.fit({animation: false}); }, 50);
+    setTimeout(function() { if (network) network.fit({animation: false}); }, 50);
   }
 });
 
