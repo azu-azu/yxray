@@ -10,6 +10,7 @@ Public entry point: diff()
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from deepdiff import DeepDiff
@@ -253,8 +254,6 @@ def _get_parent_path(path: str) -> str:
     Example: "root['Fields'][3]" -> "root['Fields']"
     """
     # Find the last "[N]" numeric index segment and strip it
-    import re
-
     return re.sub(r"\[\d+\]$", "", path)
 
 

@@ -9,8 +9,6 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from typing import Optional
-
 from yxray.exceptions import MalformedXMLError, ParseError
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
@@ -168,7 +166,7 @@ def inspect(  # noqa: B008
     workflow: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help=".yxmd or .yxwz workflow file to inspect"
     ),
-    output: Optional[pathlib.Path] = typer.Option(  # noqa: B008
+    output: pathlib.Path | None = typer.Option(  # noqa: B008
         None,
         "--output",
         "-o",
