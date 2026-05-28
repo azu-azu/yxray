@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2022.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Data\customers.csv</File><RecordLimit>0</RecordLimit></Configuration></Properties>
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Data\orders.csv</File><RecordLimit>0</RecordLimit></Configuration></Properties>
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="270"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Data\products.csv</File><RecordLimit>0</RecordLimit></Configuration></Properties>
+    </Node>
+    <Node ToolID="4">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="216" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>[Country] = "Japan"</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="5">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="216" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>[Status] = "Completed"</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="6">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+        <Position x="378" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><OrderChanged>False</OrderChanged></Configuration></Properties>
+    </Node>
+    <Node ToolID="7">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+        <Position x="378" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><OrderChanged>False</OrderChanged></Configuration></Properties>
+    </Node>
+    <Node ToolID="8">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+        <Position x="540" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><JoinExpression>[L:CustomerID] = [R:CustomerID]</JoinExpression></Configuration></Properties>
+    </Node>
+    <Node ToolID="9">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+        <Position x="702" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><JoinExpression>[L:ProductID] = [R:ProductID]</JoinExpression></Configuration></Properties>
+    </Node>
+    <Node ToolID="10">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="864" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>[UnitPrice] * [Quantity] * 1.10</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="11">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="864" y="216"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>DateTimeFormat([OrderDate], "%Y-%m")</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="12">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Summarize.Summarize">
+        <Position x="1026" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><Fields><Field field="Region" action="GroupBy"/><Field field="Month" action="GroupBy"/><Field field="TotalAmount" action="Sum" rename="Revenue"/></Fields></Configuration></Properties>
+    </Node>
+    <Node ToolID="13">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="1188" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>[Revenue] > 100000</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="14">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="1188" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>[Revenue] &lt;= 100000</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="15">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="1350" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>"High"</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="16">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="1350" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><Expression>"Low"</Expression></Configuration></Properties>
+    </Node>
+    <Node ToolID="17">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Union.Union">
+        <Position x="1512" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><Mode>Auto</Mode></Configuration></Properties>
+    </Node>
+    <Node ToolID="18">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Sort.Sort">
+        <Position x="1674" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><SortInfo><Field field="Revenue" order="Descending"/></SortInfo></Configuration></Properties>
+    </Node>
+    <Node ToolID="19">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="1836" y="54"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Output\revenue_report.xlsx</File></Configuration></Properties>
+    </Node>
+    <Node ToolID="20">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="1836" y="162"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Output\revenue_summary.csv</File></Configuration></Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection><Origin ToolID="1" Connection="Output"/><Destination ToolID="4" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="2" Connection="Output"/><Destination ToolID="5" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="4" Connection="True"/><Destination ToolID="6" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="5" Connection="True"/><Destination ToolID="7" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="6" Connection="Output"/><Destination ToolID="8" Connection="Left"/></Connection>
+    <Connection><Origin ToolID="7" Connection="Output"/><Destination ToolID="8" Connection="Right"/></Connection>
+    <Connection><Origin ToolID="8" Connection="Join"/><Destination ToolID="9" Connection="Left"/></Connection>
+    <Connection><Origin ToolID="3" Connection="Output"/><Destination ToolID="9" Connection="Right"/></Connection>
+    <Connection><Origin ToolID="9" Connection="Join"/><Destination ToolID="10" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="9" Connection="Join"/><Destination ToolID="11" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="10" Connection="Output"/><Destination ToolID="12" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="11" Connection="Output"/><Destination ToolID="12" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="12" Connection="Output"/><Destination ToolID="13" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="12" Connection="Output"/><Destination ToolID="14" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="13" Connection="True"/><Destination ToolID="15" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="14" Connection="True"/><Destination ToolID="16" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="15" Connection="Output"/><Destination ToolID="17" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="16" Connection="Output"/><Destination ToolID="17" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="17" Connection="Output"/><Destination ToolID="18" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="18" Connection="Output"/><Destination ToolID="19" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="18" Connection="Output"/><Destination ToolID="20" Connection="Input"/></Connection>
+  </Connections>
+</AlteryxDocument>
