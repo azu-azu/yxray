@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from alteryx_git_companion.models.types import AnchorName, ToolID
-from alteryx_git_companion.models.workflow import AlteryxNode
+from yxray.models.types import AnchorName, ToolID
+from yxray.models.workflow import AlteryxNode
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

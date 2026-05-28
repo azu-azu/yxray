@@ -25,12 +25,12 @@ from typing import Any
 
 from lxml import etree
 
-from alteryx_git_companion.exceptions import (
+from yxray.exceptions import (
     MalformedXMLError,
     MissingFileError,
     UnreadableFileError,
 )
-from alteryx_git_companion.models import (
+from yxray.models import (
     AlteryxConnection,
     AlteryxNode,
     AnchorName,

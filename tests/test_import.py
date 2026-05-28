@@ -2,7 +2,7 @@
 
 
 def test_package_importable() -> None:
-    """Verify that alteryx_git_companion is importable and has a version string."""
-    import alteryx_git_companion
+    """Verify that yxray is importable and has a version string."""
+    import yxray
 
-    assert alteryx_git_companion.__version__ == "0.1.0"
+    assert yxray.__version__ == "0.1.0"

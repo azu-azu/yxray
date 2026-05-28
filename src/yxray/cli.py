@@ -11,10 +11,10 @@ from rich.console import Console
 
 from typing import Optional
 
-from alteryx_git_companion.exceptions import MalformedXMLError, ParseError
-from alteryx_git_companion.parser import parse_one
-from alteryx_git_companion.pipeline import DiffRequest, run
-from alteryx_git_companion.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
+from yxray.exceptions import MalformedXMLError, ParseError
+from yxray.parser import parse_one
+from yxray.pipeline import DiffRequest, run
+from yxray.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
 
 app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
@@ -237,7 +237,7 @@ def _cli_json_output(result: Any, metadata: dict[str, Any]) -> str:
     Kept separate to avoid breaking existing JSONRenderer tests (5 passing).
     """
     # local import: avoids circular at module level
-    from alteryx_git_companion.models import (
+    from yxray.models import (
         DiffResult,
     )
 

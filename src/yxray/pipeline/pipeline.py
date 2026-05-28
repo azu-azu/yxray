@@ -3,11 +3,11 @@ from __future__ import annotations
 import pathlib
 from dataclasses import dataclass
 
-from alteryx_git_companion.differ import diff
-from alteryx_git_companion.matcher import match
-from alteryx_git_companion.models import DiffResult, WorkflowDoc
-from alteryx_git_companion.normalizer import normalize
-from alteryx_git_companion.parser import parse
+from yxray.differ import diff
+from yxray.matcher import match
+from yxray.models import DiffResult, WorkflowDoc
+from yxray.normalizer import normalize
+from yxray.parser import parse
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

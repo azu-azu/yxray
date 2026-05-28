@@ -20,15 +20,15 @@ import hashlib
 import json
 from typing import Any
 
-from alteryx_git_companion.matcher.matcher import MatchResult
-from alteryx_git_companion.models import (
+from yxray.matcher.matcher import MatchResult
+from yxray.models import (
     AlteryxConnection,
     AlteryxNode,
     ConfigHash,
     NormalizedNode,
     ToolID,
 )
-from alteryx_git_companion.models.types import AnchorName
+from yxray.models.types import AnchorName
 
 # ---------------------------------------------------------------------------
 # Internal helpers

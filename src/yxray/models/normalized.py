@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from alteryx_git_companion.models.types import ConfigHash
-from alteryx_git_companion.models.workflow import (
+from yxray.models.types import ConfigHash
+from yxray.models.workflow import (
     AlteryxConnection,
     AlteryxNode,
     WorkflowDoc,

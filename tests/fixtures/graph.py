@@ -6,9 +6,9 @@ No collision with Phase 7 (701-720) or prior phases.
 
 from __future__ import annotations
 
-from alteryx_git_companion.models.diff import DiffResult, EdgeDiff, NodeDiff
-from alteryx_git_companion.models.types import AnchorName, ToolID
-from alteryx_git_companion.models.workflow import AlteryxConnection, AlteryxNode
+from yxray.models.diff import DiffResult, EdgeDiff, NodeDiff
+from yxray.models.types import AnchorName, ToolID
+from yxray.models.workflow import AlteryxConnection, AlteryxNode
 
 # --- Node builders (with distinct canvas positions for canvas_layout tests) ---
 

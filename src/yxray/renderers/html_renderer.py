@@ -6,9 +6,9 @@ from typing import Any
 
 from jinja2 import Environment
 
-from alteryx_git_companion.models import DiffResult, NodeDiff
-from alteryx_git_companion.models.diff import EdgeDiff
-from alteryx_git_companion.models.workflow import AlteryxNode
+from yxray.models import DiffResult, NodeDiff
+from yxray.models.diff import EdgeDiff
+from yxray.models.workflow import AlteryxNode
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
