@@ -107,12 +107,6 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
-    main {
-      flex: 1;
-      display: flex;
-      min-height: 0;
-      overflow: hidden;
-    }
     #graph-container {
       flex: 1;
       min-height: 0;
@@ -188,9 +182,7 @@ _HTML_TEMPLATE = """\
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
-  <main>
-    <div id="graph-container"></div>
-  </main>
+  <div id="graph-container"></div>
   <div id="config-panel">
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
@@ -263,7 +255,13 @@ var options = {
 var container = document.getElementById('graph-container');
 var network = null;
 
+function sizeContainer() {
+  var hdr = document.querySelector('header');
+  container.style.height = (window.innerHeight - (hdr ? hdr.offsetHeight : 0)) + 'px';
+}
+
 requestAnimationFrame(function() {
+  sizeContainer();
   network = new vis.Network(container, {nodes: nodesDataset, edges: edgesDataset}, options);
   applyColors();
   network.on('click', function(params) {
@@ -274,6 +272,11 @@ requestAnimationFrame(function() {
     network.redraw();
     network.fit();
   });
+});
+
+window.addEventListener('resize', function() {
+  sizeContainer();
+  if (network) { network.redraw(); network.fit({animation: false}); }
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
