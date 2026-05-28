@@ -16,6 +16,7 @@ __all__ = [
     "TWO_NODE_YXMD",
     "EMPTY_WORKFLOW_YXMD",
     "REPEATED_FIELDS_YXMD",
+    "CONTAINER_YXMD",
     "MALFORMED_XML",
     "EMPTY_FILE",
     "BINARY_CONTENT",
@@ -132,6 +133,64 @@ REPEATED_FIELDS_YXMD: bytes = b"""\
     </Node>
   </Nodes>
   <Connections/>
+</AlteryxDocument>
+"""
+
+# CONTAINER_YXMD: one ToolContainer (ToolID=10, Caption="My Container") containing
+# two member nodes (ToolID=1 and ToolID=2 with ToolContainerID="10"), plus one
+# node outside the container (ToolID=3).  Verifies that parser.py extracts
+# ToolContainerID from Properties/EngineSettings and stores it as container_id.
+CONTAINER_YXMD: bytes = b"""\
+<?xml version="1.0" encoding="utf-8"?>
+<AlteryxDocument yxmdVer="2022.1">
+  <Nodes>
+    <Node ToolID="10">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.ToolContainer.ToolContainer">
+        <Position x="200" y="54"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>My Container</Caption>
+        </Configuration>
+      </Properties>
+    </Node>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="216" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Expression>[x] > 0</Expression></Configuration>
+        <EngineSettings ToolContainerID="10"/>
+      </Properties>
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="378" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Expression>[x] * 2</Expression></Configuration>
+        <EngineSettings ToolContainerID="10"/>
+      </Properties>
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="540" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><File>out.csv</File></Configuration>
+      </Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="True"/>
+      <Destination ToolID="2" Connection="Input"/>
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output"/>
+      <Destination ToolID="3" Connection="Input"/>
+    </Connection>
+  </Connections>
 </AlteryxDocument>
 """
 
