@@ -194,10 +194,8 @@ _HTML_TEMPLATE = """\
     <div id="panel-body"></div>
   </div>
   <div id="panel-overlay"></div>
+  <script>{{ vis_js | safe }}</script>
   <script>
-(function() {
-{{ vis_js | safe }}
-
 var NODES_DATA = {{ nodes_json | safe }};
 var EDGES_DATA = {{ edges_json | safe }};
 var CONFIG_MAP = {{ config_map_json | safe }};
@@ -352,7 +350,6 @@ document.getElementById('theme-btn').addEventListener('click', function() {
 var savedTheme = localStorage.getItem('yxray-theme') || 'dark';
 applyTheme(savedTheme);
 
-})();
   </script>
 </body>
 </html>
