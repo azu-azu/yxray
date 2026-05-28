@@ -68,7 +68,8 @@ _HTML_TEMPLATE = """\
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
@@ -110,9 +111,11 @@ _HTML_TEMPLATE = """\
       flex: 1;
       display: flex;
       min-height: 0;
+      overflow: hidden;
     }
     #graph-container {
       flex: 1;
+      min-height: 0;
       background: var(--bg);
     }
     /* Slide-in config panel */
