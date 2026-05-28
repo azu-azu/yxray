@@ -68,10 +68,7 @@ _HTML_TEMPLATE = """\
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      height: 100vh;
       overflow: hidden;
-      display: grid;
-      grid-template-rows: auto 1fr;
     }
     header {
       display: flex;
@@ -106,9 +103,15 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
-    #graph-container {
+    #graph-wrapper {
+      width: 100%;
+      height: calc(100vh - 57px);
       background: var(--bg);
       overflow: hidden;
+    }
+    #graph-canvas {
+      width: 100%;
+      height: 100%;
     }
     /* Slide-in config panel */
     #config-panel {
@@ -180,7 +183,9 @@ _HTML_TEMPLATE = """\
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
-  <div id="graph-container"></div>
+  <div id="graph-wrapper">
+    <div id="graph-canvas"></div>
+  </div>
   <div id="config-panel">
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
@@ -198,38 +203,9 @@ var EDGES_DATA = {{ edges_json | safe }};
 var CONFIG_MAP = {{ config_map_json | safe }};
 
 // ── vis-network setup ─────────────────────────────────────────────────────
-var nodesDataset = new vis.DataSet(NODES_DATA);
-var edgesDataset = new vis.DataSet(EDGES_DATA);
-
-var isDark = true;
-
-function nodeColors() {
-  var s = getComputedStyle(document.documentElement);
-  function v(name) { return s.getPropertyValue(name).trim(); }
-  return {
-    background: v('--node-bg'),
-    border:     v('--node-border'),
-    fontColor:  v('--node-font'),
-    hoverBg:    v('--node-hover'),
-    selBg:      v('--node-select'),
-  };
-}
-
-function applyColors() {
-  var c = nodeColors();
-  nodesDataset.update(NODES_DATA.map(function(n) {
-    return {
-      id: n.id,
-      color: {
-        background: c.background,
-        border: c.border,
-        highlight: {background: c.selBg, border: c.border},
-        hover: {background: c.hoverBg, border: c.border}
-      },
-      font: {color: c.fontColor}
-    };
-  }));
-}
+var network = null;
+var nodesDataset = null;
+var edgesDataset = null;
 
 var options = {
   physics: {enabled: false},
@@ -250,20 +226,23 @@ var options = {
   interaction: {zoomView: true, dragView: true, hover: true, tooltipDelay: 150}
 };
 
-var container = document.getElementById('graph-container');
-var network = null;
-
-requestAnimationFrame(function() {
-  network = new vis.Network(container, {nodes: nodesDataset, edges: edgesDataset}, options);
-  applyColors();
+function initNetwork() {
+  if (network) return;
+  var canvas = document.getElementById('graph-canvas');
+  nodesDataset = new vis.DataSet(NODES_DATA);
+  edgesDataset = new vis.DataSet(EDGES_DATA);
+  network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
   network.fit();
   network.on('click', function(params) {
     if (params.nodes.length === 0) { closePanel(); return; }
     openPanel(params.nodes[0]);
   });
+}
+
+requestAnimationFrame(function() {
+  initNetwork();
   requestAnimationFrame(function() {
-    network.redraw();
-    network.fit();
+    if (network) { network.redraw(); network.fit({animation: false}); }
   });
 });
 
@@ -336,7 +315,7 @@ document.addEventListener('fullscreenchange', function() {
 });
 
 // ── Theme toggle ──────────────────────────────────────────────────────────
-var savedTheme = localStorage.getItem('yxray-theme') || 'dark';
+var isDark = true;
 function applyTheme(theme) {
   isDark = (theme === 'dark');
   if (isDark) {
@@ -345,17 +324,27 @@ function applyTheme(theme) {
     document.documentElement.classList.add('light');
   }
   document.getElementById('theme-btn').textContent = isDark ? 'Light Mode' : 'Dark Mode';
-  var edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--edge-color').trim();
+  if (!nodesDataset || !edgesDataset) return;
+  var s = getComputedStyle(document.documentElement);
+  var edgeColor = s.getPropertyValue('--edge-color').trim();
+  var nodeBg    = s.getPropertyValue('--node-bg').trim();
+  var nodeBd    = s.getPropertyValue('--node-border').trim();
+  var nodeFont  = s.getPropertyValue('--node-font').trim();
+  var nodeHover = s.getPropertyValue('--node-hover').trim();
+  var nodeSel   = s.getPropertyValue('--node-select').trim();
+  nodesDataset.update(NODES_DATA.map(function(n) {
+    return {id: n.id, color: {background: nodeBg, border: nodeBd, highlight: {background: nodeSel, border: nodeBd}, hover: {background: nodeHover, border: nodeBd}}, font: {color: nodeFont}};
+  }));
   edgesDataset.update(EDGES_DATA.map(function(e) {
     return {id: e.id, color: {color: edgeColor, highlight: edgeColor, hover: edgeColor}};
   }));
-  applyColors();
 }
 document.getElementById('theme-btn').addEventListener('click', function() {
   var next = isDark ? 'light' : 'dark';
   localStorage.setItem('yxray-theme', next);
   applyTheme(next);
 });
+var savedTheme = localStorage.getItem('yxray-theme') || 'dark';
 applyTheme(savedTheme);
 
 })();
