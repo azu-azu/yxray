@@ -212,6 +212,37 @@ var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, co
 var clusterCounter = 0;
 var MIN_CLUSTER_SIZE = 3;  // minimum nodes to form a type-based cluster
 
+// ── Cluster color palette ─────────────────────────────────────────────────
+// Single source of truth for cluster node colors.
+// type = same-type BFS cluster (purple); container = ToolContainer group (teal).
+var CLUSTER_STYLE = {
+  type: {
+    normal: {background:'#4c1d95', border:'#7c3aed',
+             highlight:{background:'#5b21b6', border:'#7c3aed'},
+             hover:    {background:'#5b21b6', border:'#7c3aed'}},
+    dim:    {background:'#2e1065', border:'#4c1d95'},
+    matchBg: '#5b21b6',
+    stroke: '#7c3aed', fill: 'rgba(109,40,217,0.07)', label: '#a78bfa',
+  },
+  container: {
+    normal: {background:'#065f46', border:'#059669',
+             highlight:{background:'#047857', border:'#059669'},
+             hover:    {background:'#047857', border:'#059669'}},
+    dim:    {background:'#022c22', border:'#065f46'},
+    matchBg: '#047857',
+    stroke: '#059669', fill: 'rgba(5,150,105,0.07)', label: '#34d399',
+  },
+};
+
+// ── afterDrawing box constants ────────────────────────────────────────────
+// Padding around each node center to form the group bounding box.
+// padX/padY should be >= half the node visual size at zoom 1 (~80px × 50px).
+// Tuned alongside options.layout.hierarchical.nodeSpacing (120) and
+// levelSeparation (220) to avoid overlap with non-member nodes.
+var BOX_PAD_X   = 72;   // horizontal padding from node center
+var BOX_PAD_Y   = 36;   // vertical padding from node center
+var BOX_RADIUS  = 14;   // corner radius of the rounded rectangle
+
 var options = {
   layout: {
     hierarchical: {
@@ -407,7 +438,8 @@ function buildContainerClusters() {
 
   // Step 2: build cluster defs and memberToCluster map
   var clusterDefs = [];
-  var memberToCluster = {};  // nodeId -> clusterId  (or '__remove__' for the container node itself)
+  var memberToCluster = {};   // member nodeId -> clusterId
+  var containerNodeSet = {};  // ToolContainer node IDs — no data role, edges dropped
 
   containerIds.forEach(function(cidStr) {
     var containerId = parseInt(cidStr);
@@ -417,7 +449,7 @@ function buildContainerClusters() {
     var label = caption + ' \xd7' + memberIds.length;
 
     memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
-    memberToCluster[containerId] = '__remove__';  // the ToolContainer node itself: no data role
+    containerNodeSet[containerId] = true;  // the ToolContainer node itself: no data role
 
     clusterDefs.push({
       cid: clusterId,
@@ -446,11 +478,7 @@ function buildContainerClusters() {
       title: c.caption + ' — Double-click to expand',
       shape: 'box',
       borderDashes: [5, 3],
-      color: {
-        background: '#065f46', border: '#059669',
-        highlight: {background: '#047857', border: '#059669'},
-        hover: {background: '#047857', border: '#059669'}
-      },
+      color: CLUSTER_STYLE.container.normal,
       font: {color: '#f1f5f9', size: 13}
     });
   });
@@ -468,7 +496,7 @@ function buildContainerClusters() {
     var dstMapped = memberToCluster[e.to];
 
     // ToolContainer node itself has no data role — drop any edge to/from it
-    if (srcMapped === '__remove__' || dstMapped === '__remove__') {
+    if (containerNodeSet[e.from] || containerNodeSet[e.to]) {
       edgesToRemove.push(e.id);
       return;
     }
@@ -541,13 +569,7 @@ function recollapseGroup(groupKey) {
 
   // Re-add cluster node with appropriate colors (teal for container, purple for type)
   var isContainer = group.isContainer || false;
-  var clusterColor = isContainer
-    ? {background: '#065f46', border: '#059669',
-       highlight: {background: '#047857', border: '#059669'},
-       hover: {background: '#047857', border: '#059669'}}
-    : {background: '#4c1d95', border: '#7c3aed',
-       highlight: {background: '#5b21b6', border: '#7c3aed'},
-       hover: {background: '#5b21b6', border: '#7c3aed'}};
+  var cStyle = isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
   var clusterTitle = isContainer
     ? group.toolType + ' \u2014 Double-click to expand'
     : group.toolType + ' cluster \u2014 Double-click to expand';
@@ -557,7 +579,7 @@ function recollapseGroup(groupKey) {
     title: clusterTitle,
     shape: 'box',
     borderDashes: [5, 3],
-    color: clusterColor,
+    color: cStyle.normal,
     font: {color: '#f1f5f9', size: 13}
   });
 
@@ -753,16 +775,15 @@ function initNetwork() {
       });
       if (!hasNode) return;
 
-      // Pad generously around each node center (node is ~80px wide, 50px tall at 1:1 zoom)
-      var padX = 72, padY = 36;
-      var x = minX - padX, y = minY - padY;
-      var w = maxX - minX + padX * 2;
-      var h = maxY - minY + padY * 2;
-      var r = 14;
+      var x = minX - BOX_PAD_X, y = minY - BOX_PAD_Y;
+      var w = maxX - minX + BOX_PAD_X * 2;
+      var h = maxY - minY + BOX_PAD_Y * 2;
+      var r = BOX_RADIUS;
 
-      var strokeColor = group.isContainer ? '#059669' : '#7c3aed';
-      var fillColor   = group.isContainer ? 'rgba(5,150,105,0.07)' : 'rgba(109,40,217,0.07)';
-      var labelColor  = group.isContainer ? '#34d399' : '#a78bfa';
+      var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+      var strokeColor = bs.stroke;
+      var fillColor   = bs.fill;
+      var labelColor  = bs.label;
 
       // Rounded rectangle path
       ctx.beginPath();
@@ -934,11 +955,11 @@ function doSearch(query) {
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;
       if (clusterMap[n.id]) {
-        var matchBg  = clusterMap[n.id].isContainer ? '#047857' : '#5b21b6';
+        var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
         updates.push({id: n.id, color: {
-          background: matchBg, border: '#f59e0b',
-          highlight: {background: matchBg, border: '#f59e0b'},
-          hover: {background: matchBg, border: '#f59e0b'}
+          background: cs.matchBg, border: '#f59e0b',
+          highlight: {background: cs.matchBg, border: '#f59e0b'},
+          hover: {background: cs.matchBg, border: '#f59e0b'}
         }, font: {color: '#f1f5f9'}});
       } else {
         updates.push({id: n.id, color: {
@@ -949,12 +970,11 @@ function doSearch(query) {
       }
     } else {
       if (clusterMap[n.id]) {
-        var dimBg = clusterMap[n.id].isContainer ? '#022c22' : '#2e1065';
-        var dimBd = clusterMap[n.id].isContainer ? '#065f46' : '#4c1d95';
+        var cd = (clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type).dim;
         updates.push({id: n.id, color: {
-          background: dimBg, border: dimBd,
-          highlight: {background: dimBg, border: dimBd},
-          hover: {background: dimBg, border: dimBd}
+          background: cd.background, border: cd.border,
+          highlight: {background: cd.background, border: cd.border},
+          hover: {background: cd.background, border: cd.border}
         }, font: {color: '#6b7280'}});
       } else {
         updates.push({id: n.id, color: {
@@ -979,18 +999,8 @@ function clearSearch() {
   var col = nodeColors();
   nodesDataset.update(nodesDataset.get().map(function(n) {
     if (clusterMap[n.id]) {
-      if (clusterMap[n.id].isContainer) {
-        return {id: n.id, color: {
-          background: '#065f46', border: '#059669',
-          highlight: {background: '#047857', border: '#059669'},
-          hover: {background: '#047857', border: '#059669'}
-        }, font: {color: '#f1f5f9'}};
-      }
-      return {id: n.id, color: {
-        background: '#4c1d95', border: '#7c3aed',
-        highlight: {background: '#5b21b6', border: '#7c3aed'},
-        hover: {background: '#5b21b6', border: '#7c3aed'}
-      }, font: {color: '#f1f5f9'}};
+      var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+      return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
     }
     return {id: n.id, color: {
       background: col.bg, border: col.bd,
@@ -1042,7 +1052,7 @@ function applyTheme(theme) {
   // DataSet.update() inserts missing IDs as new (label-less) items.
   var nodeUpdates = [];
   nodesDataset.getIds().forEach(function(id) {
-    if (clusterMap[id]) return;  // cluster node: keep its fixed purple color
+    if (clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
       highlight: {background: nodeSel, border: nodeBd},
       hover: {background: nodeHover, border: nodeBd}}, font: {color: nodeFont}});
