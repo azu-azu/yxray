@@ -206,11 +206,11 @@ var nodesDataset = null;
 var edgesDataset = null;
 
 // ── Cluster state ─────────────────────────────────────────────────────────
-var clusterMap = {};       // { 'cluster:N': { memberIds, toolType, bridgeEdgeIds } }
+var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolType, bridgeEdgeIds, isContainer } }
 var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
-var groupMembers = {};     // groupKey -> { memberIds, toolType }  (expanded cluster metadata)
+var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
 var clusterCounter = 0;
-var MIN_CLUSTER_SIZE = 3;  // minimum nodes to form a cluster
+var MIN_CLUSTER_SIZE = 3;  // minimum nodes to form a type-based cluster
 
 var options = {
   layout: {
@@ -243,16 +243,20 @@ var options = {
 
 // ── Clustering ─────────────────────────────────────────────────────────────
 //
-// Design: all clusters are identified first via BFS on the undirected graph,
-// then edges are remapped in a single pass. BFS finds every connected component
-// of same-type nodes (regardless of branching or fan-in/fan-out topology),
-// which is far more effective than the old linear-chain-only approach for
-// large real-world workflows.
+// Two clustering modes run in sequence before vis.Network is created:
 //
-// The single-pass edge remap avoids the "dangling node" bug that occurs when
-// adjacent clusters are processed sequentially.
+//   1. buildClusters(skipSet)   — BFS same-type clustering (type-based).
+//      skipSet contains container member IDs so they are not type-clustered.
+//
+//   2. buildContainerClusters() — groups nodes by ToolContainerID.
+//      Reads the current DataSet (after type clustering) and remaps edges.
+//      Cluster nodes are teal/green to distinguish them from type clusters (purple).
+//
+// Both share clusterMap, expandedGroups, groupMembers, clusterCounter.
 
-function buildClusters() {
+function buildClusters(skipSet) {
+  skipSet = skipSet || {};
+
   // ── Phase 1: BFS over undirected adjacency to find same-type components ──
   // Use undirected adjacency so that fan-in patterns (multiple same-type nodes
   // flowing into a single node of the same type) are treated as connected.
@@ -276,6 +280,7 @@ function buildClusters() {
 
   NODES_DATA.forEach(function(n) {
     if (visited[n.id]) return;
+    if (skipSet[n.id]) { visited[n.id] = true; return; }  // container member: skip
     var toolType = nodeTypeLookup[n.id];
 
     // BFS: collect all directly-connected nodes of the same type
@@ -287,7 +292,7 @@ function buildClusters() {
       var curr = queue.shift();
       component.push(curr);
       (adjMap[curr] || []).forEach(function(neighbor) {
-        if (!visited[neighbor] && nodeTypeLookup[neighbor] === toolType) {
+        if (!visited[neighbor] && !skipSet[neighbor] && nodeTypeLookup[neighbor] === toolType) {
           visited[neighbor] = true;
           queue.push(neighbor);
         }
@@ -376,6 +381,136 @@ function buildClusters() {
   });
 }
 
+// ── Container clustering ───────────────────────────────────────────────────
+// Groups nodes by their containerId (parsed from ToolContainerID in the yxmd).
+// Runs AFTER buildClusters() so it operates on the already-modified DataSet.
+// Container clusters use teal/green color (#065f46) to distinguish from
+// type-based clusters (purple #4c1d95).
+
+function buildContainerClusters() {
+  // Step 1: find ToolContainer nodes (they carry containerLabel) and member groups
+  var containerLabels = {};  // containerId -> caption string
+  var containerGroups = {};  // containerId -> [member nodeIds]
+
+  NODES_DATA.forEach(function(n) {
+    if (n.containerLabel !== undefined) {
+      containerLabels[n.id] = n.containerLabel;
+    }
+    if (n.containerId !== null && n.containerId !== undefined) {
+      if (!containerGroups[n.containerId]) containerGroups[n.containerId] = [];
+      containerGroups[n.containerId].push(n.id);
+    }
+  });
+
+  var containerIds = Object.keys(containerGroups);
+  if (containerIds.length === 0) return;
+
+  // Step 2: build cluster defs and memberToCluster map
+  var clusterDefs = [];
+  var memberToCluster = {};  // nodeId -> clusterId  (or '__remove__' for the container node itself)
+
+  containerIds.forEach(function(cidStr) {
+    var containerId = parseInt(cidStr);
+    var memberIds = containerGroups[containerId];
+    var clusterId = 'container:' + containerId;
+    var caption = containerLabels[containerId] || ('Container ' + containerId);
+    var label = caption + ' \xd7' + memberIds.length;
+
+    memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
+    memberToCluster[containerId] = '__remove__';  // the ToolContainer node itself: no data role
+
+    clusterDefs.push({
+      cid: clusterId,
+      memberIds: memberIds,
+      containerNodeId: containerId,
+      label: label,
+      caption: caption,
+    });
+  });
+
+  // Step 3: remove member nodes and ToolContainer nodes from DataSet
+  var allToRemove = [];
+  clusterDefs.forEach(function(c) {
+    allToRemove = allToRemove.concat(c.memberIds);
+    if (nodesDataset.get(c.containerNodeId) !== null) {
+      allToRemove.push(c.containerNodeId);
+    }
+  });
+  nodesDataset.remove(allToRemove);
+
+  // Step 4: add container cluster nodes (teal/green)
+  clusterDefs.forEach(function(c) {
+    nodesDataset.add({
+      id: c.cid,
+      label: c.label,
+      title: c.caption + ' — Double-click to expand',
+      shape: 'box',
+      borderDashes: [5, 3],
+      color: {
+        background: '#065f46', border: '#059669',
+        highlight: {background: '#047857', border: '#059669'},
+        hover: {background: '#047857', border: '#059669'}
+      },
+      font: {color: '#f1f5f9', size: 13}
+    });
+  });
+
+  // Step 5: remap edges using CURRENT DataSet state (after type clustering).
+  // Only edges that touch container members or the container node need changing.
+  var currentEdges = edgesDataset.get();
+  var edgesToRemove = [];
+  var edgesToAdd = [];
+  var seenEdgeKey = {};
+  var clusterBridges = {};
+
+  currentEdges.forEach(function(e) {
+    var srcMapped = memberToCluster[e.from];
+    var dstMapped = memberToCluster[e.to];
+
+    // ToolContainer node itself has no data role — drop any edge to/from it
+    if (srcMapped === '__remove__' || dstMapped === '__remove__') {
+      edgesToRemove.push(e.id);
+      return;
+    }
+
+    var src = srcMapped !== undefined ? srcMapped : e.from;
+    var dst = dstMapped !== undefined ? dstMapped : e.to;
+
+    // Only act if at least one endpoint changed
+    if (src !== e.from || dst !== e.to) {
+      edgesToRemove.push(e.id);
+      if (src === dst) return;  // intra-cluster: drop
+      var key = String(src) + '\x00' + String(dst);
+      if (seenEdgeKey[key]) return;
+      seenEdgeKey[key] = true;
+      var newEid = 'br:' + (++clusterCounter);
+      edgesToAdd.push({id: newEid, from: src, to: dst});
+      if (typeof src === 'string' && src.indexOf('container:') === 0) {
+        if (!clusterBridges[src]) clusterBridges[src] = [];
+        clusterBridges[src].push(newEid);
+      }
+      if (typeof dst === 'string' && dst.indexOf('container:') === 0) {
+        if (!clusterBridges[dst]) clusterBridges[dst] = [];
+        clusterBridges[dst].push(newEid);
+      }
+    }
+  });
+
+  edgesDataset.remove(edgesToRemove);
+  edgesDataset.add(edgesToAdd);
+
+  // Step 6: store cluster metadata
+  clusterDefs.forEach(function(c) {
+    clusterMap[c.cid] = {
+      memberIds: c.memberIds,
+      toolType: c.caption,
+      bridgeEdgeIds: clusterBridges[c.cid] ? clusterBridges[c.cid].slice() : [],
+      isContainer: true,
+      containerNodeId: c.containerNodeId,
+    };
+  });
+}
+
 // Returns the node ID (or cluster ID) currently representing nodeId in the
 // DataSet. Returns null if nodeId is not reachable (removed and unclustered).
 function resolveNode(nodeId) {
@@ -404,18 +539,25 @@ function recollapseGroup(groupKey) {
   // Remove member nodes
   nodesDataset.remove(group.memberIds);
 
-  // Re-add cluster node
+  // Re-add cluster node with appropriate colors (teal for container, purple for type)
+  var isContainer = group.isContainer || false;
+  var clusterColor = isContainer
+    ? {background: '#065f46', border: '#059669',
+       highlight: {background: '#047857', border: '#059669'},
+       hover: {background: '#047857', border: '#059669'}}
+    : {background: '#4c1d95', border: '#7c3aed',
+       highlight: {background: '#5b21b6', border: '#7c3aed'},
+       hover: {background: '#5b21b6', border: '#7c3aed'}};
+  var clusterTitle = isContainer
+    ? group.toolType + ' \u2014 Double-click to expand'
+    : group.toolType + ' cluster \u2014 Double-click to expand';
   nodesDataset.add({
     id: groupKey,
     label: group.toolType + ' \xd7' + group.memberIds.length,
-    title: group.toolType + ' cluster \u2014 Double-click to expand',
+    title: clusterTitle,
     shape: 'box',
     borderDashes: [5, 3],
-    color: {
-      background: '#4c1d95', border: '#7c3aed',
-      highlight: {background: '#5b21b6', border: '#7c3aed'},
-      hover: {background: '#5b21b6', border: '#7c3aed'}
-    },
+    color: clusterColor,
     font: {color: '#f1f5f9', size: 13}
   });
 
@@ -449,7 +591,13 @@ function recollapseGroup(groupKey) {
   });
 
   // Restore cluster state
-  clusterMap[groupKey] = {memberIds: group.memberIds, toolType: group.toolType, bridgeEdgeIds: bridgeEdgeIds};
+  clusterMap[groupKey] = {
+    memberIds: group.memberIds,
+    toolType: group.toolType,
+    bridgeEdgeIds: bridgeEdgeIds,
+    isContainer: group.isContainer || false,
+    containerNodeId: group.containerNodeId,
+  };
 
   // Clean up expanded state
   group.memberIds.forEach(function(mid) { delete expandedGroups[mid]; });
@@ -483,8 +631,15 @@ function expandCluster(cid) {
   // Record expanded group so the user can double-click any member to re-collapse
   var expandedMemberIds = c.memberIds.slice();
   var expandedToolType = c.toolType;
+  var expandedIsContainer = c.isContainer || false;
+  var expandedContainerNodeId = c.containerNodeId;
   delete clusterMap[cid];
-  groupMembers[cid] = {memberIds: expandedMemberIds, toolType: expandedToolType};
+  groupMembers[cid] = {
+    memberIds: expandedMemberIds,
+    toolType: expandedToolType,
+    isContainer: expandedIsContainer,
+    containerNodeId: expandedContainerNodeId,
+  };
   expandedMemberIds.forEach(function(mid) { expandedGroups[mid] = cid; });
 
   // Re-derive edges connected to the just-expanded members.
@@ -533,7 +688,18 @@ function initNetwork() {
   var canvas = document.getElementById('graph-canvas');
   nodesDataset = new vis.DataSet(NODES_DATA);
   edgesDataset = new vis.DataSet(EDGES_DATA);
-  buildClusters();  // collapse chains before vis.Network sees the graph
+
+  // Container members get priority — build skipSet so type clustering ignores them
+  var containerMemberIds = {};
+  NODES_DATA.forEach(function(n) {
+    if (n.containerId !== null && n.containerId !== undefined) {
+      containerMemberIds[n.id] = true;
+    }
+  });
+
+  buildClusters(containerMemberIds);  // type-based BFS (skips container members)
+  buildContainerClusters();            // container-based (operates on current DataSet)
+
   network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
   network.fit();
   network.on('click', function(params) {
@@ -703,10 +869,11 @@ function doSearch(query) {
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;
       if (clusterMap[n.id]) {
+        var matchBg  = clusterMap[n.id].isContainer ? '#047857' : '#5b21b6';
         updates.push({id: n.id, color: {
-          background: '#4c1d95', border: '#f59e0b',
-          highlight: {background: '#5b21b6', border: '#f59e0b'},
-          hover: {background: '#5b21b6', border: '#f59e0b'}
+          background: matchBg, border: '#f59e0b',
+          highlight: {background: matchBg, border: '#f59e0b'},
+          hover: {background: matchBg, border: '#f59e0b'}
         }, font: {color: '#f1f5f9'}});
       } else {
         updates.push({id: n.id, color: {
@@ -717,10 +884,12 @@ function doSearch(query) {
       }
     } else {
       if (clusterMap[n.id]) {
+        var dimBg = clusterMap[n.id].isContainer ? '#022c22' : '#2e1065';
+        var dimBd = clusterMap[n.id].isContainer ? '#065f46' : '#4c1d95';
         updates.push({id: n.id, color: {
-          background: '#2e1065', border: '#4c1d95',
-          highlight: {background: '#2e1065', border: '#4c1d95'},
-          hover: {background: '#2e1065', border: '#4c1d95'}
+          background: dimBg, border: dimBd,
+          highlight: {background: dimBg, border: dimBd},
+          hover: {background: dimBg, border: dimBd}
         }, font: {color: '#6b7280'}});
       } else {
         updates.push({id: n.id, color: {
@@ -745,6 +914,13 @@ function clearSearch() {
   var col = nodeColors();
   nodesDataset.update(nodesDataset.get().map(function(n) {
     if (clusterMap[n.id]) {
+      if (clusterMap[n.id].isContainer) {
+        return {id: n.id, color: {
+          background: '#065f46', border: '#059669',
+          highlight: {background: '#047857', border: '#059669'},
+          hover: {background: '#047857', border: '#059669'}
+        }, font: {color: '#f1f5f9'}};
+      }
       return {id: n.id, color: {
         background: '#4c1d95', border: '#7c3aed',
         highlight: {background: '#5b21b6', border: '#7c3aed'},
@@ -875,11 +1051,20 @@ class SingleGraphRenderer:
 
     def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]
-        return {
+        result: dict[str, Any] = {
             "id": node_id,
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
+            "containerId": node.container_id,
         }
+        if "ToolContainer" in node.tool_type:
+            caption_entry = node.config.get("Caption", {})
+            if isinstance(caption_entry, dict):
+                caption = caption_entry.get("#text", "")
+            else:
+                caption = str(caption_entry) if caption_entry else ""
+            result["containerLabel"] = caption or f"Container ({node_id})"
+        return result
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
         """Return config dict excluding XML attribute keys (@ prefix)."""

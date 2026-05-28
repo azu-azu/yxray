@@ -22,6 +22,10 @@ class AlteryxNode:
     metadata and produce a ConfigHash. Phase 5 (differ) compares dicts field-by-field.
     Raw XML is NOT stored here — the parser must produce a structured dict.
     """
+    container_id: int | None = None
+    """ToolContainer that owns this node, or None if the node is not inside a container.
+    Parsed from Properties/EngineSettings/@ToolContainerID.
+    """
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

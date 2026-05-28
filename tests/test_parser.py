@@ -34,6 +34,7 @@ from yxray.models import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.parser import parse
 from tests.fixtures import (
     BINARY_CONTENT,
+    CONTAINER_YXMD,
     EMPTY_FILE,
     EMPTY_WORKFLOW_YXMD,
     MALFORMED_XML,
@@ -160,6 +161,30 @@ def test_parse_repeated_config_children(tmp_path: pathlib.Path) -> None:
     for entry in field_list:
         assert isinstance(entry, dict)
         assert "@name" in entry
+
+
+def test_parse_container_id(tmp_path: pathlib.Path) -> None:
+    """Nodes with ToolContainerID in EngineSettings get container_id populated.
+
+    CONTAINER_YXMD has:
+      - ToolID=10: ToolContainer node (no ToolContainerID -> container_id=None)
+      - ToolID=1, ToolID=2: members with ToolContainerID="10" -> container_id=10
+      - ToolID=3: outside node -> container_id=None
+    """
+    path = write_fixture(tmp_path, "container.yxmd", CONTAINER_YXMD)
+    doc, _ = parse(path, path)
+
+    node_map = {int(n.tool_id): n for n in doc.nodes}
+
+    # Container node itself has no ToolContainerID
+    assert node_map[10].container_id is None
+
+    # Member nodes point to their container
+    assert node_map[1].container_id == 10
+    assert node_map[2].container_id == 10
+
+    # Node outside the container
+    assert node_map[3].container_id is None
 
 
 def test_parse_empty_workflow(tmp_path: pathlib.Path) -> None:

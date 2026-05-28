@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2022.1">
+  <Nodes>
+    <!-- Input (outside container) -->
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="54" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Data\sales.csv</File><RecordLimit>0</RecordLimit></Configuration></Properties>
+    </Node>
+
+    <!-- ToolContainer node (visual grouping element, no data connections) -->
+    <Node ToolID="10">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.ToolContainer.ToolContainer">
+        <Position x="280" y="60"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>Data Cleaning</Caption>
+          <Style>0</Style>
+          <Description>Filter Japan, select key fields, compute revenue</Description>
+        </Configuration>
+      </Properties>
+    </Node>
+
+    <!-- Nodes inside the container (ToolContainerID=10) -->
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="216" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Expression>[Country] = "Japan"</Expression></Configuration>
+        <EngineSettings ToolContainerID="10"/>
+      </Properties>
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+        <Position x="378" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><OrderChanged>False</OrderChanged></Configuration>
+        <EngineSettings ToolContainerID="10"/>
+      </Properties>
+    </Node>
+    <Node ToolID="4">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="540" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Expression>[Revenue] * 1.10</Expression></Configuration>
+        <EngineSettings ToolContainerID="10"/>
+      </Properties>
+    </Node>
+
+    <!-- Second container: 3 consecutive Summarize nodes -->
+    <Node ToolID="20">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.ToolContainer.ToolContainer">
+        <Position x="820" y="60"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>Aggregation Pipeline</Caption>
+          <Style>1</Style>
+          <Description>Multi-level summarize</Description>
+        </Configuration>
+      </Properties>
+    </Node>
+    <Node ToolID="5">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Summarize.Summarize">
+        <Position x="702" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Fields><Field field="Region" action="GroupBy"/><Field field="Revenue" action="Sum"/></Fields></Configuration>
+        <EngineSettings ToolContainerID="20"/>
+      </Properties>
+    </Node>
+    <Node ToolID="6">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Summarize.Summarize">
+        <Position x="864" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Fields><Field field="Region" action="GroupBy"/><Field field="Revenue" action="Avg"/></Fields></Configuration>
+        <EngineSettings ToolContainerID="20"/>
+      </Properties>
+    </Node>
+    <Node ToolID="7">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Sort.Sort">
+        <Position x="1026" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><SortInfo><Field field="Revenue" order="Descending"/></SortInfo></Configuration>
+        <EngineSettings ToolContainerID="20"/>
+      </Properties>
+    </Node>
+
+    <!-- Output (outside container) -->
+    <Node ToolID="8">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="1188" y="108"/>
+      </GuiSettings>
+      <Properties><Configuration><File>C:\Output\result.xlsx</File></Configuration></Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection><Origin ToolID="1" Connection="Output"/><Destination ToolID="2" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="2" Connection="True"/><Destination ToolID="3" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="3" Connection="Output"/><Destination ToolID="4" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="4" Connection="Output"/><Destination ToolID="5" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="5" Connection="Output"/><Destination ToolID="6" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="6" Connection="Output"/><Destination ToolID="7" Connection="Input"/></Connection>
+    <Connection><Origin ToolID="7" Connection="Output"/><Destination ToolID="8" Connection="Input"/></Connection>
+  </Connections>
+</AlteryxDocument>
