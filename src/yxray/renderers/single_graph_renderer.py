@@ -728,6 +728,71 @@ function initNetwork() {
       recollapseGroup(expandedGroups[nodeId]);
     }
   });
+
+  // Draw a rounded-rect border around each expanded cluster's member nodes.
+  // Runs on every canvas redraw so it automatically follows zoom / pan / drag.
+  network.on('afterDrawing', function(ctx) {
+    var groupKeys = Object.keys(groupMembers);
+    if (groupKeys.length === 0) return;
+
+    ctx.save();
+    groupKeys.forEach(function(groupKey) {
+      var group = groupMembers[groupKey];
+      var positions = network.getPositions(group.memberIds);
+
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      var hasNode = false;
+      group.memberIds.forEach(function(mid) {
+        var pos = positions[mid];
+        if (!pos) return;
+        hasNode = true;
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x);
+        maxY = Math.max(maxY, pos.y);
+      });
+      if (!hasNode) return;
+
+      // Pad generously around each node center (node is ~80px wide, 50px tall at 1:1 zoom)
+      var padX = 72, padY = 36;
+      var x = minX - padX, y = minY - padY;
+      var w = maxX - minX + padX * 2;
+      var h = maxY - minY + padY * 2;
+      var r = 14;
+
+      var strokeColor = group.isContainer ? '#059669' : '#7c3aed';
+      var fillColor   = group.isContainer ? 'rgba(5,150,105,0.07)' : 'rgba(109,40,217,0.07)';
+      var labelColor  = group.isContainer ? '#34d399' : '#a78bfa';
+
+      // Rounded rectangle path
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y,     x + w, y + r,     r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x,     y + h, x,     y + h - r, r);
+      ctx.lineTo(x,     y + r);
+      ctx.arcTo(x,     y,     x + r, y,          r);
+      ctx.closePath();
+
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([7, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Group label in the top-left corner of the box
+      ctx.fillStyle = labelColor;
+      ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+      ctx.fillText(group.toolType, x + 8, y - 5);
+    });
+    ctx.restore();
+  });
 }
 
 try {
