@@ -14,14 +14,10 @@ import json
 import pathlib
 from typing import Any
 
-import networkx as nx
 from jinja2 import Environment
 
 from alteryx_git_companion.models.workflow import AlteryxNode, WorkflowDoc
-from alteryx_git_companion.renderers._graph_builder import (
-    hierarchical_positions,
-    load_vis_js,
-)
+from alteryx_git_companion.renderers._graph_builder import load_vis_js
 
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -206,6 +202,16 @@ var nodesDataset = null;
 var edgesDataset = null;
 
 var options = {
+  layout: {
+    hierarchical: {
+      enabled: true,
+      direction: 'LR',
+      sortMethod: 'directed',
+      nodeSpacing: 120,
+      levelSeparation: 220,
+      treeSpacing: 150,
+    }
+  },
   physics: {enabled: false},
   nodes: {
     shape: 'box',
@@ -385,62 +391,31 @@ class SingleGraphRenderer:
     def _build_graph_data(
         self, doc: WorkflowDoc
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        # Build NetworkX DiGraph for hierarchical layout
-        G: nx.DiGraph[int] = nx.DiGraph()
-        for node in doc.nodes:
-            G.add_node(int(node.tool_id))
-        for conn in doc.connections:
-            G.add_edge(int(conn.src_tool), int(conn.dst_tool))
-
-        positions = hierarchical_positions(G) if G.nodes else {}
-
-        node_map = {int(n.tool_id): n for n in doc.nodes}
-
-        nodes_json: list[dict[str, Any]] = []
-        positioned: set[int] = set(positions)
-
-        for node_id, (px, py) in positions.items():
-            node = node_map[node_id]
-            nodes_json.append(self._vis_node(node_id, node, px, py))
-
-        # Isolated nodes not included in positions
-        for node in doc.nodes:
-            nid = int(node.tool_id)
-            if nid not in positioned:
-                nodes_json.append(self._vis_node(nid, node, 0.0, 0.0))
+        nodes_json: list[dict[str, Any]] = [
+            self._vis_node(int(node.tool_id), node) for node in doc.nodes
+        ]
 
         edges_json: list[dict[str, Any]] = [
-            {
-                "id": i,
-                "from": int(c.src_tool),
-                "to": int(c.dst_tool),
-            }
+            {"id": i, "from": int(c.src_tool), "to": int(c.dst_tool)}
             for i, c in enumerate(doc.connections)
         ]
 
-        # Config map: node_id (str) → {label, config} for panel display
-        config_map: dict[str, Any] = {}
-        for node in doc.nodes:
-            nid = int(node.tool_id)
-            short_type = node.tool_type.split(".")[-1]
-            config_map[str(nid)] = {
-                "label": f"{short_type} (ID: {nid})",
+        config_map: dict[str, Any] = {
+            str(int(node.tool_id)): {
+                "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
                 "config": self._clean_config(node),
             }
+            for node in doc.nodes
+        }
 
         return nodes_json, edges_json, config_map
 
-    def _vis_node(
-        self, node_id: int, node: AlteryxNode, x: float, y: float
-    ) -> dict[str, Any]:
+    def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]
         return {
             "id": node_id,
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
-            "x": x,
-            "y": y,
-            "fixed": False,
         }
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
