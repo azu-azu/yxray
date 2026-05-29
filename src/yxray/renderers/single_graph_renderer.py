@@ -259,8 +259,6 @@ var NODES_DATA = {{ nodes_json | safe }};
 var EDGES_DATA = {{ edges_json | safe }};
 var CONFIG_MAP = {{ config_map_json | safe }};
 var CONTAINERS_DATA = {{ containers_json | safe }};
-console.log('[yxray] containers config dump:');
-CONTAINERS_DATA.forEach(function(c){console.log(' ', c.label, '| fillColor:', c.fillColor, '| raw config:', JSON.stringify(c._config));});
 
 // ── vis-network setup ─────────────────────────────────────────────────────
 var network = null;
@@ -1739,7 +1737,6 @@ class SingleGraphRenderer:
                 "h": node.height,
                 "label": self._container_label(node),
                 "fillColor": self._container_fill_color(node),
-                "_config": node.config,  # debug: remove after confirming field names
             }
             for node in doc.nodes
             if "ToolContainer" in node.tool_type and node.width > 0 and node.height > 0
