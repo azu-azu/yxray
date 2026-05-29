@@ -259,6 +259,7 @@ var NODES_DATA = {{ nodes_json | safe }};
 var EDGES_DATA = {{ edges_json | safe }};
 var CONFIG_MAP = {{ config_map_json | safe }};
 var CONTAINERS_DATA = {{ containers_json | safe }};
+console.log('[yxray] CONTAINERS_DATA:', JSON.stringify(CONTAINERS_DATA.map(function(c){return {label:c.label,fillColor:c.fillColor};})));
 
 // ── vis-network setup ─────────────────────────────────────────────────────
 var network = null;
@@ -1745,20 +1746,32 @@ class SingleGraphRenderer:
         return nodes_json, edges_json, config_map, containers_json
 
     def _container_fill_color(self, node: AlteryxNode) -> str | None:
-        """Return '#rrggbb' extracted from container config, or None if absent/white."""
+        """Return '#rrggbb' extracted from container config, or None if absent/white.
+
+        Alteryx stores container color as one of:
+          - <Tint>: Qt ARGB32 packed integer  (0xAARRGGBB, alpha in high byte)
+          - <FillColor>: hex string "#rrggbb"
+          - <Style>: small index 0-9 (preset palette) OR large int (packed ARGB)
+        """
         config = node.config
 
-        # Tint: Windows BGR packed integer stored as decimal (0x00BBGGRR)
+        def _argb_to_hex(val: int) -> str | None:
+            if val <= 0:
+                return None
+            # Qt ARGB32: alpha in bits 24-31 (ignored), R in 16-23, G in 8-15, B in 0-7
+            r = (val >> 16) & 0xFF
+            g = (val >> 8) & 0xFF
+            b = val & 0xFF
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        # Tint: Qt ARGB32 packed integer
         tint_entry = config.get("Tint")
         if tint_entry:
             raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
             try:
-                val = int(raw.strip())
-                if val > 0:
-                    r = val & 0xFF
-                    g = (val >> 8) & 0xFF
-                    b = (val >> 16) & 0xFF
-                    return f"#{r:02x}{g:02x}{b:02x}"
+                result = _argb_to_hex(int(raw.strip()))
+                if result:
+                    return result
             except ValueError:
                 pass
 
@@ -1770,12 +1783,14 @@ class SingleGraphRenderer:
             if len(raw) >= 6:
                 return f"#{raw[:6].lower()}"
 
-        # Style integer → preset palette (0 = default/white → None)
+        # Style: small int 0-9 → preset palette; large int → packed ARGB color
         style_entry = config.get("Style")
         if style_entry:
             raw = style_entry.get("#text", "") if isinstance(style_entry, dict) else str(style_entry)
             try:
                 style_int = int(raw.strip())
+                if style_int > 9:
+                    return _argb_to_hex(style_int)
                 _STYLE_COLORS: dict[int, str] = {
                     1: "#dbeafe", 2: "#dcfce7", 3: "#fef9c3",
                     4: "#ffedd5", 5: "#fce7f3", 6: "#ede9fe",
