@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 
 from yxray.exceptions import MalformedXMLError, ParseError
+from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
 from yxray.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
@@ -88,26 +89,17 @@ def diff(  # noqa: B008
     metadata = _build_governance_metadata(workflow_a, workflow_b, hash_a, hash_b)
 
     # Run pipeline (spinner goes to stderr; stdout stays clean for --json)
+    request = DiffRequest(
+        path_a=workflow_a,
+        path_b=workflow_b,
+        filter_ui_tools=filter_ui_tools,
+    )
     try:
         if quiet or json_output:
-            response = run(
-                DiffRequest(
-                    path_a=workflow_a,
-                    path_b=workflow_b,
-                    filter_ui_tools=filter_ui_tools,
-                ),
-                include_positions=include_positions,
-            )
+            response = run(request, include_positions=include_positions)
         else:
             with _err_console.status("Running diff...", spinner="dots"):
-                response = run(
-                    DiffRequest(
-                        path_a=workflow_a,
-                        path_b=workflow_b,
-                        filter_ui_tools=filter_ui_tools,
-                    ),
-                    include_positions=include_positions,
-                )
+                response = run(request, include_positions=include_positions)
     except MalformedXMLError as e:
         typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
         raise typer.Exit(code=2) from None
@@ -230,17 +222,12 @@ def _build_governance_metadata(
     }
 
 
-def _cli_json_output(result: Any, metadata: dict[str, Any]) -> str:
+def _cli_json_output(result: DiffResult, metadata: dict[str, Any]) -> str:
     """Produce CLI --json schema: {added, removed, modified, metadata}.
 
     Distinct from JSONRenderer output ({summary, tools, connections}).
     Kept separate to avoid breaking existing JSONRenderer tests (5 passing).
     """
-    # local import: avoids circular at module level
-    from yxray.models import (
-        DiffResult,
-    )
-
     r: DiffResult = result
     payload: dict[str, Any] = {
         "added": [

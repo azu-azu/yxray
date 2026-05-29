@@ -473,29 +473,21 @@ document.getElementById('fit-btn').addEventListener('click', function() {
   if (network) network.fit({animation: true});
 });
 
-// Fullscreen toggle (overlay view)
-document.getElementById('fullscreen-btn').addEventListener('click', function() {
-  var section = document.getElementById('graph-section');
-  if (!document.fullscreenElement) {
-    section.requestFullscreen().catch(function() {});
-    this.textContent = 'Exit Fullscreen';
-  } else {
-    document.exitFullscreen();
-    this.textContent = 'Fullscreen';
-  }
-});
-
-// Fullscreen toggle (split view)
-document.getElementById('split-fullscreen-btn').addEventListener('click', function() {
-  var section = document.getElementById('graph-section');
-  if (!document.fullscreenElement) {
-    section.requestFullscreen().catch(function() {});
-    this.textContent = 'Exit Fullscreen';
-  } else {
-    document.exitFullscreen();
-    this.textContent = 'Fullscreen';
-  }
-});
+// Fullscreen toggle helper
+function attachFullscreenToggle(btnId) {
+  document.getElementById(btnId).addEventListener('click', function() {
+    var section = document.getElementById('graph-section');
+    if (!document.fullscreenElement) {
+      section.requestFullscreen().catch(function() {});
+      this.textContent = 'Exit Fullscreen';
+    } else {
+      document.exitFullscreen();
+      this.textContent = 'Fullscreen';
+    }
+  });
+}
+attachFullscreenToggle('fullscreen-btn');
+attachFullscreenToggle('split-fullscreen-btn');
 
 document.addEventListener('fullscreenchange', function() {
   if (!document.fullscreenElement) {

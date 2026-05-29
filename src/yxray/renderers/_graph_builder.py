@@ -203,6 +203,29 @@ def load_vis_js() -> str:
         return p.read_text(encoding="utf-8")
 
 
+def _make_vis_node(node: AlteryxNode, status: str) -> dict[str, Any]:
+    """Build a vis-network node dict for split-view graphs."""
+    tool_id = int(node.tool_id)
+    short_label = node.tool_type.split(".")[-1]
+    return {
+        "id": tool_id,
+        "label": short_label + "\n(" + str(tool_id) + ")",
+        "x": node.x,
+        "y": node.y,
+        "fixed": False,
+        "status": status,
+        "color": {
+            "background": COLOR_MAP[status],
+            "border": BORDER_COLOR_MAP[status],
+            "highlight": {
+                "background": COLOR_MAP[status],
+                "border": BORDER_COLOR_MAP[status],
+            },
+        },
+        "title": node.tool_type + " | " + status,
+    }
+
+
 def build_split_node_list(
     result: DiffResult,
     nodes_old: tuple[AlteryxNode, ...],
@@ -247,26 +270,7 @@ def build_split_node_list(
             status = "modified"
         else:
             status = "unchanged"
-        short_label = node.tool_type.split(".")[-1]
-        old_vis_nodes.append(
-            {
-                "id": tool_id,
-                "label": short_label + "\n(" + str(tool_id) + ")",
-                "x": node.x,
-                "y": node.y,
-                "fixed": False,
-                "status": status,
-                "color": {
-                    "background": COLOR_MAP[status],
-                    "border": BORDER_COLOR_MAP[status],
-                    "highlight": {
-                        "background": COLOR_MAP[status],
-                        "border": BORDER_COLOR_MAP[status],
-                    },
-                },
-                "title": node.tool_type + " | " + status,
-            }
-        )
+        old_vis_nodes.append(_make_vis_node(node, status))
     # Ghost nodes for added nodes (shown faintly on left/old graph)
     for n in result.added_nodes:
         if n.tool_type == CONTAINER_TYPE:
@@ -300,26 +304,7 @@ def build_split_node_list(
             status = "modified"
         else:
             status = "unchanged"
-        short_label = node.tool_type.split(".")[-1]
-        new_vis_nodes.append(
-            {
-                "id": tool_id,
-                "label": short_label + "\n(" + str(tool_id) + ")",
-                "x": node.x,
-                "y": node.y,
-                "fixed": False,
-                "status": status,
-                "color": {
-                    "background": COLOR_MAP[status],
-                    "border": BORDER_COLOR_MAP[status],
-                    "highlight": {
-                        "background": COLOR_MAP[status],
-                        "border": BORDER_COLOR_MAP[status],
-                    },
-                },
-                "title": node.tool_type + " | " + status,
-            }
-        )
+        new_vis_nodes.append(_make_vis_node(node, status))
     # Ghost nodes for removed nodes (shown faintly on right/new graph)
     for n in result.removed_nodes:
         if n.tool_type == CONTAINER_TYPE:
