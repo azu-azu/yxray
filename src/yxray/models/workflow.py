@@ -29,6 +29,14 @@ class AlteryxNode:
     Parsed from Properties/EngineSettings/@ToolContainerID.
     """
 
+    def __post_init__(self) -> None:
+        if self.tool_id <= 0:
+            raise ValueError(f"tool_id must be > 0, got {self.tool_id}")
+        if self.width < 0:
+            raise ValueError(f"width must be >= 0, got {self.width}")
+        if self.height < 0:
+            raise ValueError(f"height must be >= 0, got {self.height}")
+
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class AlteryxConnection:
