@@ -694,18 +694,28 @@ function initSplitNetworks() {
   applyThemeColorsToSplit();
 }
 
+var _syncLRFrameId = null, _syncRLFrameId = null;
+
 function syncLeftToRight() {
-  if (syncingViewport) return;
-  syncingViewport = true;
-  networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
-  syncingViewport = false;
+  if (syncingViewport || _syncLRFrameId) return;
+  _syncLRFrameId = requestAnimationFrame(function() {
+    _syncLRFrameId = null;
+    if (syncingViewport) return;
+    syncingViewport = true;
+    networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
+    syncingViewport = false;
+  });
 }
 
 function syncRightToLeft() {
-  if (syncingViewport) return;
-  syncingViewport = true;
-  networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
-  syncingViewport = false;
+  if (syncingViewport || _syncRLFrameId) return;
+  _syncRLFrameId = requestAnimationFrame(function() {
+    _syncRLFrameId = null;
+    if (syncingViewport) return;
+    syncingViewport = true;
+    networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
+    syncingViewport = false;
+  });
 }
 
 // Show-only-changes toggle for split view
@@ -915,7 +925,12 @@ class GraphRenderer:
         if canvas_layout:
             positions = canvas_positions(nodes_old, nodes_new)
         else:
-            positions = hierarchical_positions(G)
+            cy: dict[int, float] = {}
+            for n in nodes_old:
+                cy[int(n.tool_id)] = n.y
+            for n in nodes_new:
+                cy[int(n.tool_id)] = n.y
+            positions = hierarchical_positions(G, canvas_y=cy)
 
         # Build field counts for modified node tooltips
         field_counts: dict[int, int] = {
