@@ -1750,49 +1750,51 @@ class SingleGraphRenderer:
     def _container_fill_color(self, node: AlteryxNode) -> str | None:
         """Return '#rrggbb' extracted from container config, or None if absent/white.
 
-        Alteryx stores container color as one of:
-          - <Tint>: Qt ARGB32 packed integer  (0xAARRGGBB, alpha in high byte)
-          - <FillColor>: hex string "#rrggbb"
-          - <Style>: small index 0-9 (preset palette) OR large int (packed ARGB)
+        Alteryx stores container color inside the <Style> element's attributes:
+          <Style FillColor="xxx" TextColor="xxx" BorderColor="xxx" .../>
+        parsed as config["Style"]["@FillColor"].
+        Value may be hex (#RRGGBB, AARRGGBB) or a decimal ARGB integer.
+
+        Fallback: <Tint> (Qt ARGB32 int), <FillColor> hex string.
         """
         config = node.config
 
-        def _argb_to_hex(val: int) -> str | None:
-            if val <= 0:
+        def _hex_or_int_to_rgb(raw: str) -> str | None:
+            raw = raw.strip().lstrip("#")
+            if not raw:
                 return None
-            # Qt ARGB32: alpha in bits 24-31 (ignored), R in 16-23, G in 8-15, B in 0-7
-            r = (val >> 16) & 0xFF
-            g = (val >> 8) & 0xFF
-            b = val & 0xFF
-            return f"#{r:02x}{g:02x}{b:02x}"
-
-        # Tint: Qt ARGB32 packed integer
-        tint_entry = config.get("Tint")
-        if tint_entry:
-            raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
+            # 8-char hex AARRGGBB → take RGB part
+            if len(raw) == 8 and all(c in "0123456789abcdefABCDEF" for c in raw):
+                return f"#{raw[2:8].lower()}"
+            # 6-char hex RRGGBB
+            if len(raw) == 6 and all(c in "0123456789abcdefABCDEF" for c in raw):
+                return f"#{raw.lower()}"
+            # Decimal integer → ARGB32
             try:
-                result = _argb_to_hex(int(raw.strip()))
-                if result:
-                    return result
+                val = int(raw)
+                if val > 0:
+                    r = (val >> 16) & 0xFF
+                    g = (val >> 8) & 0xFF
+                    b = val & 0xFF
+                    return f"#{r:02x}{g:02x}{b:02x}"
             except ValueError:
                 pass
+            return None
 
-        # FillColor: hex string "#rrggbb" or "rrggbb"
-        fill_entry = config.get("FillColor") or config.get("fillColor")
-        if fill_entry:
-            raw = fill_entry.get("#text", "") if isinstance(fill_entry, dict) else str(fill_entry)
-            raw = raw.strip().lstrip("#")
-            if len(raw) >= 6:
-                return f"#{raw[:6].lower()}"
-
-        # Style: small int 0-9 → preset palette; large int → packed ARGB color
+        # Primary: Style/@FillColor attribute
         style_entry = config.get("Style")
-        if style_entry:
-            raw = style_entry.get("#text", "") if isinstance(style_entry, dict) else str(style_entry)
+        if isinstance(style_entry, dict):
+            fill_attr = style_entry.get("@FillColor", "")
+            if fill_attr:
+                result = _hex_or_int_to_rgb(fill_attr)
+                if result:
+                    return result
+            # Fallback: Style as plain integer index (old format)
+            text = style_entry.get("#text", "").strip()
             try:
-                style_int = int(raw.strip())
+                style_int = int(text)
                 if style_int > 9:
-                    return _argb_to_hex(style_int)
+                    return _hex_or_int_to_rgb(text)
                 _STYLE_COLORS: dict[int, str] = {
                     1: "#dbeafe", 2: "#dcfce7", 3: "#fef9c3",
                     4: "#ffedd5", 5: "#fce7f3", 6: "#ede9fe",
@@ -1801,6 +1803,22 @@ class SingleGraphRenderer:
                 return _STYLE_COLORS.get(style_int)
             except ValueError:
                 pass
+
+        # Tint: Qt ARGB32 packed integer
+        tint_entry = config.get("Tint")
+        if tint_entry:
+            raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
+            result = _hex_or_int_to_rgb(raw)
+            if result:
+                return result
+
+        # FillColor: top-level hex string (some versions)
+        fill_entry = config.get("FillColor") or config.get("fillColor")
+        if fill_entry:
+            raw = fill_entry.get("#text", "") if isinstance(fill_entry, dict) else str(fill_entry)
+            result = _hex_or_int_to_rgb(raw)
+            if result:
+                return result
 
         return None
 
