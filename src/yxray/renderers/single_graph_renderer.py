@@ -414,9 +414,9 @@ function buildClusters(skipSet) {
 // type-based clusters (purple #4c1d95).
 
 function buildContainerClusters() {
-  // Step 1: find ToolContainer nodes (they carry containerLabel) and member groups
-  var containerLabels = {};  // containerId -> caption string
-  var containerGroups = {};  // containerId -> [member nodeIds]
+  // Step 1: collect containerLabels and direct-member groups from raw NODES_DATA.
+  var containerLabels = {};  // containerNodeId -> caption string
+  var containerGroups = {};  // containerNodeId -> [direct member nodeIds (data + nested containers)]
 
   NODES_DATA.forEach(function(n) {
     if (n.containerLabel !== undefined) {
@@ -428,44 +428,67 @@ function buildContainerClusters() {
     }
   });
 
-  var containerIds = Object.keys(containerGroups);
-  if (containerIds.length === 0) return;
+  if (Object.keys(containerGroups).length === 0) return;
 
-  // Step 2: build cluster defs and memberToCluster map
+  // Step 2: identify root containers — those whose own node has no containerId.
+  // Nested container nodes (containerId set) are collected under their parent and
+  // are NOT turned into separate clusters; only root containers become clusters.
+  var nestedContainerNodeIds = {};
+  NODES_DATA.forEach(function(n) {
+    if (n.containerLabel !== undefined &&
+        n.containerId !== null && n.containerId !== undefined) {
+      nestedContainerNodeIds[n.id] = true;
+    }
+  });
+
+  var rootContainerIds = Object.keys(containerGroups).map(Number).filter(function(cid) {
+    return !nestedContainerNodeIds[cid];
+  });
+
+  if (rootContainerIds.length === 0) return;
+
+  // Recursively collect all non-container descendant node IDs under a container.
+  function collectLeafMembers(containerId) {
+    var result = [];
+    (containerGroups[containerId] || []).forEach(function(mid) {
+      if (containerLabels[mid] !== undefined) {
+        // mid is a nested ToolContainer node — recurse into it
+        result = result.concat(collectLeafMembers(mid));
+      } else {
+        result.push(mid);
+      }
+    });
+    return result;
+  }
+
+  // Step 3: build cluster defs (root containers only) and memberToCluster map
   var clusterDefs = [];
-  var memberToCluster = {};   // member nodeId -> clusterId
-  var containerNodeSet = {};  // ToolContainer node IDs — no data role, edges dropped
+  var memberToCluster = {};   // data nodeId -> root clusterId
+  var allContainerNodeIds = {};  // every ToolContainer node — no data role, edges dropped
+  Object.keys(containerLabels).forEach(function(k) { allContainerNodeIds[parseInt(k)] = true; });
 
-  containerIds.forEach(function(cidStr) {
-    var containerId = parseInt(cidStr);
-    var memberIds = containerGroups[containerId];
+  rootContainerIds.forEach(function(containerId) {
+    var memberIds = collectLeafMembers(containerId);
+    if (memberIds.length === 0) return;
     var clusterId = 'container:' + containerId;
     var caption = containerLabels[containerId] || ('Container ' + containerId);
     var label = caption + ' \xd7' + memberIds.length;
-
     memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
-    containerNodeSet[containerId] = true;  // the ToolContainer node itself: no data role
-
-    clusterDefs.push({
-      cid: clusterId,
-      memberIds: memberIds,
-      containerNodeId: containerId,
-      label: label,
-      caption: caption,
-    });
+    clusterDefs.push({ cid: clusterId, memberIds: memberIds, containerNodeId: containerId, label: label, caption: caption });
   });
 
-  // Step 3: remove member nodes and ToolContainer nodes from DataSet
-  var allToRemove = [];
-  clusterDefs.forEach(function(c) {
-    allToRemove = allToRemove.concat(c.memberIds);
-    if (nodesDataset.get(c.containerNodeId) !== null) {
-      allToRemove.push(c.containerNodeId);
-    }
-  });
-  nodesDataset.remove(allToRemove);
+  if (clusterDefs.length === 0) return;
 
-  // Step 4: add container cluster nodes (teal/green)
+  // Step 4: remove all data members and ALL ToolContainer nodes from DataSet
+  var removeSet = {};
+  clusterDefs.forEach(function(c) { c.memberIds.forEach(function(id) { removeSet[id] = true; }); });
+  Object.keys(allContainerNodeIds).forEach(function(k) {
+    var id = parseInt(k);
+    if (nodesDataset.get(id) !== null) removeSet[id] = true;
+  });
+  nodesDataset.remove(Object.keys(removeSet).map(Number));
+
+  // Step 5: add container cluster nodes (teal/green)
   clusterDefs.forEach(function(c) {
     nodesDataset.add({
       id: c.cid,
@@ -478,7 +501,7 @@ function buildContainerClusters() {
     });
   });
 
-  // Step 5: remap edges using CURRENT DataSet state (after type clustering).
+  // Step 6: remap edges using CURRENT DataSet state (after type clustering).
   // Only edges that touch container members or the container node need changing.
   var currentEdges = edgesDataset.get();
   var edgesToRemove = [];
@@ -491,7 +514,7 @@ function buildContainerClusters() {
     var dstMapped = memberToCluster[e.to];
 
     // ToolContainer node itself has no data role — drop any edge to/from it
-    if (containerNodeSet[e.from] || containerNodeSet[e.to]) {
+    if (allContainerNodeIds[e.from] || allContainerNodeIds[e.to]) {
       edgesToRemove.push(e.id);
       return;
     }
@@ -522,7 +545,7 @@ function buildContainerClusters() {
   edgesDataset.remove(edgesToRemove);
   edgesDataset.add(edgesToAdd);
 
-  // Step 6: store cluster metadata
+  // Step 7: store cluster metadata
   clusterDefs.forEach(function(c) {
     clusterMap[c.cid] = {
       memberIds: c.memberIds,
