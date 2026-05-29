@@ -3,7 +3,7 @@
 
 Public API:
     build_digraph(result, all_connections, all_nodes) -> nx.DiGraph
-    hierarchical_positions(G) -> dict[int, tuple[float, float]]
+    hierarchical_positions(G, *, canvas_y) -> dict[int, tuple[float, float]]
     canvas_positions(nodes_old, nodes_new) -> dict[int, tuple[float, float]]
     load_vis_js() -> str
     build_split_node_list(result, nodes_old, nodes_new) -> tuple[list[dict], list[dict]]
@@ -15,6 +15,7 @@ graph_renderer.py. Unit tests import directly from here.
 from __future__ import annotations
 
 import importlib.resources as pkg_resources
+from collections import defaultdict
 from typing import Any
 
 import networkx as nx
@@ -113,7 +114,11 @@ def build_digraph(
     return G
 
 
-def hierarchical_positions(G: nx.DiGraph[int]) -> dict[int, tuple[float, float]]:
+def hierarchical_positions(
+    G: nx.DiGraph[int],
+    *,
+    canvas_y: dict[int, float] | None = None,
+) -> dict[int, tuple[float, float]]:
     """Compute multipartite (hierarchical) layout positions for a directed graph.
 
     Cycles are handled by iteratively removing back-edges until the graph is a DAG.
@@ -121,6 +126,10 @@ def hierarchical_positions(G: nx.DiGraph[int]) -> dict[int, tuple[float, float]]
 
     Args:
         G: The directed graph produced by build_digraph().
+        canvas_y: Optional mapping of tool_id -> Alteryx canvas Y coordinate.
+            When provided, nodes within the same topological layer are ordered
+            by their original canvas Y so the visual top-to-bottom order
+            matches the designer's intent.
 
     Returns:
         Mapping of integer tool_id -> (x, y) pixel coordinates scaled by
@@ -145,10 +154,31 @@ def hierarchical_positions(G: nx.DiGraph[int]) -> dict[int, tuple[float, float]]
         dag, subset_key="layer", align="vertical"
     )
 
-    return {
-        int(node): (float(coords[0]) * LAYOUT_SCALE, float(coords[1]) * LAYOUT_SCALE)
-        for node, coords in raw_pos.items()
-    }
+    if canvas_y is None:
+        return {
+            int(node): (float(coords[0]) * LAYOUT_SCALE, float(coords[1]) * LAYOUT_SCALE)
+            for node, coords in raw_pos.items()
+        }
+
+    # Re-order nodes within each layer by Alteryx canvas Y.
+    # Keep the exact y-slot positions that multipartite_layout assigned; only
+    # reorder which node gets which slot so the visual order mirrors the
+    # designer's canvas layout (smaller Alteryx Y → higher on screen).
+    by_layer: defaultdict[float, list[tuple[int, float]]] = defaultdict(list)
+    for node_id, coords in raw_pos.items():
+        x_key = round(float(coords[0]), 6)
+        by_layer[x_key].append((int(node_id), float(coords[1])))
+
+    result: dict[int, tuple[float, float]] = {}
+    for x_raw, node_y_pairs in by_layer.items():
+        y_slots = sorted(p[1] for p in node_y_pairs)
+        node_ids = sorted(
+            (p[0] for p in node_y_pairs),
+            key=lambda nid: canvas_y.get(nid, 0.0),
+        )
+        for node_id, y_raw in zip(node_ids, y_slots):
+            result[node_id] = (x_raw * LAYOUT_SCALE, y_raw * LAYOUT_SCALE)
+    return result
 
 
 def canvas_positions(
