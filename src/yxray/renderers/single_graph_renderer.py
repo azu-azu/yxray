@@ -1213,6 +1213,27 @@ function initNetwork() {
     });
   });
 
+  // Draw file path subtitles below input/output nodes (those with a subtitle field).
+  // Shown only when the node is currently in the DataSet (not clustered away).
+  network.on('afterDrawing', function(ctx) {
+    NODES_DATA.forEach(function(nd) {
+      if (!nd.subtitle) return;
+      if (!nodesDataset.get(nd.id)) return;  // clustered: skip
+      var bb = network.getBoundingBox(nd.id);
+      if (!bb) return;
+      // Show only the filename part of the path; truncate if very long
+      var parts = nd.subtitle.replace(/\\/g, '/').split('/');
+      var text = parts[parts.length - 1] || nd.subtitle;
+      if (text.length > 30) text = '…' + text.slice(-27);
+      ctx.save();
+      ctx.font = '10px system-ui,-apple-system,sans-serif';
+      ctx.fillStyle = isDark ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
+      ctx.restore();
+    });
+  });
+
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
   var HANDLE_HIT_PX = 10;  // hit radius in DOM pixels
   canvas.addEventListener('mousedown', function(e) {
@@ -1774,7 +1795,7 @@ class SingleGraphRenderer:
 
     def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]
-        return {
+        result: dict[str, Any] = {
             "id": node_id,
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
@@ -1782,6 +1803,18 @@ class SingleGraphRenderer:
             "x": node.x,
             "y": node.y,
         }
+        subtitle = self._node_subtitle(node)
+        if subtitle:
+            result["subtitle"] = subtitle
+        return result
+
+    def _node_subtitle(self, node: AlteryxNode) -> str | None:
+        """Return the File path from config for input/output nodes, else None."""
+        file_entry = node.config.get("File")
+        if file_entry is None:
+            return None
+        raw = file_entry.get("#text", "") if isinstance(file_entry, dict) else str(file_entry)
+        return raw.strip() or None
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
         """Return config dict excluding XML attribute keys (@ prefix)."""
