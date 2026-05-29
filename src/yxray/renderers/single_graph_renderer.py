@@ -238,6 +238,7 @@ var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolTy
 var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
 var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
 var clusterCounter = 0;
+var clusteredContainerIdx = {}; // CONTAINERS_DATA index -> true, for containers that formed a cluster node
 
 var options = {
   physics: {enabled: false},
@@ -476,6 +477,7 @@ function buildContainerClusters(membership) {
     var c = CONTAINERS_DATA[parseInt(idx)];
     var clusterId = 'container:' + (++clusterCounter);
     var caption = c.label || ('Container ' + idx);
+    clusteredContainerIdx[parseInt(idx)] = true;  // mark this container as clustered
     var label = caption + ' \xd7' + memberIds.length;
     memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
     clusterDefs.push({ cid: clusterId, memberIds: memberIds, caption: caption, label: label });
@@ -801,9 +803,17 @@ function initNetwork() {
       ctx.stroke();
       ctx.setLineDash([]);
       if (c.label) {
-        ctx.font = 'bold 15px system-ui,-apple-system,sans-serif';
-        ctx.fillStyle = 'rgba(249,168,212,0.95)';
-        ctx.fillText('【' + c.label + '】', x + 8, y + 20);
+        if (clusteredContainerIdx[idx]) {
+          // Clustered child container: small label, no brackets (cluster node already shows it)
+          ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+          ctx.fillStyle = 'rgba(249,168,212,0.7)';
+          ctx.fillText(c.label, x + 8, y + 16);
+        } else {
+          // Non-clustered parent container: large label with 【】
+          ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+          ctx.fillStyle = 'rgba(249,168,212,0.95)';
+          ctx.fillText('【' + c.label + '】', x + 10, y + 24);
+        }
       }
     });
     ctx.restore();
