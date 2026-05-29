@@ -165,6 +165,43 @@ _HTML_TEMPLATE = """\
       margin: 10px 0 4px; padding-top: 8px;
       border-top: 1px solid var(--border-subtle);
     }
+    /* Memo feature */
+    #memo-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 1999;
+    }
+    #memo-modal-overlay.open { display: block; }
+    #memo-modal {
+      display: none; position: fixed;
+      top: 50%; left: 50%; transform: translate(-50%,-50%);
+      z-index: 2000; width: 300px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    #memo-modal.open { display: block; }
+    .memo-modal-title {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 10px;
+    }
+    #memo-textarea {
+      width: 100%; min-height: 80px; padding: 8px 10px; display: block;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface-2); color: var(--text);
+      font-size: 13px; font-family: system-ui,-apple-system,sans-serif;
+      resize: vertical; outline: none;
+    }
+    #memo-textarea:focus { border-color: var(--accent); }
+    .memo-modal-actions {
+      display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end;
+    }
+    #connect-mode-hint {
+      display: none; position: fixed; top: 65px; left: 50%;
+      transform: translateX(-50%); z-index: 1500; pointer-events: none;
+      background: #ca8a04; color: #fff; padding: 6px 18px;
+      border-radius: 6px; font-size: 12px; font-weight: 500;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
   </style>
 </head>
 <body>
@@ -178,6 +215,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
@@ -194,6 +232,17 @@ _HTML_TEMPLATE = """\
     <div id="panel-body"></div>
   </div>
   <div id="panel-overlay"></div>
+  <div id="memo-modal-overlay"></div>
+  <div id="memo-modal">
+    <div class="memo-modal-title" id="memo-modal-title">New Memo</div>
+    <textarea id="memo-textarea" placeholder="Enter memo text…" rows="4"></textarea>
+    <div class="memo-modal-actions">
+      <button class="ctrl-btn" id="memo-delete-btn" style="display:none;color:#f87171;">Delete</button>
+      <button class="ctrl-btn" id="memo-cancel-btn">Cancel</button>
+      <button class="ctrl-btn" id="memo-save-btn" style="background:var(--accent);color:#fff;border-color:var(--accent);">Save</button>
+    </div>
+  </div>
+  <div id="connect-mode-hint">Click a node to connect &mdash; Esc to cancel</div>
   <script>{{ vis_js | safe }}</script>
   <script>
 var NODES_DATA = {{ nodes_json | safe }};
@@ -239,6 +288,16 @@ var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from
 var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
 var clusterCounter = 0;
 var clusteredContainerIdx = {}; // CONTAINERS_DATA index -> true, for containers that formed a cluster node
+
+// ── Memo state ────────────────────────────────────────────────────────────
+var memoCounter = 0;
+var memoData = {};   // 'memo:N' -> {text, x, y}
+var memoEdges = {};  // edgeId  -> {from, to}
+var _memoEditTarget = null;  // memoId being edited, or null = new memo
+var _memoPendingPos = null;  // {x,y} for new memo placement
+var _connectMode = false;    // true while waiting for user to click a target node
+var _connectSourceId = null; // memo ID initiating the connection
+var MEMO_STORAGE_KEY = 'yxray-memos-' + (document.title || 'default');
 
 var options = {
   physics: {enabled: false},
@@ -708,6 +767,121 @@ function expandCluster(cid) {
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
+// ── Memo helpers ──────────────────────────────────────────────────────────
+function _memoNodeDef(id, text, x, y) {
+  return {
+    id: id,
+    label: text || '(memo)',
+    title: 'Memo — double-click to edit',
+    shape: 'box',
+    x: x, y: y,
+    color: {
+      background: '#fef9c3', border: '#ca8a04',
+      highlight: {background: '#fef08a', border: '#a16207'},
+      hover:     {background: '#fef08a', border: '#a16207'}
+    },
+    font: {color: '#1c1917', size: 13},
+    borderWidth: 2,
+    shapeProperties: {borderRadius: 4}
+  };
+}
+
+function saveMemos() {
+  if (!network) return;
+  Object.keys(memoData).forEach(function(id) {
+    var pos = network.getPositions([id])[id];
+    if (pos) { memoData[id].x = pos.x; memoData[id].y = pos.y; }
+  });
+  var edgeArr = Object.keys(memoEdges).map(function(eid) { return memoEdges[eid]; });
+  try {
+    localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify({nodes: memoData, edges: edgeArr}));
+  } catch(e) {}
+}
+
+function loadMemos() {
+  try {
+    var raw = localStorage.getItem(MEMO_STORAGE_KEY);
+    if (!raw) return;
+    var saved = JSON.parse(raw);
+    if (saved.nodes) {
+      Object.keys(saved.nodes).forEach(function(id) {
+        var m = saved.nodes[id];
+        var numMatch = id.match(/^memo:(\d+)$/);
+        if (numMatch) { var n = parseInt(numMatch[1]); if (n > memoCounter) memoCounter = n; }
+        memoData[id] = m;
+        nodesDataset.add(_memoNodeDef(id, m.text, m.x, m.y));
+      });
+    }
+    if (saved.edges) {
+      saved.edges.forEach(function(e) {
+        var eid = 'memo-edge:' + (++memoCounter);
+        edgesDataset.add({id: eid, from: e.from, to: e.to,
+          color: {color: '#ca8a04', highlight: '#a16207', hover: '#a16207'}, width: 1.5});
+        memoEdges[eid] = {from: e.from, to: e.to};
+      });
+    }
+  } catch(e) {}
+}
+
+function openMemoModal(targetId, x, y) {
+  _memoEditTarget = targetId;
+  _memoPendingPos = (x !== undefined && y !== undefined) ? {x: x, y: y} : null;
+  var isNew = (targetId === null);
+  document.getElementById('memo-modal-title').textContent = isNew ? 'New Memo' : 'Edit Memo';
+  document.getElementById('memo-textarea').value = isNew ? '' : (memoData[targetId] ? memoData[targetId].text : '');
+  document.getElementById('memo-delete-btn').style.display = isNew ? 'none' : '';
+  document.getElementById('memo-modal').classList.add('open');
+  document.getElementById('memo-modal-overlay').classList.add('open');
+  setTimeout(function() { document.getElementById('memo-textarea').focus(); }, 50);
+}
+
+function closeMemoModal() {
+  document.getElementById('memo-modal').classList.remove('open');
+  document.getElementById('memo-modal-overlay').classList.remove('open');
+  _memoEditTarget = null;
+  _memoPendingPos = null;
+}
+
+function saveMemoFromModal() {
+  var text = document.getElementById('memo-textarea').value.trim() || '(memo)';
+  if (_memoEditTarget === null) {
+    var id = 'memo:' + (++memoCounter);
+    var pos = _memoPendingPos || {x: 0, y: 0};
+    memoData[id] = {text: text, x: pos.x, y: pos.y};
+    nodesDataset.add(_memoNodeDef(id, text, pos.x, pos.y));
+  } else {
+    if (memoData[_memoEditTarget]) memoData[_memoEditTarget].text = text;
+    nodesDataset.update({id: _memoEditTarget, label: text});
+  }
+  saveMemos();
+  closeMemoModal();
+}
+
+function deleteMemoNode(memoId) {
+  var toRemove = Object.keys(memoEdges).filter(function(eid) {
+    return memoEdges[eid].from === memoId || memoEdges[eid].to === memoId;
+  });
+  edgesDataset.remove(toRemove);
+  toRemove.forEach(function(eid) { delete memoEdges[eid]; });
+  nodesDataset.remove(memoId);
+  delete memoData[memoId];
+  saveMemos();
+}
+
+function enterConnectMode(fromId) {
+  _connectMode = true;
+  _connectSourceId = fromId;
+  document.getElementById('graph-canvas').style.cursor = 'crosshair';
+  document.getElementById('connect-mode-hint').style.display = 'block';
+}
+
+function exitConnectMode() {
+  _connectMode = false;
+  _connectSourceId = null;
+  document.getElementById('graph-canvas').style.cursor = '';
+  document.getElementById('connect-mode-hint').style.display = 'none';
+}
+
 // ── Network init ──────────────────────────────────────────────────────────
 var _clusterClickTimer = null;
 
@@ -730,6 +904,7 @@ function initNetwork() {
 
   network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
   network.fit();
+  loadMemos();
 
   // Draw ToolContainer boundaries behind all nodes/edges.
   // Bounds are computed dynamically from the CURRENT vis-network positions of
@@ -820,6 +995,21 @@ function initNetwork() {
   });
 
   network.on('click', function(params) {
+    // Connect mode: user clicks a target node to wire a memo edge
+    if (_connectMode) {
+      if (params.nodes.length > 0) {
+        var targetId = params.nodes[0];
+        if (targetId !== _connectSourceId) {
+          var eid = 'memo-edge:' + (++memoCounter);
+          edgesDataset.add({id: eid, from: _connectSourceId, to: targetId,
+            color: {color: '#ca8a04', highlight: '#a16207', hover: '#a16207'}, width: 1.5});
+          memoEdges[eid] = {from: _connectSourceId, to: targetId};
+          saveMemos();
+        }
+      }
+      exitConnectMode();
+      return;
+    }
     if (params.nodes.length === 0) { closePanel(); return; }
     var nodeId = params.nodes[0];
     // Delay panel open for any node that is double-clickable (cluster or
@@ -837,13 +1027,31 @@ function initNetwork() {
   network.on('doubleClick', function(params) {
     clearTimeout(_clusterClickTimer);
     _clusterClickTimer = null;
-    if (params.nodes.length === 0) return;
+    // Empty canvas double-click → create memo at that canvas position
+    if (params.nodes.length === 0) {
+      var cp = params.pointer.canvas;
+      openMemoModal(null, cp.x, cp.y);
+      return;
+    }
     var nodeId = params.nodes[0];
+    // Memo node double-click → edit
+    if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
+      openMemoModal(nodeId);
+      return;
+    }
     if (clusterMap[nodeId]) {
       expandCluster(nodeId);
     } else if (expandedGroups[nodeId]) {
       recollapseGroup(expandedGroups[nodeId]);
     }
+  });
+  // Persist memo positions after drag
+  network.on('dragEnd', function(params) {
+    if (params.nodes.length === 0) return;
+    var hasMemo = params.nodes.some(function(id) {
+      return typeof id === 'string' && id.indexOf('memo:') === 0;
+    });
+    if (hasMemo) saveMemos();
   });
 
   // Draw a rounded-rect border around each expanded cluster's member nodes.
@@ -957,6 +1165,42 @@ function openPanel(nodeId) {
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
+  // Memo node — show editable memo panel
+  if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
+    var m = memoData[nodeId];
+    document.getElementById('panel-title-text').textContent = 'Memo';
+    var textDiv = document.createElement('div');
+    textDiv.className = 'config-val';
+    textDiv.style.cssText = 'white-space:pre-wrap;min-height:40px;margin-bottom:12px;';
+    textDiv.textContent = m ? m.text : '';
+    body.appendChild(textDiv);
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:var(--text-muted);margin-bottom:10px;';
+    hint.textContent = 'Double-click the node to edit.';
+    body.appendChild(hint);
+    var acts = document.createElement('div');
+    acts.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    var editBtn = document.createElement('button');
+    editBtn.className = 'ctrl-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = function() { closePanel(); openMemoModal(nodeId); };
+    var connectBtn = document.createElement('button');
+    connectBtn.className = 'ctrl-btn';
+    connectBtn.textContent = 'Connect to…';
+    connectBtn.onclick = function() { closePanel(); enterConnectMode(nodeId); };
+    var delBtn = document.createElement('button');
+    delBtn.className = 'ctrl-btn';
+    delBtn.style.color = '#f87171';
+    delBtn.textContent = 'Delete';
+    delBtn.onclick = function() { closePanel(); deleteMemoNode(nodeId); };
+    acts.appendChild(editBtn);
+    acts.appendChild(connectBtn);
+    acts.appendChild(delBtn);
+    body.appendChild(acts);
+    document.getElementById('config-panel').classList.add('open');
+    return;
+  }
+
   // Cluster node — show member list
   if (clusterMap[nodeId]) {
     var c = clusterMap[nodeId];
@@ -992,7 +1236,38 @@ function closePanel() {
 
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePanel(); });
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (_connectMode) { exitConnectMode(); return; }
+    closeMemoModal();
+    closePanel();
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !e.target.matches('input,textarea')) {
+    var sel = network ? network.getSelectedNodes() : [];
+    sel.forEach(function(id) {
+      if (typeof id === 'string' && id.indexOf('memo:') === 0) deleteMemoNode(id);
+    });
+  }
+});
+
+// ── Memo modal events ─────────────────────────────────────────────────────
+document.getElementById('memo-save-btn').addEventListener('click', saveMemoFromModal);
+document.getElementById('memo-cancel-btn').addEventListener('click', closeMemoModal);
+document.getElementById('memo-modal-overlay').addEventListener('click', closeMemoModal);
+document.getElementById('memo-delete-btn').addEventListener('click', function() {
+  if (_memoEditTarget) deleteMemoNode(_memoEditTarget);
+  closeMemoModal();
+});
+document.getElementById('memo-textarea').addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { e.stopPropagation(); closeMemoModal(); }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveMemoFromModal(); }
+});
+
+document.getElementById('add-memo-btn').addEventListener('click', function() {
+  var center = network ? network.getViewPosition() : {x: 0, y: 0};
+  openMemoModal(null, center.x, center.y);
+});
 
 // ── Controls ──────────────────────────────────────────────────────────────
 document.getElementById('fit-btn').addEventListener('click', function() {
@@ -1043,6 +1318,14 @@ function doSearch(query) {
   var firstMatch = null;
 
   allNodes.forEach(function(n) {
+    // Memo nodes: dim when not matching, restore when matching, never touch colors otherwise
+    if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
+      var mLabel = (n.label || '').toLowerCase();
+      var mMatch = mLabel.indexOf(query) !== -1;
+      updates.push({id: n.id, font: {color: mMatch ? '#1c1917' : '#a8a29e'}});
+      if (mMatch && firstMatch === null) firstMatch = n.id;
+      return;
+    }
     var idStr  = String(n.id).toLowerCase();
     var label  = (n.label || '').toLowerCase();
     var matches = idStr === query || label.indexOf(query) !== -1;
@@ -1097,6 +1380,9 @@ function clearSearch() {
       var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
       return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
     }
+    if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
+      return {id: n.id, font: {color: '#1c1917'}};  // restore memo font
+    }
     return {id: n.id, color: {
       background: col.bg, border: col.bd,
       highlight: {background: col.sel, border: col.bd},
@@ -1148,6 +1434,7 @@ function applyTheme(theme) {
   var nodeUpdates = [];
   nodesDataset.getIds().forEach(function(id) {
     if (clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
+    if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
       highlight: {background: nodeSel, border: nodeBd},
       hover: {background: nodeHover, border: nodeBd}}, font: {color: nodeFont}});
