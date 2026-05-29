@@ -257,6 +257,22 @@ var options = {
   interaction: {zoomView: true, dragView: true, hover: true, tooltipDelay: 150}
 };
 
+// ── Centroid helper ───────────────────────────────────────────────────────
+// Returns the average {x, y} of a list of node IDs, looking up positions
+// from NODES_DATA. Used to place cluster nodes near their members.
+function centroid(nodeIds) {
+  var sx = 0, sy = 0, n = 0;
+  var lookup = {};
+  NODES_DATA.forEach(function(nd) { lookup[nd.id] = nd; });
+  nodeIds.forEach(function(id) {
+    var nd = lookup[id];
+    if (nd && nd.x !== undefined && nd.y !== undefined) {
+      sx += nd.x; sy += nd.y; n++;
+    }
+  });
+  return n > 0 ? {x: sx / n, y: sy / n} : {x: 0, y: 0};
+}
+
 // ── Clustering ─────────────────────────────────────────────────────────────
 //
 // Two clustering modes run in sequence before vis.Network is created:
@@ -338,12 +354,14 @@ function buildClusters(skipSet) {
   nodesDataset.remove(allMembers);
 
   chains.forEach(function(c) {
+    var cPos = centroid(c.chain);
     nodesDataset.add({
       id: c.cid,
       label: c.toolType + ' ×' + c.chain.length,
       title: c.toolType + ' cluster — Double-click to expand',
       shape: 'box',
       borderDashes: [5, 3],
+      x: cPos.x, y: cPos.y,
       color: {
         background: '#4c1d95', border: '#7c3aed',
         highlight: {background: '#5b21b6', border: '#7c3aed'},
@@ -498,12 +516,14 @@ function buildContainerClusters() {
 
   // Step 5: add container cluster nodes (teal/green)
   clusterDefs.forEach(function(c) {
+    var cPos = centroid(c.memberIds);
     nodesDataset.add({
       id: c.cid,
       label: c.label,
       title: c.caption + ' — Double-click to expand',
       shape: 'box',
       borderDashes: [5, 3],
+      x: cPos.x, y: cPos.y,
       color: CLUSTER_STYLE.container.normal,
       font: {color: '#f1f5f9', size: 13}
     });
@@ -599,12 +619,14 @@ function recollapseGroup(groupKey) {
   var clusterTitle = isContainer
     ? group.toolType + ' \u2014 Double-click to expand'
     : group.toolType + ' cluster \u2014 Double-click to expand';
+  var cPos = centroid(group.memberIds);
   nodesDataset.add({
     id: groupKey,
     label: group.toolType + ' \xd7' + group.memberIds.length,
     title: clusterTitle,
     shape: 'box',
     borderDashes: [5, 3],
+    x: cPos.x, y: cPos.y,
     color: cStyle.normal,
     font: {color: '#f1f5f9', size: 13}
   });
