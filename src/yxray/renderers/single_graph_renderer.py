@@ -205,15 +205,13 @@ var network = null;
 var nodesDataset = null;
 var edgesDataset = null;
 
-// ── Cluster state ─────────────────────────────────────────────────────────
-var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolType, bridgeEdgeIds, isContainer } }
-var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
-var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
-var clusterCounter = 0;
+// ── Clustering constants ──────────────────────────────────────────────────
 var MIN_CLUSTER_SIZE = 2;  // minimum nodes to form a type-based cluster
+var BOX_PAD_X        = 72; // horizontal padding from node center (expanded cluster box)
+var BOX_PAD_Y        = 36; // vertical padding from node center
+var BOX_RADIUS       = 14; // corner radius of the rounded rectangle
 
 // ── Cluster color palette ─────────────────────────────────────────────────
-// Single source of truth for cluster node colors.
 // type = same-type BFS cluster (purple); container = ToolContainer group (teal).
 var CLUSTER_STYLE = {
   type: {
@@ -234,14 +232,11 @@ var CLUSTER_STYLE = {
   },
 };
 
-// ── afterDrawing box constants ────────────────────────────────────────────
-// Padding around each node center to form the group bounding box.
-// padX/padY should be >= half the node visual size at zoom 1 (~80px × 50px).
-// Tuned alongside options.layout.hierarchical.nodeSpacing (120) and
-// levelSeparation (220) to avoid overlap with non-member nodes.
-var BOX_PAD_X   = 72;   // horizontal padding from node center
-var BOX_PAD_Y   = 36;   // vertical padding from node center
-var BOX_RADIUS  = 14;   // corner radius of the rounded rectangle
+// ── Cluster state ─────────────────────────────────────────────────────────
+var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolType, bridgeEdgeIds, isContainer } }
+var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
+var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
+var clusterCounter = 0;
 
 var options = {
   layout: {
