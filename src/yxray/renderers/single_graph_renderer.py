@@ -210,7 +210,7 @@ var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolTy
 var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
 var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
 var clusterCounter = 0;
-var MIN_CLUSTER_SIZE = 3;  // minimum nodes to form a type-based cluster
+var MIN_CLUSTER_SIZE = 2;  // minimum nodes to form a type-based cluster
 
 // ── Cluster color palette ─────────────────────────────────────────────────
 // Single source of truth for cluster node colors.
