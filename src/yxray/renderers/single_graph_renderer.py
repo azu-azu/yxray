@@ -1141,13 +1141,17 @@ class SingleGraphRenderer:
     def _build_graph_data(
         self, doc: WorkflowDoc
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        data_nodes = [n for n in doc.nodes if "ToolContainer" not in n.tool_type]
+        data_node_ids = {int(n.tool_id) for n in data_nodes}
+
         nodes_json: list[dict[str, Any]] = [
-            self._vis_node(int(node.tool_id), node) for node in doc.nodes
+            self._vis_node(int(node.tool_id), node) for node in data_nodes
         ]
 
         edges_json: list[dict[str, Any]] = [
             {"id": i, "from": int(c.src_tool), "to": int(c.dst_tool)}
             for i, c in enumerate(doc.connections)
+            if int(c.src_tool) in data_node_ids and int(c.dst_tool) in data_node_ids
         ]
 
         config_map: dict[str, Any] = {
@@ -1155,7 +1159,7 @@ class SingleGraphRenderer:
                 "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
                 "config": self._clean_config(node),
             }
-            for node in doc.nodes
+            for node in data_nodes
         }
 
         return nodes_json, edges_json, config_map
