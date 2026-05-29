@@ -213,7 +213,7 @@ var BOX_PAD_Y        = 36; // vertical padding from node center
 var BOX_RADIUS       = 14; // corner radius of the rounded rectangle
 
 // ── Cluster color palette ─────────────────────────────────────────────────
-// type = same-type BFS cluster (purple); container = ToolContainer group (teal).
+// type = same-type BFS cluster (purple); container = ToolContainer group (red).
 var CLUSTER_STYLE = {
   type: {
     normal: {background:'#4c1d95', border:'#7c3aed',
@@ -224,12 +224,12 @@ var CLUSTER_STYLE = {
     stroke: '#7c3aed', fill: 'rgba(109,40,217,0.07)', label: '#a78bfa',
   },
   container: {
-    normal: {background:'#065f46', border:'#059669',
-             highlight:{background:'#047857', border:'#059669'},
-             hover:    {background:'#047857', border:'#059669'}},
-    dim:    {background:'#022c22', border:'#065f46'},
-    matchBg: '#047857',
-    stroke: '#059669', fill: 'rgba(5,150,105,0.07)', label: '#34d399',
+    normal: {background:'#7f1d1d', border:'#ef4444',
+             highlight:{background:'#991b1b', border:'#ef4444'},
+             hover:    {background:'#991b1b', border:'#ef4444'}},
+    dim:    {background:'#450a0a', border:'#7f1d1d'},
+    matchBg: '#991b1b',
+    stroke: '#ef4444', fill: 'rgba(239,68,68,0.07)', label: '#fca5a5',
   },
 };
 
