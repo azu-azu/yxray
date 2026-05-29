@@ -181,12 +181,14 @@ def _tree_to_workflow(
         gui: etree._Element | None = node_elem.find("GuiSettings")
         plugin: str = gui.get("Plugin", "") if gui is not None else ""
 
-        if filter_ui_tools and plugin.startswith("AlteryxGuiToolkit."):
+        if filter_ui_tools and plugin.startswith("AlteryxGuiToolkit.") and "ToolContainer" not in plugin:
             continue
 
         pos: etree._Element | None = gui.find("Position") if gui is not None else None
         x: float = float(pos.get("x", "0")) if pos is not None else 0.0
         y: float = float(pos.get("y", "0")) if pos is not None else 0.0
+        width: float = float(pos.get("width", "0")) if pos is not None else 0.0
+        height: float = float(pos.get("height", "0")) if pos is not None else 0.0
 
         config_elem: etree._Element | None = node_elem.find("Properties/Configuration")
         config: dict[str, Any] = (
@@ -205,6 +207,8 @@ def _tree_to_workflow(
                 tool_type=plugin,
                 x=x,
                 y=y,
+                width=width,
+                height=height,
                 config=config,
                 container_id=container_id,
             )

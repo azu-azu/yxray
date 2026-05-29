@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import json
 import pathlib
+import webbrowser
 from typing import Any
 
 import typer
@@ -204,6 +205,7 @@ def inspect(  # noqa: B008
         f" ({len(doc.nodes)} nodes, {len(doc.connections)} connections)",
         err=True,
     )
+    webbrowser.open(out_path.resolve().as_uri())
 
 
 def _file_sha256(path: pathlib.Path) -> str:
