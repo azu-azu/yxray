@@ -271,6 +271,13 @@ var BOX_PAD_X        = 72; // horizontal padding from node center (expanded clus
 var BOX_PAD_Y        = 36; // vertical padding from node center
 var BOX_RADIUS       = 14; // corner radius of the rounded rectangle
 
+// ── Container drawing constants ───────────────────────────────────────────
+var CONT_PAD_X          = 60; // horizontal padding around container boundary box
+var CONT_PAD_Y          = 36; // vertical padding around container boundary box
+var CONT_R              = 10; // corner radius of container boundary box
+var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
+var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
+
 // ── Cluster color palette ─────────────────────────────────────────────────
 // type = same-type BFS cluster (purple); container = ToolContainer group (red).
 var CLUSTER_STYLE = {
@@ -292,24 +299,26 @@ var CLUSTER_STYLE = {
   },
 };
 
-// ── Cluster state ─────────────────────────────────────────────────────────
-var clusterMap = {};       // { 'cluster:N' | 'container:N': { memberIds, toolType, bridgeEdgeIds, isContainer } }
-var expandedGroups = {};   // nodeId -> groupKey  (nodes that were expanded from a cluster)
-var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
-var clusterCounter = 0;
-var clusteredContainerIdx = {}; // CONTAINERS_DATA index -> true, for containers that formed a cluster node
-
-// ── Memo state ────────────────────────────────────────────────────────────
-var memoCounter = 0;
-var memoData = {};   // 'memo:N' -> {text, x, y}
-var memoEdges = {};  // edgeId  -> {from, to}
-var _memoEditTarget = null;  // memoId being edited, or null = new memo
-var _memoPendingPos = null;  // {x,y} for new memo placement
-var _connectMode = false;    // true while waiting for user to click a target node
-var _connectSourceId = null; // memo ID initiating the connection
+// ── Application state ─────────────────────────────────────────────────────
+var AppState = {
+  // Cluster state
+  clusterMap: {},         // { 'cluster:N' | 'container:N': { memberIds, toolType, bridgeEdgeIds, isContainer } }
+  expandedGroups: {},     // nodeId -> groupKey (nodes expanded from a cluster)
+  groupMembers: {},       // groupKey -> { memberIds, toolType, isContainer, containerNodeId }
+  clusterCounter: 0,
+  clusteredContainerIdx: {}, // CONTAINERS_DATA index -> true, for containers that formed a cluster node
+  // Memo state
+  memoCounter: 0,
+  memoData: {},           // 'memo:N' -> {text, x, y}
+  memoEdges: {},          // edgeId  -> {from, to}
+  memoEditTarget: null,   // memoId being edited, or null = new memo
+  memoPendingPos: null,   // {x,y} for new memo placement
+  connectMode: false,     // true while waiting for user to click a target node
+  connectSourceId: null,  // memo ID initiating the connection
+  memoHandles: {},        // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
+  resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
+};
 var MEMO_STORAGE_KEY = 'yxray-memos-' + (document.title || 'default');
-var _memoHandles = {};   // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
-var _resizeState = null; // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
 
 var options = {
   physics: {enabled: false},
@@ -364,7 +373,21 @@ function centroid(nodeIds) {
 //      Reads the current DataSet (after type clustering) and remaps edges.
 //      Cluster nodes are teal/green to distinguish them from type clusters (purple).
 //
-// Both share clusterMap, expandedGroups, groupMembers, clusterCounter.
+// Both share AppState.clusterMap, AppState.expandedGroups, AppState.groupMembers, AppState.clusterCounter.
+
+// Build an undirected adjacency map from a node list and an edge list.
+// Returns { nodeId: [neighborId, ...] } for both edge directions.
+function buildAdjacencyMap(nodes, edges) {
+  var adjMap = {};
+  nodes.forEach(function(n) { adjMap[n.id] = []; });
+  edges.forEach(function(e) {
+    if (!adjMap[e.from]) adjMap[e.from] = [];
+    if (!adjMap[e.to])   adjMap[e.to]   = [];
+    adjMap[e.from].push(e.to);
+    adjMap[e.to].push(e.from);
+  });
+  return adjMap;
+}
 
 function buildClusters(skipSet) {
   skipSet = skipSet || {};
@@ -372,14 +395,7 @@ function buildClusters(skipSet) {
   // ── Phase 1: BFS over undirected adjacency to find same-type components ──
   // Use undirected adjacency so that fan-in patterns (multiple same-type nodes
   // flowing into a single node of the same type) are treated as connected.
-  var adjMap = {};  // nodeId -> [adjacent nodeIds, both directions]
-  NODES_DATA.forEach(function(n) { adjMap[n.id] = []; });
-  EDGES_DATA.forEach(function(e) {
-    if (!adjMap[e.from]) adjMap[e.from] = [];
-    if (!adjMap[e.to])   adjMap[e.to]   = [];
-    adjMap[e.from].push(e.to);
-    adjMap[e.to].push(e.from);
-  });
+  var adjMap = buildAdjacencyMap(NODES_DATA, EDGES_DATA);
 
   // tool type suffix from node.title (= full plugin path, e.g. AlteryxBasePluginsGui.Filter.Filter)
   var nodeTypeLookup = {};
@@ -420,7 +436,7 @@ function buildClusters(skipSet) {
 
   // ── Phase 2: assign cluster IDs and build memberToCluster map ────────────
   chains.forEach(function(c) {
-    c.cid = 'cluster:' + (++clusterCounter);
+    c.cid = 'cluster:' + (++AppState.clusterCounter);
   });
 
   var memberToCluster = {};
@@ -471,7 +487,7 @@ function buildClusters(skipSet) {
     seenEdgeKey[key] = true;
 
     // Preserve original numeric edge ID only when both endpoints are real nodes
-    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++clusterCounter);
+    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++AppState.clusterCounter);
     edgesDataset.add({id: newEid, from: src, to: dst});
 
     // Register bridge edge in every involved cluster
@@ -487,7 +503,7 @@ function buildClusters(skipSet) {
 
   // ── Phase 5: store cluster metadata ──────────────────────────────────────
   chains.forEach(function(c) {
-    clusterMap[c.cid] = {
+    AppState.clusterMap[c.cid] = {
       memberIds: c.chain,
       toolType: c.toolType,
       bridgeEdgeIds: clusterBridges[c.cid] ? clusterBridges[c.cid].slice() : [],
@@ -500,21 +516,24 @@ function buildClusters(skipSet) {
 // node canvas coordinates against container bounding rectangles from CONTAINERS_DATA.
 // Nodes inside nested containers are assigned to the smallest enclosing box.
 // Returns { nodeId: containerDataIndex, ... }.
+// Result is cached after the first call — membership is stable for the lifetime of the page.
+var _containerMembershipCache = null;
 function computeContainerMembership() {
+  if (_containerMembershipCache) return _containerMembershipCache;
   var result = {};
-  if (CONTAINERS_DATA.length === 0) return result;
-  var PAD = 8;  // tolerance for nodes sitting on the boundary
+  if (CONTAINERS_DATA.length === 0) { _containerMembershipCache = result; return result; }
   NODES_DATA.forEach(function(n) {
     var bestIdx = -1, bestArea = Infinity;
     CONTAINERS_DATA.forEach(function(c, idx) {
-      if (n.x >= c.x - PAD && n.x <= c.x + c.w + PAD &&
-          n.y >= c.y - PAD && n.y <= c.y + c.h + PAD) {
+      if (n.x >= c.x - CONTAINER_BOUNDARY_PAD && n.x <= c.x + c.w + CONTAINER_BOUNDARY_PAD &&
+          n.y >= c.y - CONTAINER_BOUNDARY_PAD && n.y <= c.y + c.h + CONTAINER_BOUNDARY_PAD) {
         var area = c.w * c.h;
         if (area < bestArea) { bestArea = area; bestIdx = idx; }
       }
     });
     if (bestIdx >= 0) result[n.id] = bestIdx;
   });
+  _containerMembershipCache = result;
   return result;
 }
 
@@ -598,9 +617,9 @@ function buildContainerClusters(membership) {
     var memberIds = groups[parseInt(idx)];
     if (memberIds.length < MIN_CLUSTER_SIZE) return;
     var c = CONTAINERS_DATA[parseInt(idx)];
-    var clusterId = 'container:' + (++clusterCounter);
+    var clusterId = 'container:' + (++AppState.clusterCounter);
     var caption = c.label || ('Container ' + idx);
-    clusteredContainerIdx[parseInt(idx)] = true;  // mark this container as clustered
+    AppState.clusteredContainerIdx[parseInt(idx)] = true;  // mark this container as clustered
     var label = caption + ' \xd7' + memberIds.length;
     memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
     clusterDefs.push({ cid: clusterId, memberIds: memberIds, caption: caption, label: label, fillColor: c.fillColor || null });
@@ -640,7 +659,7 @@ function buildContainerClusters(membership) {
       var key = String(src) + '\x00' + String(dst);
       if (seenKey[key]) return;
       seenKey[key] = true;
-      var eid = 'br:' + (++clusterCounter);
+      var eid = 'br:' + (++AppState.clusterCounter);
       edgesToAdd.push({id: eid, from: src, to: dst});
       [src, dst].forEach(function(ep) {
         if (typeof ep === 'string' && ep.indexOf('container:') === 0) {
@@ -657,7 +676,7 @@ function buildContainerClusters(membership) {
   // Store metadata (including fill color for later re-collapse and search restore)
   clusterDefs.forEach(function(c) {
     var ns = _containerNodeStyle(c.fillColor);
-    clusterMap[c.cid] = {
+    AppState.clusterMap[c.cid] = {
       memberIds: c.memberIds, toolType: c.caption,
       bridgeEdgeIds: clusterBridges[c.cid] || [],
       isContainer: true,
@@ -671,8 +690,8 @@ function buildContainerClusters(membership) {
 // DataSet. Returns null if nodeId is not reachable (removed and unclustered).
 function resolveNode(nodeId) {
   if (nodesDataset.get(nodeId) !== null) return nodeId;
-  for (var cid in clusterMap) {
-    if (clusterMap[cid].memberIds.indexOf(nodeId) !== -1) return cid;
+  for (var cid in AppState.clusterMap) {
+    if (AppState.clusterMap[cid].memberIds.indexOf(nodeId) !== -1) return cid;
   }
   return null;
 }
@@ -680,7 +699,7 @@ function resolveNode(nodeId) {
 // Re-collapse a previously expanded cluster. groupKey is the original cluster ID
 // (e.g. 'cluster:1'). Any member node's double-click triggers this.
 function recollapseGroup(groupKey) {
-  var group = groupMembers[groupKey];
+  var group = AppState.groupMembers[groupKey];
   if (!group) return;
 
   var memberSet = {};
@@ -733,19 +752,19 @@ function recollapseGroup(groupKey) {
     var key = String(src) + '\x00' + String(dst);
     if (presentKeys[key]) return;
     presentKeys[key] = true;
-    var newEid = 'br:' + (++clusterCounter);
+    var newEid = 'br:' + (++AppState.clusterCounter);
     edgesDataset.add({id: newEid, from: src, to: dst});
     bridgeEdgeIds.push(newEid);
-    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && clusterMap[dst]) {
-      clusterMap[dst].bridgeEdgeIds.push(newEid);
+    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && AppState.clusterMap[dst]) {
+      AppState.clusterMap[dst].bridgeEdgeIds.push(newEid);
     }
-    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && clusterMap[src]) {
-      clusterMap[src].bridgeEdgeIds.push(newEid);
+    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && AppState.clusterMap[src]) {
+      AppState.clusterMap[src].bridgeEdgeIds.push(newEid);
     }
   });
 
   // Restore cluster state
-  clusterMap[groupKey] = {
+  AppState.clusterMap[groupKey] = {
     memberIds: group.memberIds,
     toolType: group.toolType,
     bridgeEdgeIds: bridgeEdgeIds,
@@ -756,15 +775,15 @@ function recollapseGroup(groupKey) {
   };
 
   // Clean up expanded state
-  group.memberIds.forEach(function(mid) { delete expandedGroups[mid]; });
-  delete groupMembers[groupKey];
+  group.memberIds.forEach(function(mid) { delete AppState.expandedGroups[mid]; });
+  delete AppState.groupMembers[groupKey];
 
   var cPos = centroid(group.memberIds);
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
 function expandCluster(cid) {
-  var c = clusterMap[cid];
+  var c = AppState.clusterMap[cid];
   if (!c) return;
 
   // Remove cluster node + its bridge edges
@@ -793,8 +812,8 @@ function expandCluster(cid) {
   var expandedContainerNodeId = c.containerNodeId;
   var expandedFillColorHex = c.fillColorHex || null;
   var expandedFontColorHex = c.fontColorHex || '#f1f5f9';
-  delete clusterMap[cid];
-  groupMembers[cid] = {
+  delete AppState.clusterMap[cid];
+  AppState.groupMembers[cid] = {
     memberIds: expandedMemberIds,
     toolType: expandedToolType,
     isContainer: expandedIsContainer,
@@ -802,7 +821,7 @@ function expandCluster(cid) {
     fillColorHex: expandedFillColorHex,
     fontColorHex: expandedFontColorHex,
   };
-  expandedMemberIds.forEach(function(mid) { expandedGroups[mid] = cid; });
+  expandedMemberIds.forEach(function(mid) { AppState.expandedGroups[mid] = cid; });
 
   // Re-derive edges connected to the just-expanded members.
   // We look at every original edge touching a member node, remap its endpoints
@@ -826,16 +845,16 @@ function expandCluster(cid) {
     if (presentKeys[key]) return;
     presentKeys[key] = true;
 
-    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++clusterCounter);
+    var newEid = (src === e.from && dst === e.to) ? e.id : 'br:' + (++AppState.clusterCounter);
     edgesDataset.add({id: newEid, from: src, to: dst});
 
     // Register the new bridge edge in any cluster it touches, so a subsequent
     // expandCluster() call can clean it up correctly.
-    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && clusterMap[dst]) {
-      clusterMap[dst].bridgeEdgeIds.push(newEid);
+    if (typeof dst === 'string' && dst.indexOf('cluster:') === 0 && AppState.clusterMap[dst]) {
+      AppState.clusterMap[dst].bridgeEdgeIds.push(newEid);
     }
-    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && clusterMap[src]) {
-      clusterMap[src].bridgeEdgeIds.push(newEid);
+    if (typeof src === 'string' && src.indexOf('cluster:') === 0 && AppState.clusterMap[src]) {
+      AppState.clusterMap[src].bridgeEdgeIds.push(newEid);
     }
   });
 
@@ -869,13 +888,13 @@ function _memoNodeDef(id, text, x, y, w, h) {
 
 function saveMemos() {
   if (!network) return;
-  Object.keys(memoData).forEach(function(id) {
+  Object.keys(AppState.memoData).forEach(function(id) {
     var pos = network.getPositions([id])[id];
-    if (pos) { memoData[id].x = pos.x; memoData[id].y = pos.y; }
+    if (pos) { AppState.memoData[id].x = pos.x; AppState.memoData[id].y = pos.y; }
   });
-  var edgeArr = Object.keys(memoEdges).map(function(eid) { return memoEdges[eid]; });
+  var edgeArr = Object.keys(AppState.memoEdges).map(function(eid) { return AppState.memoEdges[eid]; });
   try {
-    localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify({nodes: memoData, edges: edgeArr}));
+    localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify({nodes: AppState.memoData, edges: edgeArr}));
   } catch(e) {}
 }
 
@@ -888,28 +907,28 @@ function loadMemos() {
       Object.keys(saved.nodes).forEach(function(id) {
         var m = saved.nodes[id];
         var numMatch = id.match(/^memo:(\d+)$/);
-        if (numMatch) { var n = parseInt(numMatch[1]); if (n > memoCounter) memoCounter = n; }
-        memoData[id] = m;
+        if (numMatch) { var n = parseInt(numMatch[1]); if (n > AppState.memoCounter) AppState.memoCounter = n; }
+        AppState.memoData[id] = m;
         nodesDataset.add(_memoNodeDef(id, m.text, m.x, m.y, m.w, m.h));
       });
     }
     if (saved.edges) {
       saved.edges.forEach(function(e) {
-        var eid = 'memo-edge:' + (++memoCounter);
+        var eid = 'memo-edge:' + (++AppState.memoCounter);
         edgesDataset.add({id: eid, from: e.from, to: e.to,
           color: {color: '#ca8a04', highlight: '#a16207', hover: '#a16207'}, width: 1.5});
-        memoEdges[eid] = {from: e.from, to: e.to};
+        AppState.memoEdges[eid] = {from: e.from, to: e.to};
       });
     }
   } catch(e) {}
 }
 
 function openMemoModal(targetId, x, y) {
-  _memoEditTarget = targetId;
-  _memoPendingPos = (x !== undefined && y !== undefined) ? {x: x, y: y} : null;
+  AppState.memoEditTarget = targetId;
+  AppState.memoPendingPos = (x !== undefined && y !== undefined) ? {x: x, y: y} : null;
   var isNew = (targetId === null);
   document.getElementById('memo-modal-title').textContent = isNew ? 'New Memo' : 'Edit Memo';
-  document.getElementById('memo-textarea').value = isNew ? '' : (memoData[targetId] ? memoData[targetId].text : '');
+  document.getElementById('memo-textarea').value = isNew ? '' : (AppState.memoData[targetId] ? AppState.memoData[targetId].text : '');
   document.getElementById('memo-delete-btn').style.display = isNew ? 'none' : '';
   document.getElementById('memo-modal').classList.add('open');
   document.getElementById('memo-modal-overlay').classList.add('open');
@@ -919,46 +938,46 @@ function openMemoModal(targetId, x, y) {
 function closeMemoModal() {
   document.getElementById('memo-modal').classList.remove('open');
   document.getElementById('memo-modal-overlay').classList.remove('open');
-  _memoEditTarget = null;
-  _memoPendingPos = null;
+  AppState.memoEditTarget = null;
+  AppState.memoPendingPos = null;
 }
 
 function saveMemoFromModal() {
   var text = document.getElementById('memo-textarea').value.trim() || '(memo)';
-  if (_memoEditTarget === null) {
-    var id = 'memo:' + (++memoCounter);
-    var pos = _memoPendingPos || {x: 0, y: 0};
-    memoData[id] = {text: text, x: pos.x, y: pos.y};
+  if (AppState.memoEditTarget === null) {
+    var id = 'memo:' + (++AppState.memoCounter);
+    var pos = AppState.memoPendingPos || {x: 0, y: 0};
+    AppState.memoData[id] = {text: text, x: pos.x, y: pos.y};
     nodesDataset.add(_memoNodeDef(id, text, pos.x, pos.y));
   } else {
-    if (memoData[_memoEditTarget]) memoData[_memoEditTarget].text = text;
-    nodesDataset.update({id: _memoEditTarget, label: text});
+    if (AppState.memoData[AppState.memoEditTarget]) AppState.memoData[AppState.memoEditTarget].text = text;
+    nodesDataset.update({id: AppState.memoEditTarget, label: text});
   }
   saveMemos();
   closeMemoModal();
 }
 
 function deleteMemoNode(memoId) {
-  var toRemove = Object.keys(memoEdges).filter(function(eid) {
-    return memoEdges[eid].from === memoId || memoEdges[eid].to === memoId;
+  var toRemove = Object.keys(AppState.memoEdges).filter(function(eid) {
+    return AppState.memoEdges[eid].from === memoId || AppState.memoEdges[eid].to === memoId;
   });
   edgesDataset.remove(toRemove);
-  toRemove.forEach(function(eid) { delete memoEdges[eid]; });
+  toRemove.forEach(function(eid) { delete AppState.memoEdges[eid]; });
   nodesDataset.remove(memoId);
-  delete memoData[memoId];
+  delete AppState.memoData[memoId];
   saveMemos();
 }
 
 function enterConnectMode(fromId) {
-  _connectMode = true;
-  _connectSourceId = fromId;
+  AppState.connectMode = true;
+  AppState.connectSourceId = fromId;
   document.getElementById('graph-canvas').style.cursor = 'crosshair';
   document.getElementById('connect-mode-hint').style.display = 'block';
 }
 
 function exitConnectMode() {
-  _connectMode = false;
-  _connectSourceId = null;
+  AppState.connectMode = false;
+  AppState.connectSourceId = null;
   var cv = document.getElementById('graph-canvas');
   if (cv && !cv._memoResizeCursor) cv.style.cursor = '';
   document.getElementById('connect-mode-hint').style.display = 'none';
@@ -995,7 +1014,6 @@ function initNetwork() {
   //  - expands to wrap all members when expanded
   //  - covers the full nested set for parent containers (all nodes whose
   //    initial canvas position fell inside the container's XML bounds)
-  var CONT_PAD_X = 60, CONT_PAD_Y = 36, CONT_R = 10, CONT_HIT = 8;
   network.on('beforeDrawing', function(ctx) {
     if (CONTAINERS_DATA.length === 0) return;
     ctx.save();
@@ -1005,8 +1023,8 @@ function initNetwork() {
       //    Using initial positions (NODES_DATA) so membership is stable.
       var memberIds = [];
       NODES_DATA.forEach(function(nd) {
-        if (nd.x >= c.x - CONT_HIT && nd.x <= c.x + c.w + CONT_HIT &&
-            nd.y >= c.y - CONT_HIT && nd.y <= c.y + c.h + CONT_HIT) {
+        if (nd.x >= c.x - CONTAINER_BOUNDARY_PAD && nd.x <= c.x + c.w + CONTAINER_BOUNDARY_PAD &&
+            nd.y >= c.y - CONTAINER_BOUNDARY_PAD && nd.y <= c.y + c.h + CONTAINER_BOUNDARY_PAD) {
           memberIds.push(nd.id);
         }
       });
@@ -1070,14 +1088,14 @@ function initNetwork() {
 
   network.on('click', function(params) {
     // Connect mode: user clicks a target node to wire a memo edge
-    if (_connectMode) {
+    if (AppState.connectMode) {
       if (params.nodes.length > 0) {
         var targetId = params.nodes[0];
-        if (targetId !== _connectSourceId) {
-          var eid = 'memo-edge:' + (++memoCounter);
-          edgesDataset.add({id: eid, from: _connectSourceId, to: targetId,
+        if (targetId !== AppState.connectSourceId) {
+          var eid = 'memo-edge:' + (++AppState.memoCounter);
+          edgesDataset.add({id: eid, from: AppState.connectSourceId, to: targetId,
             color: {color: '#ca8a04', highlight: '#a16207', hover: '#a16207'}, width: 1.5});
-          memoEdges[eid] = {from: _connectSourceId, to: targetId};
+          AppState.memoEdges[eid] = {from: AppState.connectSourceId, to: targetId};
           saveMemos();
         }
       }
@@ -1088,7 +1106,7 @@ function initNetwork() {
     var nodeId = params.nodes[0];
     // Delay panel open for any node that is double-clickable (cluster or
     // expanded member) so the overlay does not block the second tap.
-    if (clusterMap[nodeId] || expandedGroups[nodeId]) {
+    if (AppState.clusterMap[nodeId] || AppState.expandedGroups[nodeId]) {
       clearTimeout(_clusterClickTimer);
       _clusterClickTimer = setTimeout(function() {
         _clusterClickTimer = null;
@@ -1113,10 +1131,10 @@ function initNetwork() {
       openMemoModal(nodeId);
       return;
     }
-    if (clusterMap[nodeId]) {
+    if (AppState.clusterMap[nodeId]) {
       expandCluster(nodeId);
-    } else if (expandedGroups[nodeId]) {
-      recollapseGroup(expandedGroups[nodeId]);
+    } else if (AppState.expandedGroups[nodeId]) {
+      recollapseGroup(AppState.expandedGroups[nodeId]);
     }
   });
   // Persist memo positions after drag
@@ -1131,12 +1149,12 @@ function initNetwork() {
   // Draw a rounded-rect border around each expanded cluster's member nodes.
   // Runs on every canvas redraw so it automatically follows zoom / pan / drag.
   network.on('afterDrawing', function(ctx) {
-    var groupKeys = Object.keys(groupMembers);
+    var groupKeys = Object.keys(AppState.groupMembers);
     if (groupKeys.length === 0) return;
 
     ctx.save();
     groupKeys.forEach(function(groupKey) {
-      var group = groupMembers[groupKey];
+      var group = AppState.groupMembers[groupKey];
       var positions = network.getPositions(group.memberIds);
 
       var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1193,14 +1211,14 @@ function initNetwork() {
   });
 
   // Draw resize handles (small orange squares at bottom-right corner) for all memo nodes.
-  // Also refreshes _memoHandles used for hit-testing in the mousedown listener.
+  // Also refreshes AppState.memoHandles used for hit-testing in the mousedown listener.
   network.on('afterDrawing', function(ctx) {
-    _memoHandles = {};
-    Object.keys(memoData).forEach(function(memoId) {
+    AppState.memoHandles = {};
+    Object.keys(AppState.memoData).forEach(function(memoId) {
       if (!nodesDataset.get(memoId)) return;
       var bb = network.getBoundingBox(memoId);
       if (!bb) return;
-      _memoHandles[memoId] = {x: bb.right, y: bb.bottom};
+      AppState.memoHandles[memoId] = {x: bb.right, y: bb.bottom};
       ctx.save();
       ctx.fillStyle = '#ca8a04';
       ctx.strokeStyle = '#92400e';
@@ -1237,9 +1255,8 @@ function initNetwork() {
   });
 
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
-  var HANDLE_HIT_PX = 10;  // hit radius in DOM pixels
   canvas.addEventListener('mousedown', function(e) {
-    if (Object.keys(_memoHandles).length === 0) return;
+    if (Object.keys(AppState.memoHandles).length === 0) return;
     var rect = canvas.getBoundingClientRect();
     var domX = e.clientX - rect.left;
     var domY = e.clientY - rect.top;
@@ -1247,15 +1264,15 @@ function initNetwork() {
     var canvasPos = network.DOMtoCanvas({x: domX, y: domY});
     var hitR = HANDLE_HIT_PX / scale;
     var found = null;
-    Object.keys(_memoHandles).forEach(function(memoId) {
-      var h = _memoHandles[memoId];
+    Object.keys(AppState.memoHandles).forEach(function(memoId) {
+      var h = AppState.memoHandles[memoId];
       if (Math.abs(canvasPos.x - h.x) <= hitR && Math.abs(canvasPos.y - h.y) <= hitR) found = memoId;
     });
     if (!found) return;
     e.preventDefault();
     e.stopPropagation();
     var bb = network.getBoundingBox(found);
-    _resizeState = {
+    AppState.resizeState = {
       memoId: found,
       startDomX: domX, startDomY: domY,
       startW: bb.right - bb.left,
@@ -1265,16 +1282,16 @@ function initNetwork() {
 
   // Cursor feedback when hovering over a resize handle
   canvas.addEventListener('mousemove', function(e) {
-    if (_resizeState || _connectMode) return;
-    if (Object.keys(_memoHandles).length === 0) { return; }
+    if (AppState.resizeState || AppState.connectMode) return;
+    if (Object.keys(AppState.memoHandles).length === 0) { return; }
     var rect = canvas.getBoundingClientRect();
     var domX = e.clientX - rect.left;
     var domY = e.clientY - rect.top;
     var scale = network.getScale();
     var canvasPos = network.DOMtoCanvas({x: domX, y: domY});
     var hitR = HANDLE_HIT_PX / scale;
-    var onHandle = Object.keys(_memoHandles).some(function(id) {
-      var h = _memoHandles[id];
+    var onHandle = Object.keys(AppState.memoHandles).some(function(id) {
+      var h = AppState.memoHandles[id];
       return Math.abs(canvasPos.x - h.x) <= hitR && Math.abs(canvasPos.y - h.y) <= hitR;
     });
     if (!canvas._memoResizeCursor && onHandle) {
@@ -1287,30 +1304,30 @@ function initNetwork() {
   });
 
   document.addEventListener('mousemove', function(e) {
-    if (!_resizeState) return;
+    if (!AppState.resizeState) return;
     var rect = canvas.getBoundingClientRect();
-    var dx = (e.clientX - rect.left) - _resizeState.startDomX;
-    var dy = (e.clientY - rect.top)  - _resizeState.startDomY;
+    var dx = (e.clientX - rect.left) - AppState.resizeState.startDomX;
+    var dy = (e.clientY - rect.top)  - AppState.resizeState.startDomY;
     var scale = network.getScale();
-    var newW = Math.max(60, _resizeState.startW + dx / scale);
-    var newH = Math.max(28, _resizeState.startH + dy / scale);
+    var newW = Math.max(60, AppState.resizeState.startW + dx / scale);
+    var newH = Math.max(28, AppState.resizeState.startH + dy / scale);
     nodesDataset.update({
-      id: _resizeState.memoId,
+      id: AppState.resizeState.memoId,
       widthConstraint:  {minimum: newW, maximum: newW},
       heightConstraint: {minimum: newH, maximum: newH}
     });
   });
 
   document.addEventListener('mouseup', function() {
-    if (!_resizeState) return;
-    var rs = _resizeState;
-    _resizeState = null;
+    if (!AppState.resizeState) return;
+    var rs = AppState.resizeState;
+    AppState.resizeState = null;
     canvas.style.cursor = '';
     canvas._memoResizeCursor = false;
     var bb = network.getBoundingBox(rs.memoId);
-    if (memoData[rs.memoId] && bb) {
-      memoData[rs.memoId].w = bb.right - bb.left;
-      memoData[rs.memoId].h = bb.bottom - bb.top;
+    if (AppState.memoData[rs.memoId] && bb) {
+      AppState.memoData[rs.memoId].w = bb.right - bb.left;
+      AppState.memoData[rs.memoId].h = bb.bottom - bb.top;
       saveMemos();
     }
   });
@@ -1364,7 +1381,7 @@ function openPanel(nodeId) {
 
   // Memo node — show editable memo panel
   if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
-    var m = memoData[nodeId];
+    var m = AppState.memoData[nodeId];
     document.getElementById('panel-title-text').textContent = 'Memo';
     var textDiv = document.createElement('div');
     textDiv.className = 'config-val';
@@ -1399,8 +1416,8 @@ function openPanel(nodeId) {
   }
 
   // Cluster node — show member list
-  if (clusterMap[nodeId]) {
-    var c = clusterMap[nodeId];
+  if (AppState.clusterMap[nodeId]) {
+    var c = AppState.clusterMap[nodeId];
     document.getElementById('panel-title-text').textContent =
       c.toolType + ' ×' + c.memberIds.length + ' nodes';
     var hint = document.createElement('div');
@@ -1435,7 +1452,7 @@ document.getElementById('panel-close-btn').addEventListener('click', closePanel)
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    if (_connectMode) { exitConnectMode(); return; }
+    if (AppState.connectMode) { exitConnectMode(); return; }
     closeMemoModal();
     closePanel();
     return;
@@ -1453,7 +1470,7 @@ document.getElementById('memo-save-btn').addEventListener('click', saveMemoFromM
 document.getElementById('memo-cancel-btn').addEventListener('click', closeMemoModal);
 document.getElementById('memo-modal-overlay').addEventListener('click', closeMemoModal);
 document.getElementById('memo-delete-btn').addEventListener('click', function() {
-  if (_memoEditTarget) deleteMemoNode(_memoEditTarget);
+  if (AppState.memoEditTarget) deleteMemoNode(AppState.memoEditTarget);
   closeMemoModal();
 });
 document.getElementById('memo-textarea').addEventListener('keydown', function(e) {
@@ -1503,6 +1520,28 @@ function nodeColors() {
   };
 }
 
+// Returns the base (un-highlighted, un-dimmed) color update object for node n.
+// col = nodeColors() result. Used by clearSearch and applyTheme.
+function baseNodeColorUpdate(n, col) {
+  if (AppState.clusterMap[n.id]) {
+    var cm = AppState.clusterMap[n.id];
+    if (cm.isContainer && cm.fillColorHex) {
+      var ns = _containerNodeStyle(cm.fillColorHex);
+      return {id: n.id, color: ns.color, font: {color: ns.fontColor}};
+    }
+    var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+    return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
+  }
+  if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
+    return {id: n.id, font: {color: '#1c1917'}};
+  }
+  return {id: n.id, color: {
+    background: col.bg, border: col.bd,
+    highlight: {background: col.sel, border: col.bd},
+    hover: {background: col.hover, border: col.bd}
+  }, font: {color: col.font}};
+}
+
 function doSearch(query) {
   query = query.trim().toLowerCase();
   if (!query) { clearSearch(); return; }
@@ -1529,8 +1568,8 @@ function doSearch(query) {
 
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;
-      if (clusterMap[n.id]) {
-        var cm = clusterMap[n.id];
+      if (AppState.clusterMap[n.id]) {
+        var cm = AppState.clusterMap[n.id];
         var matchBg, matchFont;
         if (cm.isContainer && cm.fillColorHex) {
           matchBg   = cm.fillColorHex;
@@ -1553,8 +1592,8 @@ function doSearch(query) {
         }, font: {color: col.font}});
       }
     } else {
-      if (clusterMap[n.id]) {
-        var cm2 = clusterMap[n.id];
+      if (AppState.clusterMap[n.id]) {
+        var cm2 = AppState.clusterMap[n.id];
         var dimColor;
         if (cm2.isContainer && cm2.fillColorHex) {
           var dimmed = _darkenHex(cm2.fillColorHex, 35);
@@ -1589,25 +1628,7 @@ function clearSearch() {
   document.getElementById('search-input').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
   var col = nodeColors();
-  nodesDataset.update(nodesDataset.get().map(function(n) {
-    if (clusterMap[n.id]) {
-      var cm = clusterMap[n.id];
-      if (cm.isContainer && cm.fillColorHex) {
-        var ns = _containerNodeStyle(cm.fillColorHex);
-        return {id: n.id, color: ns.color, font: {color: ns.fontColor}};
-      }
-      var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-      return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
-    }
-    if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
-      return {id: n.id, font: {color: '#1c1917'}};  // restore memo font
-    }
-    return {id: n.id, color: {
-      background: col.bg, border: col.bd,
-      highlight: {background: col.sel, border: col.bd},
-      hover: {background: col.hover, border: col.bd}
-    }, font: {color: col.font}};
-  }));
+  nodesDataset.update(nodesDataset.get().map(function(n) { return baseNodeColorUpdate(n, col); }));
 }
 
 document.getElementById('search-input').addEventListener('input', function() {
@@ -1652,7 +1673,7 @@ function applyTheme(theme) {
   // DataSet.update() inserts missing IDs as new (label-less) items.
   var nodeUpdates = [];
   nodesDataset.getIds().forEach(function(id) {
-    if (clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
+    if (AppState.clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
       highlight: {background: nodeSel, border: nodeBd},
