@@ -743,7 +743,7 @@ function initNetwork() {
     if (CONTAINERS_DATA.length === 0) return;
     ctx.save();
 
-    CONTAINERS_DATA.forEach(function(c) {
+    CONTAINERS_DATA.forEach(function(c, idx) {
       // 1. Find original node IDs whose initial position falls inside this container.
       //    Using initial positions (NODES_DATA) so membership is stable.
       var memberIds = [];
