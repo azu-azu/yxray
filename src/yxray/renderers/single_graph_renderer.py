@@ -5,8 +5,8 @@ SingleGraphRenderer.render(doc) produces a full standalone HTML document
 (not a fragment) containing an interactive vis-network graph.
 
 vis-network UMD is inlined via load_vis_js() — zero CDN references.
-Physics is disabled; layout is handled by vis-network hierarchical engine.
-Clustering collapses same-type linear chains (length >= 3) into single nodes.
+Physics is disabled; nodes are placed at their Alteryx canvas coordinates.
+Same-type BFS clusters (purple) and ToolContainer dashed borders are drawn.
 """
 
 from __future__ import annotations
@@ -685,6 +685,7 @@ function expandCluster(cid) {
     if (!orig) return;
     nodesDataset.add({
       id: orig.id, label: orig.label, title: orig.title, shape: 'box',
+      x: orig.x, y: orig.y,
       color: {background: col.bg, border: col.bd,
               highlight: {background: col.sel, border: col.bd},
               hover: {background: col.hover, border: col.bd}},
@@ -1169,9 +1170,10 @@ class SingleGraphRenderer:
         env = Environment(autoescape=True)  # noqa: S701
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_HTML_TEMPLATE)
+        data_node_count = sum(1 for n in doc.nodes if "ToolContainer" not in n.tool_type)
         return template.render(
             title=title,
-            node_count=len(doc.nodes),
+            node_count=data_node_count,
             edge_count=len(doc.connections),
             nodes_json=json.dumps(nodes_json),
             edges_json=json.dumps(edges_json),
@@ -1228,7 +1230,7 @@ class SingleGraphRenderer:
 
     def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]
-        result: dict[str, Any] = {
+        return {
             "id": node_id,
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
@@ -1236,14 +1238,6 @@ class SingleGraphRenderer:
             "x": node.x,
             "y": node.y,
         }
-        if "ToolContainer" in node.tool_type:
-            caption_entry = node.config.get("Caption", {})
-            if isinstance(caption_entry, dict):
-                caption = caption_entry.get("#text", "")
-            else:
-                caption = str(caption_entry) if caption_entry else ""
-            result["containerLabel"] = caption or f"Container ({node_id})"
-        return result
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
         """Return config dict excluding XML attribute keys (@ prefix)."""
