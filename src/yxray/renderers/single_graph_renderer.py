@@ -518,6 +518,58 @@ function computeContainerMembership() {
   return result;
 }
 
+// ── Fill color helpers ────────────────────────────────────────────────────
+// Used by container cluster nodes to reflect their Alteryx fill color.
+
+function _isNearWhiteOrGray(hex) {
+  // Returns true for white-ish or low-saturation bright colors that are
+  // hard to distinguish from the canvas background → fallback to default red.
+  if (!hex || hex.length < 7) return true;
+  var r = parseInt(hex.slice(1,3), 16);
+  var g = parseInt(hex.slice(3,5), 16);
+  var b = parseInt(hex.slice(5,7), 16);
+  if (r > 215 && g > 215 && b > 215) return true;  // near-white
+  var mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+  return (mx - mn < 25 && mx > 160);  // low-saturation gray
+}
+
+function _contrastFont(hex) {
+  // WCAG-style luminance → dark text on light bg, light text on dark bg.
+  if (!hex || hex.length < 7) return '#f1f5f9';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  var L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return L > 0.45 ? '#1c1917' : '#f1f5f9';
+}
+
+function _darkenHex(hex, pct) {
+  var f = 1 - pct / 100;
+  var r = Math.round(parseInt(hex.slice(1,3), 16) * f);
+  var g = Math.round(parseInt(hex.slice(3,5), 16) * f);
+  var b = Math.round(parseInt(hex.slice(5,7), 16) * f);
+  return '#' + ('00'+r.toString(16)).slice(-2) +
+               ('00'+g.toString(16)).slice(-2) +
+               ('00'+b.toString(16)).slice(-2);
+}
+
+function _containerNodeStyle(fillHex) {
+  // Returns {color, fontColor} for a container cluster node.
+  // Falls back to default red if fill is null / near-white / near-gray.
+  if (!fillHex || _isNearWhiteOrGray(fillHex)) {
+    return {color: CLUSTER_STYLE.container.normal, fontColor: '#f1f5f9'};
+  }
+  var dark = _darkenHex(fillHex, 20);
+  return {
+    color: {
+      background: fillHex,  border: dark,
+      highlight: {background: _darkenHex(fillHex, 8), border: dark},
+      hover:     {background: _darkenHex(fillHex, 8), border: dark}
+    },
+    fontColor: _contrastFont(fillHex)
+  };
+}
+
 // ── Container clustering ───────────────────────────────────────────────────
 // membership: { nodeId: containerDataIndex } from computeContainerMembership().
 // Groups nodes by container, collapses each group into a teal cluster node.
@@ -551,7 +603,7 @@ function buildContainerClusters(membership) {
     clusteredContainerIdx[parseInt(idx)] = true;  // mark this container as clustered
     var label = caption + ' \xd7' + memberIds.length;
     memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
-    clusterDefs.push({ cid: clusterId, memberIds: memberIds, caption: caption, label: label });
+    clusterDefs.push({ cid: clusterId, memberIds: memberIds, caption: caption, label: label, fillColor: c.fillColor || null });
   });
 
   if (clusterDefs.length === 0) return;
@@ -561,16 +613,17 @@ function buildContainerClusters(membership) {
   clusterDefs.forEach(function(c) { allMemberIds = allMemberIds.concat(c.memberIds); });
   nodesDataset.remove(allMemberIds);
 
-  // Add teal container cluster nodes
+  // Add container cluster nodes (color from Alteryx fill, or red fallback)
   clusterDefs.forEach(function(c) {
     var pos = centroid(c.memberIds);
+    var ns = _containerNodeStyle(c.fillColor);
     nodesDataset.add({
       id: c.cid, label: c.label,
       title: c.caption + ' — Double-click to expand',
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
-      color: CLUSTER_STYLE.container.normal,
-      font: {color: '#f1f5f9', size: 13}
+      color: ns.color,
+      font: {color: ns.fontColor, size: 13}
     });
   });
 
@@ -601,12 +654,15 @@ function buildContainerClusters(membership) {
   edgesDataset.remove(edgesToRemove);
   edgesDataset.add(edgesToAdd);
 
-  // Store metadata
+  // Store metadata (including fill color for later re-collapse and search restore)
   clusterDefs.forEach(function(c) {
+    var ns = _containerNodeStyle(c.fillColor);
     clusterMap[c.cid] = {
       memberIds: c.memberIds, toolType: c.caption,
       bridgeEdgeIds: clusterBridges[c.cid] || [],
       isContainer: true,
+      fillColorHex: c.fillColor || null,
+      fontColorHex: ns.fontColor,
     };
   });
 }
@@ -639,13 +695,15 @@ function recollapseGroup(groupKey) {
   // Remove member nodes
   nodesDataset.remove(group.memberIds);
 
-  // Re-add cluster node with appropriate colors (teal for container, purple for type)
+  // Re-add cluster node with appropriate colors
   var isContainer = group.isContainer || false;
-  var cStyle = isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
   var clusterTitle = isContainer
     ? group.toolType + ' \u2014 Double-click to expand'
     : group.toolType + ' cluster \u2014 Double-click to expand';
   var cPos = centroid(group.memberIds);
+  var ns = isContainer
+    ? _containerNodeStyle(group.fillColorHex || null)
+    : {color: CLUSTER_STYLE.type.normal, fontColor: '#f1f5f9'};
   nodesDataset.add({
     id: groupKey,
     label: group.toolType + ' \xd7' + group.memberIds.length,
@@ -653,8 +711,8 @@ function recollapseGroup(groupKey) {
     shape: 'box',
     borderDashes: [5, 3],
     x: cPos.x, y: cPos.y,
-    color: cStyle.normal,
-    font: {color: '#f1f5f9', size: 13}
+    color: ns.color,
+    font: {color: ns.fontColor, size: 13}
   });
 
   // Re-derive bridge edges from EDGES_DATA (same logic as expandCluster edge step)
@@ -693,6 +751,8 @@ function recollapseGroup(groupKey) {
     bridgeEdgeIds: bridgeEdgeIds,
     isContainer: group.isContainer || false,
     containerNodeId: group.containerNodeId,
+    fillColorHex: group.fillColorHex || null,
+    fontColorHex: group.fontColorHex || '#f1f5f9',
   };
 
   // Clean up expanded state
@@ -731,12 +791,16 @@ function expandCluster(cid) {
   var expandedToolType = c.toolType;
   var expandedIsContainer = c.isContainer || false;
   var expandedContainerNodeId = c.containerNodeId;
+  var expandedFillColorHex = c.fillColorHex || null;
+  var expandedFontColorHex = c.fontColorHex || '#f1f5f9';
   delete clusterMap[cid];
   groupMembers[cid] = {
     memberIds: expandedMemberIds,
     toolType: expandedToolType,
     isContainer: expandedIsContainer,
     containerNodeId: expandedContainerNodeId,
+    fillColorHex: expandedFillColorHex,
+    fontColorHex: expandedFontColorHex,
   };
   expandedMemberIds.forEach(function(mid) { expandedGroups[mid] = cid; });
 
@@ -1149,6 +1213,29 @@ function initNetwork() {
     });
   });
 
+  // Draw file path subtitles below input/output nodes (those with a subtitle field).
+  // Shown only when the node is currently in the DataSet (not clustered away).
+  network.on('afterDrawing', function(ctx) {
+    NODES_DATA.forEach(function(nd) {
+      if (!nd.subtitle) return;
+      if (!nodesDataset.get(nd.id)) return;  // clustered: skip
+      var bb = network.getBoundingBox(nd.id);
+      if (!bb) return;
+      // Extract filename from path — handles both / and \ separators
+      var bsIdx = nd.subtitle.lastIndexOf(String.fromCharCode(92));
+      var fsIdx = nd.subtitle.lastIndexOf('/');
+      var sepIdx = Math.max(bsIdx, fsIdx);
+      var text = sepIdx >= 0 ? nd.subtitle.slice(sepIdx + 1) : nd.subtitle;
+      if (text.length > 30) text = '…' + text.slice(-27);
+      ctx.save();
+      ctx.font = '10px system-ui,-apple-system,sans-serif';
+      ctx.fillStyle = isDark ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
+      ctx.restore();
+    });
+  });
+
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
   var HANDLE_HIT_PX = 10;  // hit radius in DOM pixels
   canvas.addEventListener('mousedown', function(e) {
@@ -1443,12 +1530,21 @@ function doSearch(query) {
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;
       if (clusterMap[n.id]) {
-        var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+        var cm = clusterMap[n.id];
+        var matchBg, matchFont;
+        if (cm.isContainer && cm.fillColorHex) {
+          matchBg   = cm.fillColorHex;
+          matchFont = cm.fontColorHex || '#f1f5f9';
+        } else {
+          var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+          matchBg   = cs.matchBg;
+          matchFont = '#f1f5f9';
+        }
         updates.push({id: n.id, color: {
-          background: cs.matchBg, border: '#f59e0b',
-          highlight: {background: cs.matchBg, border: '#f59e0b'},
-          hover: {background: cs.matchBg, border: '#f59e0b'}
-        }, font: {color: '#f1f5f9'}});
+          background: matchBg, border: '#f59e0b',
+          highlight: {background: matchBg, border: '#f59e0b'},
+          hover:     {background: matchBg, border: '#f59e0b'}
+        }, font: {color: matchFont}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: '#f59e0b',
@@ -1458,12 +1554,20 @@ function doSearch(query) {
       }
     } else {
       if (clusterMap[n.id]) {
-        var cd = (clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type).dim;
-        updates.push({id: n.id, color: {
-          background: cd.background, border: cd.border,
-          highlight: {background: cd.background, border: cd.border},
-          hover: {background: cd.background, border: cd.border}
-        }, font: {color: '#6b7280'}});
+        var cm2 = clusterMap[n.id];
+        var dimColor;
+        if (cm2.isContainer && cm2.fillColorHex) {
+          var dimmed = _darkenHex(cm2.fillColorHex, 35);
+          dimColor = {background: dimmed, border: dimmed,
+                      highlight: {background: dimmed, border: dimmed},
+                      hover:     {background: dimmed, border: dimmed}};
+        } else {
+          var cd = (cm2.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type).dim;
+          dimColor = {background: cd.background, border: cd.border,
+                      highlight: {background: cd.background, border: cd.border},
+                      hover:     {background: cd.background, border: cd.border}};
+        }
+        updates.push({id: n.id, color: dimColor, font: {color: '#6b7280'}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: col.bd,
@@ -1487,7 +1591,12 @@ function clearSearch() {
   var col = nodeColors();
   nodesDataset.update(nodesDataset.get().map(function(n) {
     if (clusterMap[n.id]) {
-      var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+      var cm = clusterMap[n.id];
+      if (cm.isContainer && cm.fillColorHex) {
+        var ns = _containerNodeStyle(cm.fillColorHex);
+        return {id: n.id, color: ns.color, font: {color: ns.fontColor}};
+      }
+      var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
       return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
     }
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
@@ -1627,12 +1736,88 @@ class SingleGraphRenderer:
                 "w": node.width,
                 "h": node.height,
                 "label": self._container_label(node),
+                "fillColor": self._container_fill_color(node),
             }
             for node in doc.nodes
             if "ToolContainer" in node.tool_type and node.width > 0 and node.height > 0
         ]
 
         return nodes_json, edges_json, config_map, containers_json
+
+    def _container_fill_color(self, node: AlteryxNode) -> str | None:
+        """Return '#rrggbb' extracted from container config, or None if absent/white.
+
+        Alteryx stores container color inside the <Style> element's attributes:
+          <Style FillColor="xxx" TextColor="xxx" BorderColor="xxx" .../>
+        parsed as config["Style"]["@FillColor"].
+        Value may be hex (#RRGGBB, AARRGGBB) or a decimal ARGB integer.
+
+        Fallback: <Tint> (Qt ARGB32 int), <FillColor> hex string.
+        """
+        config = node.config
+
+        def _hex_or_int_to_rgb(raw: str) -> str | None:
+            raw = raw.strip().lstrip("#")
+            if not raw:
+                return None
+            # 8-char hex AARRGGBB → take RGB part
+            if len(raw) == 8 and all(c in "0123456789abcdefABCDEF" for c in raw):
+                return f"#{raw[2:8].lower()}"
+            # 6-char hex RRGGBB
+            if len(raw) == 6 and all(c in "0123456789abcdefABCDEF" for c in raw):
+                return f"#{raw.lower()}"
+            # Decimal integer → ARGB32
+            try:
+                val = int(raw)
+                if val > 0:
+                    r = (val >> 16) & 0xFF
+                    g = (val >> 8) & 0xFF
+                    b = val & 0xFF
+                    return f"#{r:02x}{g:02x}{b:02x}"
+            except ValueError:
+                pass
+            return None
+
+        # Primary: Style/@FillColor attribute
+        style_entry = config.get("Style")
+        if isinstance(style_entry, dict):
+            fill_attr = style_entry.get("@FillColor", "")
+            if fill_attr:
+                result = _hex_or_int_to_rgb(fill_attr)
+                if result:
+                    return result
+            # Fallback: Style as plain integer index (old format)
+            text = style_entry.get("#text", "").strip()
+            try:
+                style_int = int(text)
+                if style_int > 9:
+                    return _hex_or_int_to_rgb(text)
+                _STYLE_COLORS: dict[int, str] = {
+                    1: "#dbeafe", 2: "#dcfce7", 3: "#fef9c3",
+                    4: "#ffedd5", 5: "#fce7f3", 6: "#ede9fe",
+                    7: "#d1fae5", 8: "#e0f2fe", 9: "#fee2e2",
+                }
+                return _STYLE_COLORS.get(style_int)
+            except ValueError:
+                pass
+
+        # Tint: Qt ARGB32 packed integer
+        tint_entry = config.get("Tint")
+        if tint_entry:
+            raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
+            result = _hex_or_int_to_rgb(raw)
+            if result:
+                return result
+
+        # FillColor: top-level hex string (some versions)
+        fill_entry = config.get("FillColor") or config.get("fillColor")
+        if fill_entry:
+            raw = fill_entry.get("#text", "") if isinstance(fill_entry, dict) else str(fill_entry)
+            result = _hex_or_int_to_rgb(raw)
+            if result:
+                return result
+
+        return None
 
     def _container_label(self, node: AlteryxNode) -> str:
         caption_entry = node.config.get("Caption", {})
@@ -1644,7 +1829,7 @@ class SingleGraphRenderer:
 
     def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]
-        return {
+        result: dict[str, Any] = {
             "id": node_id,
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
@@ -1652,6 +1837,18 @@ class SingleGraphRenderer:
             "x": node.x,
             "y": node.y,
         }
+        subtitle = self._node_subtitle(node)
+        if subtitle:
+            result["subtitle"] = subtitle
+        return result
+
+    def _node_subtitle(self, node: AlteryxNode) -> str | None:
+        """Return the File path from config for input/output nodes, else None."""
+        file_entry = node.config.get("File")
+        if file_entry is None:
+            return None
+        raw = file_entry.get("#text", "") if isinstance(file_entry, dict) else str(file_entry)
+        return raw.strip() or None
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
         """Return config dict excluding XML attribute keys (@ prefix)."""
