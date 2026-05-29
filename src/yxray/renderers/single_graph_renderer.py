@@ -626,7 +626,8 @@ function recollapseGroup(groupKey) {
   group.memberIds.forEach(function(mid) { delete expandedGroups[mid]; });
   delete groupMembers[groupKey];
 
-  network.fit({animation: true});
+  var cPos = centroid(group.memberIds);
+  network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
 function expandCluster(cid) {
@@ -701,7 +702,8 @@ function expandCluster(cid) {
     }
   });
 
-  network.fit({animation: true});
+  var cPos = centroid(expandedMemberIds);
+  network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
 // ── Network init ──────────────────────────────────────────────────────────
