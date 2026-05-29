@@ -728,12 +728,58 @@ function initNetwork() {
   network.fit();
 
   // Draw ToolContainer boundaries behind all nodes/edges.
+  // Bounds are computed dynamically from the CURRENT vis-network positions of
+  // each container's members, so the border:
+  //  - shrinks to wrap a single cluster node when collapsed
+  //  - expands to wrap all members when expanded
+  //  - covers the full nested set for parent containers (all nodes whose
+  //    initial canvas position fell inside the container's XML bounds)
+  var CONT_PAD_X = 60, CONT_PAD_Y = 36, CONT_R = 10, CONT_HIT = 8;
   network.on('beforeDrawing', function(ctx) {
     if (CONTAINERS_DATA.length === 0) return;
     ctx.save();
+
     CONTAINERS_DATA.forEach(function(c) {
-      var r = 10;
-      var x = c.x, y = c.y, w = c.w, h = c.h;
+      // 1. Find original node IDs whose initial position falls inside this container.
+      //    Using initial positions (NODES_DATA) so membership is stable.
+      var memberIds = [];
+      NODES_DATA.forEach(function(nd) {
+        if (nd.x >= c.x - CONT_HIT && nd.x <= c.x + c.w + CONT_HIT &&
+            nd.y >= c.y - CONT_HIT && nd.y <= c.y + c.h + CONT_HIT) {
+          memberIds.push(nd.id);
+        }
+      });
+      if (memberIds.length === 0) return;
+
+      // 2. Resolve each member to its current DataSet representative
+      //    (handles type-clustered and container-clustered states).
+      var reps = [];
+      memberIds.forEach(function(nid) {
+        var rep = resolveNode(nid);
+        if (rep !== null && reps.indexOf(rep) === -1) reps.push(rep);
+      });
+      if (reps.length === 0) return;
+
+      // 3. Get current vis-network positions and compute bounding box.
+      var positions = network.getPositions(reps);
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      var hasAny = false;
+      reps.forEach(function(id) {
+        var pos = positions[id];
+        if (!pos) return;
+        hasAny = true;
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x);
+        maxY = Math.max(maxY, pos.y);
+      });
+      if (!hasAny) return;
+
+      var x = minX - CONT_PAD_X, y = minY - CONT_PAD_Y;
+      var w = maxX - minX + CONT_PAD_X * 2;
+      var h = maxY - minY + CONT_PAD_Y * 2;
+      var r = CONT_R;
+
       ctx.beginPath();
       ctx.moveTo(x + r, y);
       ctx.lineTo(x + w - r, y);
