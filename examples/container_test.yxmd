@@ -12,7 +12,7 @@
     <!-- ToolContainer node (visual grouping element, no data connections) -->
     <Node ToolID="10">
       <GuiSettings Plugin="AlteryxBasePluginsGui.ToolContainer.ToolContainer">
-        <Position x="280" y="60"/>
+        <Position x="162" y="36" width="432" height="144"/>
       </GuiSettings>
       <Properties>
         <Configuration>
@@ -55,7 +55,7 @@
     <!-- Second container: 3 consecutive Summarize nodes -->
     <Node ToolID="20">
       <GuiSettings Plugin="AlteryxBasePluginsGui.ToolContainer.ToolContainer">
-        <Position x="820" y="60"/>
+        <Position x="648" y="36" width="432" height="144"/>
       </GuiSettings>
       <Properties>
         <Configuration>
