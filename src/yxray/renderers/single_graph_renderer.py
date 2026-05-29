@@ -433,7 +433,12 @@ function buildContainerClusters() {
     }
   });
 
-  if (Object.keys(containerGroups).length === 0) return;
+  if (Object.keys(containerGroups).length === 0) {
+    console.log('[yxray] buildContainerClusters: no containerId found on any node — skipping');
+    return;
+  }
+  console.log('[yxray] containerGroups:', JSON.stringify(containerGroups));
+  console.log('[yxray] containerLabels:', JSON.stringify(containerLabels));
 
   // Step 2: identify root containers.
   // A container is "nested" if its own ID appears as a member of another container.
@@ -447,7 +452,11 @@ function buildContainerClusters() {
     return !allMemberIds[cid];
   });
 
-  if (rootContainerIds.length === 0) return;
+  console.log('[yxray] rootContainerIds:', rootContainerIds);
+  if (rootContainerIds.length === 0) {
+    console.log('[yxray] no root containers found — all containers are nested inside others');
+    return;
+  }
 
   // Recursively collect all non-container descendant node IDs under a container.
   // A member is treated as a nested container if its ID is a key in containerGroups.
@@ -482,7 +491,11 @@ function buildContainerClusters() {
     clusterDefs.push({ cid: clusterId, memberIds: memberIds, containerNodeId: containerId, label: label, caption: caption });
   });
 
-  if (clusterDefs.length === 0) return;
+  console.log('[yxray] clusterDefs:', clusterDefs.map(function(c){ return {cid:c.cid, members:c.memberIds.length}; }));
+  if (clusterDefs.length === 0) {
+    console.log('[yxray] no container clusters to create (all root containers had 0 leaf members)');
+    return;
+  }
 
   // Step 4: remove all data members and ALL ToolContainer nodes from DataSet
   var removeSet = {};
