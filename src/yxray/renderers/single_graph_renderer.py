@@ -298,6 +298,8 @@ var _memoPendingPos = null;  // {x,y} for new memo placement
 var _connectMode = false;    // true while waiting for user to click a target node
 var _connectSourceId = null; // memo ID initiating the connection
 var MEMO_STORAGE_KEY = 'yxray-memos-' + (document.title || 'default');
+var _memoHandles = {};   // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
+var _resizeState = null; // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
 
 var options = {
   physics: {enabled: false},
@@ -768,8 +770,8 @@ function expandCluster(cid) {
 }
 
 // ── Memo helpers ──────────────────────────────────────────────────────────
-function _memoNodeDef(id, text, x, y) {
-  return {
+function _memoNodeDef(id, text, x, y, w, h) {
+  var def = {
     id: id,
     label: text || '(memo)',
     title: 'Memo — double-click to edit',
@@ -784,6 +786,11 @@ function _memoNodeDef(id, text, x, y) {
     borderWidth: 2,
     shapeProperties: {borderRadius: 4}
   };
+  if (w && h) {
+    def.widthConstraint  = {minimum: w, maximum: w};
+    def.heightConstraint = {minimum: h, maximum: h};
+  }
+  return def;
 }
 
 function saveMemos() {
@@ -809,7 +816,7 @@ function loadMemos() {
         var numMatch = id.match(/^memo:(\d+)$/);
         if (numMatch) { var n = parseInt(numMatch[1]); if (n > memoCounter) memoCounter = n; }
         memoData[id] = m;
-        nodesDataset.add(_memoNodeDef(id, m.text, m.x, m.y));
+        nodesDataset.add(_memoNodeDef(id, m.text, m.x, m.y, m.w, m.h));
       });
     }
     if (saved.edges) {
@@ -878,7 +885,8 @@ function enterConnectMode(fromId) {
 function exitConnectMode() {
   _connectMode = false;
   _connectSourceId = null;
-  document.getElementById('graph-canvas').style.cursor = '';
+  var cv = document.getElementById('graph-canvas');
+  if (cv && !cv._memoResizeCursor) cv.style.cursor = '';
   document.getElementById('connect-mode-hint').style.display = 'none';
 }
 
@@ -1116,6 +1124,106 @@ function initNetwork() {
       ctx.fillText(group.toolType, x + 8, y - 5);
     });
     ctx.restore();
+  });
+
+  // Draw resize handles (small orange squares at bottom-right corner) for all memo nodes.
+  // Also refreshes _memoHandles used for hit-testing in the mousedown listener.
+  network.on('afterDrawing', function(ctx) {
+    _memoHandles = {};
+    Object.keys(memoData).forEach(function(memoId) {
+      if (!nodesDataset.get(memoId)) return;
+      var bb = network.getBoundingBox(memoId);
+      if (!bb) return;
+      _memoHandles[memoId] = {x: bb.right, y: bb.bottom};
+      ctx.save();
+      ctx.fillStyle = '#ca8a04';
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.rect(bb.right - 5, bb.bottom - 5, 8, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    });
+  });
+
+  // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
+  var HANDLE_HIT_PX = 10;  // hit radius in DOM pixels
+  canvas.addEventListener('mousedown', function(e) {
+    if (Object.keys(_memoHandles).length === 0) return;
+    var rect = canvas.getBoundingClientRect();
+    var domX = e.clientX - rect.left;
+    var domY = e.clientY - rect.top;
+    var scale = network.getScale();
+    var canvasPos = network.DOMtoCanvas({x: domX, y: domY});
+    var hitR = HANDLE_HIT_PX / scale;
+    var found = null;
+    Object.keys(_memoHandles).forEach(function(memoId) {
+      var h = _memoHandles[memoId];
+      if (Math.abs(canvasPos.x - h.x) <= hitR && Math.abs(canvasPos.y - h.y) <= hitR) found = memoId;
+    });
+    if (!found) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var bb = network.getBoundingBox(found);
+    _resizeState = {
+      memoId: found,
+      startDomX: domX, startDomY: domY,
+      startW: bb.right - bb.left,
+      startH: bb.bottom - bb.top
+    };
+  }, true);  // capture phase
+
+  // Cursor feedback when hovering over a resize handle
+  canvas.addEventListener('mousemove', function(e) {
+    if (_resizeState || _connectMode) return;
+    if (Object.keys(_memoHandles).length === 0) { return; }
+    var rect = canvas.getBoundingClientRect();
+    var domX = e.clientX - rect.left;
+    var domY = e.clientY - rect.top;
+    var scale = network.getScale();
+    var canvasPos = network.DOMtoCanvas({x: domX, y: domY});
+    var hitR = HANDLE_HIT_PX / scale;
+    var onHandle = Object.keys(_memoHandles).some(function(id) {
+      var h = _memoHandles[id];
+      return Math.abs(canvasPos.x - h.x) <= hitR && Math.abs(canvasPos.y - h.y) <= hitR;
+    });
+    if (!canvas._memoResizeCursor && onHandle) {
+      canvas._memoResizeCursor = true;
+      canvas.style.cursor = 'se-resize';
+    } else if (canvas._memoResizeCursor && !onHandle) {
+      canvas._memoResizeCursor = false;
+      canvas.style.cursor = '';
+    }
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!_resizeState) return;
+    var rect = canvas.getBoundingClientRect();
+    var dx = (e.clientX - rect.left) - _resizeState.startDomX;
+    var dy = (e.clientY - rect.top)  - _resizeState.startDomY;
+    var scale = network.getScale();
+    var newW = Math.max(60, _resizeState.startW + dx / scale);
+    var newH = Math.max(28, _resizeState.startH + dy / scale);
+    nodesDataset.update({
+      id: _resizeState.memoId,
+      widthConstraint:  {minimum: newW, maximum: newW},
+      heightConstraint: {minimum: newH, maximum: newH}
+    });
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!_resizeState) return;
+    var rs = _resizeState;
+    _resizeState = null;
+    canvas.style.cursor = '';
+    canvas._memoResizeCursor = false;
+    var bb = network.getBoundingBox(rs.memoId);
+    if (memoData[rs.memoId] && bb) {
+      memoData[rs.memoId].w = bb.right - bb.left;
+      memoData[rs.memoId].h = bb.bottom - bb.top;
+      saveMemos();
+    }
   });
 }
 
