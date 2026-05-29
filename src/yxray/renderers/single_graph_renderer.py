@@ -199,6 +199,7 @@ _HTML_TEMPLATE = """\
 var NODES_DATA = {{ nodes_json | safe }};
 var EDGES_DATA = {{ edges_json | safe }};
 var CONFIG_MAP = {{ config_map_json | safe }};
+var CONTAINERS_DATA = {{ containers_json | safe }};
 
 // ── vis-network setup ─────────────────────────────────────────────────────
 var network = null;
@@ -442,11 +443,8 @@ function buildContainerClusters() {
   });
 
   if (Object.keys(containerGroups).length === 0) {
-    console.log('[yxray] buildContainerClusters: no containerId found on any node — skipping');
     return;
   }
-  console.log('[yxray] containerGroups:', JSON.stringify(containerGroups));
-  console.log('[yxray] containerLabels:', JSON.stringify(containerLabels));
 
   // Step 2: identify root containers.
   // A container is "nested" if its own ID appears as a member of another container.
@@ -460,9 +458,7 @@ function buildContainerClusters() {
     return !allMemberIds[cid];
   });
 
-  console.log('[yxray] rootContainerIds:', rootContainerIds);
   if (rootContainerIds.length === 0) {
-    console.log('[yxray] no root containers found — all containers are nested inside others');
     return;
   }
 
@@ -499,9 +495,7 @@ function buildContainerClusters() {
     clusterDefs.push({ cid: clusterId, memberIds: memberIds, containerNodeId: containerId, label: label, caption: caption });
   });
 
-  console.log('[yxray] clusterDefs:', clusterDefs.map(function(c){ return {cid:c.cid, members:c.memberIds.length}; }));
   if (clusterDefs.length === 0) {
-    console.log('[yxray] no container clusters to create (all root containers had 0 leaf members)');
     return;
   }
 
@@ -772,6 +766,41 @@ function initNetwork() {
 
   network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
   network.fit();
+
+  // Draw ToolContainer boundaries behind all nodes/edges.
+  network.on('beforeDrawing', function(ctx) {
+    if (CONTAINERS_DATA.length === 0) return;
+    ctx.save();
+    CONTAINERS_DATA.forEach(function(c) {
+      var r = 10;
+      var x = c.x, y = c.y, w = c.w, h = c.h;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y,     x + w, y + r,     r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x,     y + h, x,     y + h - r, r);
+      ctx.lineTo(x,     y + r);
+      ctx.arcTo(x,     y,     x + r, y,          r);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(20,184,166,0.06)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20,184,166,0.65)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (c.label) {
+        ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(94,234,212,0.9)';
+        ctx.fillText(c.label, x + 8, y + 16);
+      }
+    });
+    ctx.restore();
+  });
+
   network.on('click', function(params) {
     if (params.nodes.length === 0) { closePanel(); return; }
     var nodeId = params.nodes[0];
@@ -1133,7 +1162,7 @@ class SingleGraphRenderer:
 
     def render(self, doc: WorkflowDoc) -> str:
         """WorkflowDoc → standalone HTML string."""
-        nodes_json, edges_json, config_map = self._build_graph_data(doc)
+        nodes_json, edges_json, config_map, containers_json = self._build_graph_data(doc)
         vis_js = load_vis_js()
         title = pathlib.Path(doc.filepath).name
 
@@ -1147,12 +1176,13 @@ class SingleGraphRenderer:
             nodes_json=json.dumps(nodes_json),
             edges_json=json.dumps(edges_json),
             config_map_json=json.dumps(config_map),
+            containers_json=json.dumps(containers_json),
             vis_js=vis_js,
         )
 
     def _build_graph_data(
         self, doc: WorkflowDoc
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
         data_nodes = [n for n in doc.nodes if "ToolContainer" not in n.tool_type]
         data_node_ids = {int(n.tool_id) for n in data_nodes}
 
@@ -1174,7 +1204,27 @@ class SingleGraphRenderer:
             for node in data_nodes
         }
 
-        return nodes_json, edges_json, config_map
+        containers_json: list[dict[str, Any]] = [
+            {
+                "x": node.x,
+                "y": node.y,
+                "w": node.width,
+                "h": node.height,
+                "label": self._container_label(node),
+            }
+            for node in doc.nodes
+            if "ToolContainer" in node.tool_type and node.width > 0 and node.height > 0
+        ]
+
+        return nodes_json, edges_json, config_map, containers_json
+
+    def _container_label(self, node: AlteryxNode) -> str:
+        caption_entry = node.config.get("Caption", {})
+        if isinstance(caption_entry, dict):
+            text = caption_entry.get("#text", "")
+        else:
+            text = str(caption_entry) if caption_entry else ""
+        return text or f"Container ({int(node.tool_id)})"
 
     def _vis_node(self, node_id: int, node: AlteryxNode) -> dict[str, Any]:
         short_type = node.tool_type.split(".")[-1]

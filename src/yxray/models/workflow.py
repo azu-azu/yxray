@@ -16,6 +16,8 @@ class AlteryxNode:
     tool_type: str
     x: float
     y: float
+    width: float = 0.0
+    height: float = 0.0
     config: dict[str, Any] = field(default_factory=dict)
     """Parsed tool configuration as flat key/value map.
     Set once at parse time. Phase 3 (normalizer) iterates this dict to strip
