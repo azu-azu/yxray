@@ -77,6 +77,9 @@ _HTML_TEMPLATE = """\
     }
     .header-title { font-size: 15px; font-weight: 600; color: var(--text); }
     .header-meta { font-size: 12px; color: var(--text-muted); }
+    .header-hints { font-size: 11px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+    .hint-item { opacity: 0.7; }
+    .hint-sep { opacity: 0.35; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .ctrl-btn {
       padding: 5px 12px;
@@ -209,6 +212,13 @@ _HTML_TEMPLATE = """\
     <div>
       <div class="header-title">{{ title }}</div>
       <div class="header-meta">{{ node_count }} nodes &middot; {{ edge_count }} connections</div>
+      <div class="header-hints">
+        <span class="hint-item">&#128203; 空白をダブルクリック &rarr; メモ追加</span>
+        <span class="hint-sep">&middot;</span>
+        <span class="hint-item">&#128308; 赤いクラスタをダブルクリック &rarr; 展開</span>
+        <span class="hint-sep">&middot;</span>
+        <span class="hint-item">&#128203; メモをダブルクリック &rarr; 編集</span>
+      </div>
     </div>
     <div class="header-right">
       <div class="search-wrap">
