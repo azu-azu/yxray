@@ -376,7 +376,7 @@ function buildClusters(skipSet) {
         highlight: {background: '#5b21b6', border: '#7c3aed'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
-      font: {color: '#000000', size: 13}
+      font: {color: '#f1f5f9', size: 13}
     });
   });
 
@@ -499,7 +499,7 @@ function buildContainerClusters(membership) {
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
       color: CLUSTER_STYLE.container.normal,
-      font: {color: '#000000', size: 13}
+      font: {color: '#f1f5f9', size: 13}
     });
   });
 
@@ -583,7 +583,7 @@ function recollapseGroup(groupKey) {
     borderDashes: [5, 3],
     x: cPos.x, y: cPos.y,
     color: cStyle.normal,
-    font: {color: '#000000', size: 13}
+    font: {color: '#f1f5f9', size: 13}
   });
 
   // Re-derive bridge edges from EDGES_DATA (same logic as expandCluster edge step)
@@ -1055,7 +1055,7 @@ function doSearch(query) {
           background: cs.matchBg, border: '#f59e0b',
           highlight: {background: cs.matchBg, border: '#f59e0b'},
           hover: {background: cs.matchBg, border: '#f59e0b'}
-        }, font: {color: '#000000'}});
+        }, font: {color: '#f1f5f9'}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: '#f59e0b',
@@ -1095,7 +1095,7 @@ function clearSearch() {
   nodesDataset.update(nodesDataset.get().map(function(n) {
     if (clusterMap[n.id]) {
       var cs = clusterMap[n.id].isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-      return {id: n.id, color: cs.normal, font: {color: '#000000'}};
+      return {id: n.id, color: cs.normal, font: {color: '#f1f5f9'}};
     }
     return {id: n.id, color: {
       background: col.bg, border: col.bd,
