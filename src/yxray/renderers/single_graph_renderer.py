@@ -996,17 +996,9 @@ function initNetwork() {
       ctx.stroke();
       ctx.setLineDash([]);
       if (c.label) {
-        if (clusteredContainerIdx[idx]) {
-          // Clustered child container: small label above the border
-          ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
-          ctx.fillStyle = 'rgba(249,168,212,0.7)';
-          ctx.fillText(c.label, x + 8, y - 4);
-        } else {
-          // Non-clustered parent container: large label with 【】above the border
-          ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
-          ctx.fillStyle = 'rgba(249,168,212,0.95)';
-          ctx.fillText('【' + c.label + '】', x + 10, y - 6);
-        }
+        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(249,168,212,0.95)';
+        ctx.fillText(c.label, x + 10, y - 6);
       }
     });
     ctx.restore();
