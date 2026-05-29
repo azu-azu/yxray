@@ -414,9 +414,14 @@ function buildClusters(skipSet) {
 // type-based clusters (purple #4c1d95).
 
 function buildContainerClusters() {
-  // Step 1: collect containerLabels and direct-member groups from raw NODES_DATA.
-  var containerLabels = {};  // containerNodeId -> caption string
-  var containerGroups = {};  // containerNodeId -> [direct member nodeIds (data + nested containers)]
+  // Step 1: collect containerLabels (optional captions) and direct-member groups.
+  // containerGroups is keyed by container node ID (= ToolContainerID value on members).
+  // containerLabels is only populated when the ToolContainer node itself appears in
+  // NODES_DATA (i.e. filter_ui_tools=False or AlteryxBasePluginsGui.* variant).
+  // The clustering logic does NOT require containerLabels — it falls back to
+  // "Container <id>" labels and uses containerGroups membership to detect nesting.
+  var containerLabels = {};  // containerNodeId -> caption string (best-effort)
+  var containerGroups = {};  // containerNodeId -> [direct member nodeIds]
 
   NODES_DATA.forEach(function(n) {
     if (n.containerLabel !== undefined) {
@@ -430,29 +435,27 @@ function buildContainerClusters() {
 
   if (Object.keys(containerGroups).length === 0) return;
 
-  // Step 2: identify root containers — those whose own node has no containerId.
-  // Nested container nodes (containerId set) are collected under their parent and
-  // are NOT turned into separate clusters; only root containers become clusters.
-  var nestedContainerNodeIds = {};
-  NODES_DATA.forEach(function(n) {
-    if (n.containerLabel !== undefined &&
-        n.containerId !== null && n.containerId !== undefined) {
-      nestedContainerNodeIds[n.id] = true;
-    }
+  // Step 2: identify root containers.
+  // A container is "nested" if its own ID appears as a member of another container.
+  // This works regardless of whether ToolContainer nodes are present in NODES_DATA.
+  var allMemberIds = {};
+  Object.keys(containerGroups).forEach(function(k) {
+    containerGroups[parseInt(k)].forEach(function(mid) { allMemberIds[mid] = true; });
   });
 
   var rootContainerIds = Object.keys(containerGroups).map(Number).filter(function(cid) {
-    return !nestedContainerNodeIds[cid];
+    return !allMemberIds[cid];
   });
 
   if (rootContainerIds.length === 0) return;
 
   // Recursively collect all non-container descendant node IDs under a container.
+  // A member is treated as a nested container if its ID is a key in containerGroups.
   function collectLeafMembers(containerId) {
     var result = [];
     (containerGroups[containerId] || []).forEach(function(mid) {
-      if (containerLabels[mid] !== undefined) {
-        // mid is a nested ToolContainer node — recurse into it
+      if (containerGroups[mid] !== undefined) {
+        // mid is a nested container — recurse
         result = result.concat(collectLeafMembers(mid));
       } else {
         result.push(mid);
@@ -461,11 +464,13 @@ function buildContainerClusters() {
     return result;
   }
 
-  // Step 3: build cluster defs (root containers only) and memberToCluster map
+  // Step 3: build cluster defs (root containers only) and memberToCluster map.
+  // allContainerNodeIds covers every container node ID (keys of containerGroups) so
+  // their edges are dropped — whether or not the node is present in the DataSet.
   var clusterDefs = [];
-  var memberToCluster = {};   // data nodeId -> root clusterId
-  var allContainerNodeIds = {};  // every ToolContainer node — no data role, edges dropped
-  Object.keys(containerLabels).forEach(function(k) { allContainerNodeIds[parseInt(k)] = true; });
+  var memberToCluster = {};
+  var allContainerNodeIds = {};
+  Object.keys(containerGroups).forEach(function(k) { allContainerNodeIds[parseInt(k)] = true; });
 
   rootContainerIds.forEach(function(containerId) {
     var memberIds = collectLeafMembers(containerId);
