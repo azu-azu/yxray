@@ -1547,10 +1547,15 @@ function baseNodeColorUpdate(n, col) {
 }
 
 function doSearch(query) {
-  query = query.trim().toLowerCase();
+  query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
   document.getElementById('search-clear-btn').style.display = 'block';
+
+  var re;
+  try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
+  var q = query.toLowerCase();
+  function testStr(s) { return re ? re.test(s) : s.toLowerCase().indexOf(q) !== -1; }
 
   var col = nodeColors();
   var allNodes = nodesDataset.get();
@@ -1558,17 +1563,16 @@ function doSearch(query) {
   var firstMatch = null;
 
   allNodes.forEach(function(n) {
-    // Memo nodes: dim when not matching, restore when matching, never touch colors otherwise
+    // Memo nodes: match on label text only
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
-      var mLabel = (n.label || '').toLowerCase();
-      var mMatch = mLabel.indexOf(query) !== -1;
+      var mMatch = testStr(n.label || '');
       updates.push({id: n.id, font: {color: mMatch ? '#1c1917' : '#a8a29e'}});
       if (mMatch && firstMatch === null) firstMatch = n.id;
       return;
     }
-    var idStr  = String(n.id).toLowerCase();
-    var label  = (n.label || '').toLowerCase();
-    var matches = idStr === query || label.indexOf(query) !== -1;
+    // Regular nodes: search id, label, and flattened config values
+    var configStr = JSON.stringify(CONFIG_MAP[n.id] || {});
+    var matches = testStr(String(n.id)) || testStr(n.label || '') || testStr(configStr);
 
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;

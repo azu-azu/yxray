@@ -52,6 +52,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 <div id="split-controls" class="split-controls">
   <button id="fit-both-btn" class="ctrl-btn" onclick="if(networkLeft)networkLeft.fit();if(networkRight)networkRight.fit();">Fit Both</button>
   <button id="split-fullscreen-btn" class="ctrl-btn">Fullscreen</button>
+  <button id="split-toggle-changes" class="ctrl-btn">Show Only Changes</button>
   <span class="graph-legend">
     <span class="legend-dot legend-dot-added"></span>Added
     <span class="legend-dot legend-dot-removed"></span>Removed
@@ -68,6 +69,10 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
     <button id="fit-btn" class="ctrl-btn">Fit to Screen</button>
     <button id="fullscreen-btn" class="ctrl-btn">Fullscreen</button>
     <button id="toggle-changes" class="ctrl-btn">Show Only Changes</button>
+    <div class="graph-search-wrap">
+      <input type="text" id="graph-search-input" class="graph-search-input" placeholder="Search…" autocomplete="off" spellcheck="false" />
+      <button class="graph-search-clear" id="graph-search-clear" aria-label="Clear">&times;</button>
+    </div>
     <span class="graph-legend">
       <span data-legend="added" class="legend-dot legend-dot-added"></span>Added
       <span data-legend="removed" class="legend-dot legend-dot-removed"></span>Removed
@@ -344,6 +349,12 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   .split-view { flex-direction: column; height: auto; }
   .split-view > div { width: 100%; }
 }
+.graph-search-wrap { position: relative; display: flex; align-items: center; }
+.graph-search-input { width: 150px; padding: 5px 24px 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg); color: var(--text); outline: none; transition: width 0.2s; }
+.graph-search-input:focus { border-color: var(--accent-conn); width: 210px; }
+.graph-search-input::placeholder { color: var(--text-muted); }
+.graph-search-clear { position: absolute; right: 5px; background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text-muted); padding: 0; line-height: 1; display: none; }
+.graph-search-clear:hover { color: var(--text); }
 </style>
 <script>
 (function() {
@@ -466,6 +477,7 @@ document.getElementById('toggle-changes').addEventListener('click', function() {
   edgesDataset.update(GRAPH_EDGES.map(function(e) {
     return {id: e.id, hidden: hiddenIds.has(e.from) || hiddenIds.has(e.to)};
   }));
+  if (network) network.fit({animation: true});
 });
 
 // Fit-to-screen
@@ -583,14 +595,56 @@ function formatVal(v) {
 
 // Escape key and overlay click
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeSidePanel();
+  if (e.key === 'Escape') { closeSidePanel(); clearGraphSearch(); }
 });
 document.getElementById('graph-overlay').addEventListener('click', function() {
   closeSidePanel();
 });
 
+// ── Graph search (overlay view) ───────────────────────────────────────────
+function doGraphSearch(q) {
+  var clearBtn = document.getElementById('graph-search-clear');
+  clearBtn.style.display = q ? 'block' : 'none';
+  if (!q) { applyThemeColors(); return; }
+  var re;
+  try { re = new RegExp(q, 'i'); } catch(e) { re = null; }
+  var dim = isDark()
+    ? {bg: '#1e293b', bd: '#334155', font: '#475569'}
+    : {bg: '#f1f5f9', bd: '#cbd5e1', font: '#94a3b8'};
+  var updates = [];
+  var firstMatch = null;
+  GRAPH_NODES.forEach(function(n) {
+    var hit = re
+      ? (re.test(n.label || '') || re.test(String(n.id)) || re.test(n.title || ''))
+      : ((n.label || '').toLowerCase().indexOf(q.toLowerCase()) !== -1 || String(n.id) === q);
+    if (!hit) {
+      updates.push({id: n.id, color: {background: dim.bg, border: dim.bd,
+        highlight: {background: dim.bg, border: dim.bd}}, font: {color: dim.font}});
+    } else if (firstMatch === null) {
+      firstMatch = n.id;
+    }
+  });
+  nodesDataset.update(updates);
+  if (firstMatch !== null && network) {
+    network.focus(firstMatch, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+  }
+}
+function clearGraphSearch() {
+  document.getElementById('graph-search-input').value = '';
+  doGraphSearch('');
+}
+document.getElementById('graph-search-input').addEventListener('input', function() {
+  doGraphSearch(this.value.trim());
+});
+document.getElementById('graph-search-clear').addEventListener('click', function() {
+  clearGraphSearch();
+  document.getElementById('graph-search-input').focus();
+});
+
 // ── Section C: Split network + view switcher ──────────────────────────────
 var networkLeft = null, networkRight = null;
+var nodesDatasetLeft = null, nodesDatasetRight = null;
+var edgesDatasetLeft = null, edgesDatasetRight = null;
 var syncingViewport = false;
 
 var SPLIT_OPTIONS = {
@@ -612,8 +666,12 @@ function initSplitNetworks() {
   var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to); });
   var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to); });
 
-  networkLeft = new vis.Network(leftContainer, {nodes: new vis.DataSet(NODES_OLD), edges: new vis.DataSet(leftEdges)}, SPLIT_OPTIONS);
-  networkRight = new vis.Network(rightContainer, {nodes: new vis.DataSet(NODES_NEW), edges: new vis.DataSet(rightEdges)}, SPLIT_OPTIONS);
+  nodesDatasetLeft = new vis.DataSet(NODES_OLD);
+  edgesDatasetLeft = new vis.DataSet(leftEdges);
+  nodesDatasetRight = new vis.DataSet(NODES_NEW);
+  edgesDatasetRight = new vis.DataSet(rightEdges);
+  networkLeft = new vis.Network(leftContainer, {nodes: nodesDatasetLeft, edges: edgesDatasetLeft}, SPLIT_OPTIONS);
+  networkRight = new vis.Network(rightContainer, {nodes: nodesDatasetRight, edges: edgesDatasetRight}, SPLIT_OPTIONS);
 
   networkLeft.fit();
   networkRight.fit();
@@ -649,6 +707,30 @@ function syncRightToLeft() {
   networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
   syncingViewport = false;
 }
+
+// Show-only-changes toggle for split view
+var splitShowOnlyChanges = false;
+document.getElementById('split-toggle-changes').addEventListener('click', function() {
+  splitShowOnlyChanges = !splitShowOnlyChanges;
+  this.textContent = splitShowOnlyChanges ? 'Show All Nodes' : 'Show Only Changes';
+  if (!nodesDatasetLeft) return;
+  var hiddenOld = new Set(
+    splitShowOnlyChanges
+      ? NODES_OLD.filter(function(n) { return n.status === 'unchanged'; }).map(function(n) { return n.id; })
+      : []
+  );
+  var hiddenNew = new Set(
+    splitShowOnlyChanges
+      ? NODES_NEW.filter(function(n) { return n.status === 'unchanged'; }).map(function(n) { return n.id; })
+      : []
+  );
+  nodesDatasetLeft.update(NODES_OLD.map(function(n) { return {id: n.id, hidden: hiddenOld.has(n.id)}; }));
+  edgesDatasetLeft.update(edgesDatasetLeft.get().map(function(e) { return {id: e.id, hidden: hiddenOld.has(e.from) || hiddenOld.has(e.to)}; }));
+  nodesDatasetRight.update(NODES_NEW.map(function(n) { return {id: n.id, hidden: hiddenNew.has(n.id)}; }));
+  edgesDatasetRight.update(edgesDatasetRight.get().map(function(e) { return {id: e.id, hidden: hiddenNew.has(e.from) || hiddenNew.has(e.to)}; }));
+  if (networkLeft) networkLeft.fit({animation: true});
+  if (networkRight) networkRight.fit({animation: true});
+});
 
 function applyThemeColorsToSplit() {
   if (!networkLeft) return;
