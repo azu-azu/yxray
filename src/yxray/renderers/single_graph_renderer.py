@@ -895,7 +895,9 @@ function saveMemos() {
   var edgeArr = Object.keys(AppState.memoEdges).map(function(eid) { return AppState.memoEdges[eid]; });
   try {
     localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify({nodes: AppState.memoData, edges: edgeArr}));
-  } catch(e) {}
+  } catch(e) {
+    console.warn('[yxray] memo save failed:', e);
+  }
 }
 
 function loadMemos() {
@@ -920,7 +922,9 @@ function loadMemos() {
         AppState.memoEdges[eid] = {from: e.from, to: e.to};
       });
     }
-  } catch(e) {}
+  } catch(e) {
+    console.warn('[yxray] memo load failed:', e);
+  }
 }
 
 function openMemoModal(targetId, x, y) {

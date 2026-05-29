@@ -25,7 +25,7 @@ from yxray.models import (
 )
 
 # Excluded field paths (dotted notation) — start empty per research recommendation.
-# Populated as GUID-like fields are discovered from real fixture inspection.
+# TODO: populate from real fixture inspection before v1.0 (e.g. GUID-like Annotation.@Id)
 _EXCLUDED_FIELDS: frozenset[str] = frozenset()
 
 
@@ -90,6 +90,16 @@ def diff(
     )
 
 
+def _strip_deepdiff_root(path: str) -> str:
+    """Strip the leading 'root' prefix and outer brackets from a DeepDiff path.
+
+    Example: "root['key1']['key2']" -> "key1']['key2"
+    """
+    if path.startswith("root"):
+        path = path[4:]
+    return path.strip("[]")
+
+
 def _deepdiff_path_to_dotted(path: str) -> str:
     """Convert a DeepDiff path to dotted notation.
 
@@ -98,12 +108,7 @@ def _deepdiff_path_to_dotted(path: str) -> str:
         "root['Fields'][3]"     -> "Fields"   (numeric indices stripped)
         "root['key']"           -> "key"
     """
-    # Strip leading "root" prefix
-    if path.startswith("root"):
-        path = path[4:]
-
-    # Strip leading/trailing brackets
-    path = path.strip("[]")
+    path = _strip_deepdiff_root(path)
 
     # Split on "][" to get individual parts
     parts = path.split("][")
@@ -134,13 +139,7 @@ def _get_nested_value(config: dict[str, Any], deepdiff_path: str) -> Any:
     Returns:
         The value at the given path, or None if not found.
     """
-    # Strip "root" prefix
-    path = deepdiff_path
-    if path.startswith("root"):
-        path = path[4:]
-
-    # Strip surrounding brackets
-    path = path.strip("[]")
+    path = _strip_deepdiff_root(deepdiff_path)
 
     if not path:
         return config
