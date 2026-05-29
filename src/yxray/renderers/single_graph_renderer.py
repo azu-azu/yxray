@@ -1221,9 +1221,11 @@ function initNetwork() {
       if (!nodesDataset.get(nd.id)) return;  // clustered: skip
       var bb = network.getBoundingBox(nd.id);
       if (!bb) return;
-      // Show only the filename part of the path; truncate if very long
-      var parts = nd.subtitle.replace(/\\/g, '/').split('/');
-      var text = parts[parts.length - 1] || nd.subtitle;
+      // Extract filename from path — handles both / and \ separators
+      var bsIdx = nd.subtitle.lastIndexOf(String.fromCharCode(92));
+      var fsIdx = nd.subtitle.lastIndexOf('/');
+      var sepIdx = Math.max(bsIdx, fsIdx);
+      var text = sepIdx >= 0 ? nd.subtitle.slice(sepIdx + 1) : nd.subtitle;
       if (text.length > 30) text = '…' + text.slice(-27);
       ctx.save();
       ctx.font = '10px system-ui,-apple-system,sans-serif';
