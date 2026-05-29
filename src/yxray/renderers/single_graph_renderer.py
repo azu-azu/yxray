@@ -239,16 +239,6 @@ var groupMembers = {};     // groupKey -> { memberIds, toolType, isContainer, co
 var clusterCounter = 0;
 
 var options = {
-  layout: {
-    hierarchical: {
-      enabled: true,
-      direction: 'LR',
-      sortMethod: 'directed',
-      nodeSpacing: 120,
-      levelSeparation: 220,
-      treeSpacing: 150,
-    }
-  },
   physics: {enabled: false},
   nodes: {
     shape: 'box',
@@ -260,7 +250,7 @@ var options = {
   },
   edges: {
     arrows: {to: {enabled: true, scaleFactor: 0.7, type: 'arrow'}},
-    smooth: {enabled: true, type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4},
+    smooth: {enabled: true, type: 'dynamic'},
     color: {color: '#475569', highlight: '#94a3b8', hover: '#94a3b8'},
     width: 1.5, hoverWidth: 2.5, selectionWidth: 2.5
   },
@@ -1171,6 +1161,8 @@ class SingleGraphRenderer:
             "label": f"{short_type}\n({node_id})",
             "title": node.tool_type,
             "containerId": node.container_id,
+            "x": node.x,
+            "y": node.y,
         }
         if "ToolContainer" in node.tool_type:
             caption_entry = node.config.get("Caption", {})
