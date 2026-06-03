@@ -117,10 +117,16 @@ body {
       <h1 class="header-title">{{ title }}</h1>
       <p class="header-meta">{{ node_count }} nodes &middot; {{ edge_count }} connections</p>
     </div>
-    <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-      <span id="theme-label">Dark</span>
-    </button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="theme-toggle" onclick="openGraph()" aria-label="Open graph">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Graph
+      </button>
+      <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span id="theme-label">Dark</span>
+      </button>
+    </div>
   </div>
 </header>
 <div class="container">
@@ -167,6 +173,10 @@ function setTheme(theme) {
 function toggleTheme() {
     var isLight = document.documentElement.classList.contains('light');
     setTheme(isLight ? 'dark' : 'light');
+}
+
+function openGraph() {
+    window.open(window.location.href.replace(/_report(\\.[^.]+)$/, '_graph$1'));
 }
 
 (function() {

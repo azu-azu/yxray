@@ -947,10 +947,16 @@ body {
       <span class="header-meta-label">After:</span> {{ file_b }}
     </div>
   </div>
-  <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    <span id="theme-label">Dark</span>
-  </button>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="theme-toggle" onclick="openReport()" aria-label="Open report">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Report
+    </button>
+    <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <span id="theme-label">Dark</span>
+    </button>
+  </div>
 </header>
 <script type="application/json" id="diff-data">{{ diff_data_json | safe }}</script>
 <div class="content">
@@ -973,6 +979,10 @@ function setTheme(theme) {
 function toggleTheme() {
     var isLight = document.documentElement.classList.contains('light');
     setTheme(isLight ? 'dark' : 'light');
+}
+
+function openReport() {
+    window.open(window.location.href.replace(/_graph(\\.[^.]+)$/, '_report$1'));
 }
 
 (function() {
