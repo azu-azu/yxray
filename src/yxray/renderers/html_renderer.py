@@ -251,14 +251,6 @@ html.light .tool-row:hover { background: #f1f5f9; }
       <div class="stat-count">{{ summary.added }}</div>
       <span class="sr-only">Added: {{ summary.added }}</span>
     </a>
-    <a href="#heading-removed" onclick="expandSection('removed'); return true;" class="stat-card stat-card-removed">
-      <div class="stat-card-top">
-        <span class="stat-label">Removed</span>
-        <span class="stat-dot"></span>
-      </div>
-      <div class="stat-count">{{ summary.removed }}</div>
-      <span class="sr-only">Removed: {{ summary.removed }}</span>
-    </a>
     <a href="#heading-modified" onclick="expandSection('modified'); return true;" class="stat-card stat-card-modified">
       <div class="stat-card-top">
         <span class="stat-label">Modified</span>
@@ -266,6 +258,14 @@ html.light .tool-row:hover { background: #f1f5f9; }
       </div>
       <div class="stat-count">{{ summary.modified }}</div>
       <span class="sr-only">Modified: {{ summary.modified }}</span>
+    </a>
+    <a href="#heading-removed" onclick="expandSection('removed'); return true;" class="stat-card stat-card-removed">
+      <div class="stat-card-top">
+        <span class="stat-label">Removed</span>
+        <span class="stat-dot"></span>
+      </div>
+      <div class="stat-count">{{ summary.removed }}</div>
+      <span class="sr-only">Removed: {{ summary.removed }}</span>
     </a>
     <a href="#heading-connections" onclick="expandSection('connections'); return true;" class="stat-card stat-card-conn">
       <div class="stat-card-top">
@@ -302,30 +302,6 @@ html.light .tool-row:hover { background: #f1f5f9; }
   </div>
 </div>
 <div class="section-wrap">
-  <div class="section-header section-header-removed" id="heading-removed">
-    <span class="section-title">Removed Tools</span>
-    <span class="count-pill count-pill-removed">{{ summary.removed }}</span>
-    <div class="section-actions">
-      <button class="ctrl-btn" onclick="expandAll('section-removed')">Expand All</button>
-      <button class="ctrl-btn" onclick="collapseAll('section-removed')">Collapse All</button>
-    </div>
-  </div>
-  <div id="section-removed">
-  {% for tool in diff_data.removed %}
-  <div class="tool-row" id="row-removed-{{ tool.tool_id }}"
-       onclick="toggleTool({{ tool.tool_id }}, 'removed')">
-    <span class="chevron">&#9654;</span>
-    <span class="tool-type-name">{{ tool.tool_type }}</span>
-    <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
-    <span class="tool-row-right"><span class="change-badge change-badge-removed">removed</span></span>
-  </div>
-  <div class="tool-detail" id="detail-removed-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'removed')" hidden></div>
-  {% else %}
-  <p class="empty">No removed tools.</p>
-  {% endfor %}
-  </div>
-</div>
-<div class="section-wrap">
   <div class="section-header section-header-modified" id="heading-modified">
     <span class="section-title">Modified Tools</span>
     <span class="count-pill count-pill-modified">{{ summary.modified }}</span>
@@ -346,6 +322,30 @@ html.light .tool-row:hover { background: #f1f5f9; }
   <div class="tool-detail" id="detail-modified-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'modified')" hidden></div>
   {% else %}
   <p class="empty">No modified tools.</p>
+  {% endfor %}
+  </div>
+</div>
+<div class="section-wrap">
+  <div class="section-header section-header-removed" id="heading-removed">
+    <span class="section-title">Removed Tools</span>
+    <span class="count-pill count-pill-removed">{{ summary.removed }}</span>
+    <div class="section-actions">
+      <button class="ctrl-btn" onclick="expandAll('section-removed')">Expand All</button>
+      <button class="ctrl-btn" onclick="collapseAll('section-removed')">Collapse All</button>
+    </div>
+  </div>
+  <div id="section-removed">
+  {% for tool in diff_data.removed %}
+  <div class="tool-row" id="row-removed-{{ tool.tool_id }}"
+       onclick="toggleTool({{ tool.tool_id }}, 'removed')">
+    <span class="chevron">&#9654;</span>
+    <span class="tool-type-name">{{ tool.tool_type }}</span>
+    <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
+    <span class="tool-row-right"><span class="change-badge change-badge-removed">removed</span></span>
+  </div>
+  <div class="tool-detail" id="detail-removed-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'removed')" hidden></div>
+  {% else %}
+  <p class="empty">No removed tools.</p>
   {% endfor %}
   </div>
 </div>
