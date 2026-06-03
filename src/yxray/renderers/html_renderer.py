@@ -64,7 +64,7 @@ body {
 }
 .header-title { font-size: 18px; font-weight: 600; color: var(--text); margin: 0; }
 .header-meta { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.7; }
-.header-meta-label { color: var(--text); font-weight: 600; }
+.header-meta-label { color: var(--text); font-weight: 600; display: inline-block; width: 3.8em; }
 .header-meta-generated { margin-top: 2px; font-size: 11px; }
 .theme-toggle {
   background: var(--surface); border: 1px solid var(--border); border-radius: 9999px;
@@ -231,7 +231,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
         <h1 class="header-title">Alteryx Workflow Diff Report</h1>
       </div>
       <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
-      <p class="header-meta"><span class="header-meta-label">After:</span> &nbsp;{{ file_b }}</p>
+      <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
       <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
     <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
