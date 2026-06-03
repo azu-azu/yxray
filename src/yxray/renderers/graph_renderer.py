@@ -35,17 +35,19 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 </div>
 
 <div id="split-view" class="split-view">
-  <div class="split-pane">
-    <div class="split-header">Before</div>
-    <div id="split-view-left" class="split-graph-canvas"></div>
+  <div class="split-graphs-col">
+    <div class="split-pane">
+      <div class="split-header">Before</div>
+      <div id="split-view-left" class="split-graph-canvas"></div>
+    </div>
+    <div class="split-pane">
+      <div class="split-header">After</div>
+      <div id="split-view-right" class="split-graph-canvas"></div>
+    </div>
   </div>
   <div class="split-changes-col">
     <div class="split-changes-header">Changes</div>
     <div id="split-change-rows" class="split-change-rows"></div>
-  </div>
-  <div class="split-pane">
-    <div class="split-header">After</div>
-    <div id="split-view-right" class="split-graph-canvas"></div>
   </div>
 </div>
 
@@ -126,18 +128,30 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 
 .split-view {
   display: flex;
-  height: 600px;
+  flex-direction: row;
+  height: 820px;
   gap: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
 
-.split-pane {
+.split-graphs-col {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.split-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.split-pane + .split-pane {
+  border-top: 2px solid var(--border);
 }
 
 .split-header {
@@ -153,7 +167,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 
 .split-graph-canvas {
   flex: 1;
-  height: 100%;
+  min-height: 0;
   background: var(--bg);
 }
 
@@ -162,7 +176,6 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
 }
 
 .split-changes-header {
@@ -347,7 +360,8 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 /* Responsive */
 @media (max-width: 800px) {
   .split-view { flex-direction: column; height: auto; }
-  .split-view > div { width: 100%; }
+  .split-graphs-col { min-height: 600px; }
+  .split-changes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); }
 }
 .graph-search-wrap { position: relative; display: flex; align-items: center; }
 .graph-search-input { width: 150px; padding: 5px 24px 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg); color: var(--text); outline: none; transition: width 0.2s; }
