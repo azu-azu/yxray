@@ -242,6 +242,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      <button class="ctrl-btn" id="report-btn" onclick="openReport()">Report</button>
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
@@ -274,6 +275,11 @@ _HTML_TEMPLATE = """\
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
   <script>
 {{ single_graph_js | safe }}
+  </script>
+  <script>
+function openReport() {
+    window.open(window.location.href.replace(/_graph(\\.[^.]+)$/, '_report$1'));
+}
   </script>
 </body>
 </html>
