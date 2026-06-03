@@ -609,15 +609,17 @@ function expandCluster(cid) {
     }
   });
 
-  var cPos = centroid(expandedMemberIds);
-  network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
-
   // Re-apply search highlights to the newly visible member nodes.
-  // skipFocus=true: avoid conflicting with the moveTo() animation above.
   if (searchActive) {
     var q = document.getElementById('search-input').value;
-    if (q) doSearch(q, true);
+    if (q) {
+      doSearch(q, true);
+      if (focusFirstVisibleSearchMatch(q, expandedMemberIds)) return;
+    }
   }
+
+  var cPos = centroid(expandedMemberIds);
+  network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
 // ── Memo helpers ──────────────────────────────────────────────────────────
@@ -1304,16 +1306,82 @@ function baseNodeColorUpdate(n, col) {
   }, font: {color: col.font}};
 }
 
+function buildNodeDataLookup() {
+  var nodeDataLookup = {};
+  NODES_DATA.forEach(function(nd) { nodeDataLookup[nd.id] = nd; });
+  return nodeDataLookup;
+}
+
+function nodeMatchesSearch(nodeId, testStr, nodeDataLookup) {
+  var nd = nodeDataLookup[nodeId];
+  var configStr = JSON.stringify(CONFIG_MAP[nodeId] || {});
+  return testStr(String(nodeId)) || testStr((nd && nd.label) || '') || testStr(configStr);
+}
+
+function visibleNodeMatchesSearch(node, testStr, nodeDataLookup) {
+  var configStr = JSON.stringify(CONFIG_MAP[node.id] || {});
+  return testStr(String(node.id)) || testStr(node.label || '') ||
+         testStr(configStr) || nodeMatchesSearch(node.id, testStr, nodeDataLookup);
+}
+
+function firstClusterMemberMatch(clusterId, testStr, nodeDataLookup, visited) {
+  var cm = AppState.clusterMap[clusterId];
+  if (!cm) return null;
+  visited = visited || {};
+  if (visited[clusterId]) return null;
+  visited[clusterId] = true;
+
+  var memberIds = cm.memberIds || [];
+  for (var mi = 0; mi < memberIds.length; mi++) {
+    var mid = memberIds[mi];
+    if (AppState.clusterMap[mid]) {
+      var nestedMatch = firstClusterMemberMatch(mid, testStr, nodeDataLookup, visited);
+      if (nestedMatch !== null) return nestedMatch;
+    } else if (nodeMatchesSearch(mid, testStr, nodeDataLookup)) {
+      return mid;
+    }
+  }
+  return null;
+}
+
+function makeSearchTester(query) {
+  var re;
+  try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
+  var q = query.toLowerCase();
+  return function(s) {
+    s = String(s);
+    return re ? re.test(s) : s.toLowerCase().indexOf(q) !== -1;
+  };
+}
+
+function focusSearchMatch(nodeId, animationDuration) {
+  if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
+  network.focus(nodeId, {
+    scale: 1.2,
+    animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
+  });
+  return true;
+}
+
+function focusFirstVisibleSearchMatch(query, candidateIds) {
+  var testStr = makeSearchTester(query);
+  var nodeDataLookup = buildNodeDataLookup();
+  for (var i = 0; i < candidateIds.length; i++) {
+    var id = candidateIds[i];
+    if (nodesDataset.get(id) !== null && nodeMatchesSearch(id, testStr, nodeDataLookup)) {
+      return focusSearchMatch(id, 300);
+    }
+  }
+  return false;
+}
+
 function doSearch(query, skipFocus) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
   document.getElementById('search-clear-btn').style.display = 'block';
 
-  var re;
-  try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
-  var q = query.toLowerCase();
-  function testStr(s) { return re ? re.test(s) : s.toLowerCase().indexOf(q) !== -1; }
+  var testStr = makeSearchTester(query);
 
   var col = nodeColors();
   var allNodes = nodesDataset.get();
@@ -1321,8 +1389,7 @@ function doSearch(query, skipFocus) {
   var firstMatch = null;
 
   // Build a lookup from original node data (pre-clustering) for member searches.
-  var nodeDataLookup = {};
-  NODES_DATA.forEach(function(nd) { nodeDataLookup[nd.id] = nd; });
+  var nodeDataLookup = buildNodeDataLookup();
 
   allNodes.forEach(function(n) {
     // Memo nodes: match on label text only
@@ -1333,21 +1400,11 @@ function doSearch(query, skipFocus) {
       return;
     }
     // Regular nodes: search id, label, and flattened config values
-    var configStr = JSON.stringify(CONFIG_MAP[n.id] || {});
-    var matches = testStr(String(n.id)) || testStr(n.label || '') || testStr(configStr);
+    var matches = visibleNodeMatchesSearch(n, testStr, nodeDataLookup);
 
     // Cluster nodes: also search inside each member node
     if (!matches && AppState.clusterMap[n.id]) {
-      var memberIds = AppState.clusterMap[n.id].memberIds || [];
-      for (var mi = 0; mi < memberIds.length; mi++) {
-        var mid = memberIds[mi];
-        var mnd = nodeDataLookup[mid];
-        var mConfigStr = JSON.stringify(CONFIG_MAP[mid] || {});
-        if (testStr(String(mid)) || testStr((mnd && mnd.label) || '') || testStr(mConfigStr)) {
-          matches = true;
-          break;
-        }
-      }
+      matches = firstClusterMemberMatch(n.id, testStr, nodeDataLookup) !== null;
     }
 
     if (matches) {
@@ -1403,7 +1460,7 @@ function doSearch(query, skipFocus) {
 
   nodesDataset.update(updates);
   if (!skipFocus && firstMatch !== null) {
-    network.focus(firstMatch, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+    focusSearchMatch(firstMatch, 400);
   }
 }
 
