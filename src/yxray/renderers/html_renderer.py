@@ -114,9 +114,14 @@ body {
 .section-header-removed { border-left: 3px solid var(--accent-removed); }
 .section-header-modified { border-left: 3px solid var(--accent-modified); }
 .section-header-conn { border-left: 3px solid var(--accent-conn); }
-.section-header-summary { border-left: 3px solid var(--text-muted); }
+.section-header-summary { border-left: 3px solid var(--text-muted); cursor: pointer; user-select: none; }
+.section-header-summary:hover { opacity: 0.85; }
+.summary-chevron { display: inline-block; transition: transform 0.2s ease; margin-left: auto; font-style: normal; flex-shrink: 0; }
+.summary-chevron.open { transform: rotate(90deg); }
+#summary-steps-wrap { overflow: hidden; transition: max-height 0.25s ease; max-height: 4000px; }
+#summary-steps-wrap.collapsed { max-height: 0; }
 /* ---- Workflow summary ---- */
-.summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.summary-steps { list-style: none; padding: 0; margin: 0 0 4px; display: flex; flex-direction: column; gap: 4px; }
 .summary-step { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 6px; }
 .summary-step-input  { background: var(--accent-conn-bg); }
 .summary-step-output { background: var(--accent-added-bg); }
@@ -261,20 +266,23 @@ html.light .tool-row:hover { background: #f1f5f9; }
 <div class="container">
 {% if workflow_steps %}
 <div class="section-wrap">
-  <div class="section-header section-header-summary">
+  <div class="section-header section-header-summary" onclick="toggleSummarySection()">
     <span class="section-title">Workflow Summary</span>
     <span class="count-pill count-pill-summary">{{ workflow_steps | length }} steps</span>
+    <span class="summary-chevron open" id="summary-chevron">&#9654;</span>
   </div>
-  <ol class="summary-steps">
-    {% for step in workflow_steps %}
-    <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}">
-      <span class="step-num">{{ loop.index }}.</span>
-      <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
-      {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
-      {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
-    </li>
-    {% endfor %}
-  </ol>
+  <div id="summary-steps-wrap">
+    <ol class="summary-steps">
+      {% for step in workflow_steps %}
+      <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}">
+        <span class="step-num">{{ loop.index }}.</span>
+        <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+        {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+        {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
 </div>
 {% endif %}
 <section id="summary">
@@ -664,6 +672,14 @@ function collapseAll(containerId) {
     var rows = container.querySelectorAll('.tool-row.expanded');
     for (var i = 0; i < rows.length; i++) { rows[i].click(); }
 }
+
+function toggleSummarySection() {
+    var wrap = document.getElementById('summary-steps-wrap');
+    var chevron = document.getElementById('summary-chevron');
+    if (!wrap) return;
+    wrap.classList.toggle('collapsed');
+    if (chevron) chevron.classList.toggle('open');
+}
 </script>
 </div>
 </body>
@@ -724,11 +740,7 @@ class HTMLRenderer:
             diff_data=self._build_diff_data(result),
             graph_html=graph_html,
             metadata=metadata,
-            workflow_steps=[
-                {"short_type": s.short_type, "category": s.category,
-                 "description": s.description, "change": s.change}
-                for s in workflow_steps
-            ] if workflow_steps else None,
+            workflow_steps=[s.to_dict(include_change=True) for s in workflow_steps] if workflow_steps else None,
         )
 
     def _build_diff_data(self, result: DiffResult) -> dict[str, Any]:
