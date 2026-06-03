@@ -710,7 +710,7 @@ class HTMLRenderer:
             ],
         }
 
-    def _edge_to_dict(self, e: EdgeDiff, index: int = 0) -> dict[str, Any]:
+    def _edge_to_dict(self, e: EdgeDiff, index: int) -> dict[str, Any]:
         return {
             "tool_id": index,
             "src_tool": int(e.src_tool),
