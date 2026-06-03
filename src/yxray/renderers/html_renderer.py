@@ -690,7 +690,7 @@ class HTMLRenderer:
             "added": [self._node_to_dict(n) for n in result.added_nodes],
             "removed": [self._node_to_dict(n) for n in result.removed_nodes],
             "modified": [self._node_diff_to_dict(nd) for nd in result.modified_nodes],
-            "connections": [self._edge_to_dict(e) for e in result.edge_diffs],
+            "connections": [self._edge_to_dict(e, i + 1) for i, e in enumerate(result.edge_diffs)],
         }
 
     def _node_to_dict(self, node: AlteryxNode) -> dict[str, Any]:
@@ -710,9 +710,9 @@ class HTMLRenderer:
             ],
         }
 
-    def _edge_to_dict(self, e: EdgeDiff) -> dict[str, Any]:
+    def _edge_to_dict(self, e: EdgeDiff, index: int = 0) -> dict[str, Any]:
         return {
-            "tool_id": int(e.src_tool),
+            "tool_id": index,
             "src_tool": int(e.src_tool),
             "src_anchor": str(e.src_anchor),
             "dst_tool": int(e.dst_tool),
