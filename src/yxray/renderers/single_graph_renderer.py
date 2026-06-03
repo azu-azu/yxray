@@ -20,6 +20,7 @@ import importlib.resources as pkg_resources
 from jinja2 import Environment
 
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._graph_builder import load_vis_js
 
 
@@ -277,8 +278,10 @@ _HTML_TEMPLATE = """\
 {{ single_graph_js | safe }}
   </script>
   <script>
+{{ companion_window_js | safe }}
+
 function openReport() {
-    window.open(window.location.href.replace(/_graph(\\.[^.]+)$/, '_report$1'));
+    openCompanionFile(window.location.href.replace(/_graph(\\.[^./?#]+)([?#].*)?$/, '_report$1$2'));
 }
   </script>
 </body>
@@ -321,6 +324,7 @@ class SingleGraphRenderer:
             graph_data_json=graph_data_json,
             vis_js=vis_js,
             single_graph_js=single_graph_js,
+            companion_window_js=COMPANION_WINDOW_JS,
         )
 
     def _build_graph_data(

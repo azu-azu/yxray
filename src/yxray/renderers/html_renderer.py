@@ -9,6 +9,7 @@ from jinja2 import Environment
 from yxray.models import DiffResult, NodeDiff
 from yxray.models.diff import EdgeDiff
 from yxray.models.workflow import AlteryxNode
+from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -455,8 +456,10 @@ function toggleTheme() {
     setTheme(isLight ? 'dark' : 'light');
 }
 
+{{ companion_window_js | safe }}
+
 function openGraph() {
-    window.open(window.location.href.replace(/_report(\\.[^.]+)$/, '_graph$1'));
+    openCompanionFile(window.location.href.replace(/_report(\\.[^./?#]+)([?#].*)?$/, '_graph$1$2'));
 }
 
 (function() {
@@ -750,6 +753,7 @@ class HTMLRenderer:
             diff_data=self._build_diff_data(result),
             graph_html=graph_html,
             metadata=metadata,
+            companion_window_js=COMPANION_WINDOW_JS,
             workflow_steps=[s.to_dict(include_change=True) for s in workflow_steps] if workflow_steps else None,
         )
 
