@@ -21,8 +21,8 @@ _TEMPLATE = """<!DOCTYPE html>
   --bg: #0f172a; --surface: #1e293b; --surface-2: #131f31;
   --border: #1e3a5f; --border-subtle: #334155;
   --text: #e2e8f0; --text-muted: #64748b;
-  --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534;
-  --accent-removed: #f87171; --accent-removed-bg: #2d1515; --accent-removed-border: #7f1d1d;
+  --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534; --accent-added-text: #001a00;
+  --accent-removed: #f87171; --accent-removed-bg: #2d1515; --accent-removed-border: #7f1d1d; --accent-removed-text: #1a0000;
   --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
   --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
 }
@@ -30,8 +30,8 @@ html.light {
   --bg: #ffffff; --surface: #f8f9fb; --surface-2: #f1f5f9;
   --border: #e2e8f0; --border-subtle: #f1f5f9;
   --text: #0f172a; --text-muted: #64748b;
-  --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0;
-  --accent-removed: #dc2626; --accent-removed-bg: #fef2f2; --accent-removed-border: #fecaca;
+  --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0; --accent-added-text: #fff;
+  --accent-removed: #dc2626; --accent-removed-bg: #fef2f2; --accent-removed-border: #fecaca; --accent-removed-text: #fff;
   --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
   --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
 }
@@ -179,8 +179,8 @@ html.light .tool-row:hover { background: #f1f5f9; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap; word-break: break-all; font-size: 13px; color: var(--text);
 }
-.diff-del { background: var(--accent-removed); border-radius: 2px; padding: 0 1px; }
-.diff-ins { background: var(--accent-added);   border-radius: 2px; padding: 0 1px; }
+.diff-del { background: var(--accent-removed); color: var(--accent-removed-text); border-radius: 2px; padding: 0 1px; }
+.diff-ins { background: var(--accent-added);   color: var(--accent-added-text);   border-radius: 2px; padding: 0 1px; }
 .diff-unified {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
