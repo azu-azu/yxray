@@ -525,6 +525,12 @@ function recollapseGroup(groupKey) {
 
   var cPos = centroid(group.memberIds);
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
+
+  // Re-apply search so the newly restored cluster node is highlighted/dimmed correctly.
+  if (searchActive) {
+    var q = document.getElementById('search-input').value;
+    if (q) doSearch(q);
+  }
 }
 
 function expandCluster(cid) {
@@ -605,6 +611,12 @@ function expandCluster(cid) {
 
   var cPos = centroid(expandedMemberIds);
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
+
+  // Re-apply search highlights to the newly visible member nodes.
+  if (searchActive) {
+    var q = document.getElementById('search-input').value;
+    if (q) doSearch(q);
+  }
 }
 
 // ── Memo helpers ──────────────────────────────────────────────────────────
