@@ -82,6 +82,7 @@ _HTML_TEMPLATE = """\
       background: var(--bg);
       color: var(--text);
       overflow: hidden;
+      display: flex; flex-direction: column; height: 100vh;
     }
     header {
       display: flex;
@@ -125,9 +126,28 @@ _HTML_TEMPLATE = """\
       font-size: 14px; line-height: 1; display: none; padding: 0;
     }
     .search-clear:hover { color: var(--text); }
+    header { flex-shrink: 0; }
+    #summary-panel {
+      flex-shrink: 0; overflow: hidden; max-height: 0;
+      transition: max-height 0.25s ease;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    #summary-panel.open { max-height: 220px; overflow-y: auto; }
+    .summary-inner { padding: 10px 20px; }
+    .summary-panel-steps { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+    .summary-panel-step { display: flex; align-items: baseline; gap: 8px; padding: 3px 6px; border-radius: 4px; font-size: 12px; }
+    .sp-num { color: var(--text-muted); min-width: 20px; text-align: right; flex-shrink: 0; }
+    .sp-badge { font-size: 11px; font-weight: 600; border-radius: 3px; padding: 1px 6px; border: 1px solid; flex-shrink: 0; }
+    .sp-badge-input    { color: #38bdf8; border-color: #0c4a6e; background: #082f49; }
+    .sp-badge-output   { color: #4ade80; border-color: #14532d; background: #052e16; }
+    .sp-badge-transform { color: #fbbf24; border-color: #78350f; background: #1c1506; }
+    .sp-badge-unknown  { color: var(--text-muted); border-color: var(--border); background: var(--surface-2); }
+    .sp-desc { color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+    html.light .sp-badge-input    { color: #0369a1; border-color: #bae6fd; background: #f0f9ff; }
+    html.light .sp-badge-output   { color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; }
+    html.light .sp-badge-transform { color: #d97706; border-color: #fde68a; background: #fffbeb; }
     #graph-wrapper {
-      width: 100%;
-      height: calc(100vh - 57px);
+      flex: 1;
       background: var(--bg);
       overflow: hidden;
     }
@@ -241,12 +261,28 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="toggleSummary()">&#128203; Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
+  {% if workflow_steps %}
+  <div id="summary-panel">
+    <div class="summary-inner">
+      <ol class="summary-panel-steps">
+        {% for step in workflow_steps %}
+        <li class="summary-panel-step">
+          <span class="sp-num">{{ loop.index }}.</span>
+          <span class="sp-badge sp-badge-{{ step.category }}">{{ step.short_type }}</span>
+          {% if step.description %}<span class="sp-desc">{{ step.description }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
   </div>
@@ -269,6 +305,12 @@ _HTML_TEMPLATE = """\
     </div>
   </div>
   <div id="connect-mode-hint">Click a node to connect &mdash; Esc to cancel</div>
+  <script>
+    function toggleSummary() {
+      var panel = document.getElementById('summary-panel');
+      if (panel) panel.classList.toggle('open');
+    }
+  </script>
   <script>{{ vis_js | safe }}</script>
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
   <script>
@@ -286,7 +328,7 @@ class SingleGraphRenderer:
     vis-network UMD is inlined — zero CDN references.
     """
 
-    def render(self, doc: WorkflowDoc) -> str:
+    def render(self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None) -> str:
         """WorkflowDoc → standalone HTML string."""
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(doc)
         vis_js = load_vis_js()
@@ -314,6 +356,10 @@ class SingleGraphRenderer:
             graph_data_json=graph_data_json,
             vis_js=vis_js,
             single_graph_js=single_graph_js,
+            workflow_steps=[
+                {"short_type": s.short_type, "category": s.category, "description": s.description}
+                for s in workflow_steps
+            ] if workflow_steps else None,
         )
 
     def _build_graph_data(

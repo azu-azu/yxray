@@ -15,6 +15,7 @@ from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
 from yxray.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
+from yxray.summarizer import summarize
 
 app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
@@ -131,12 +132,16 @@ def diff(  # noqa: B008
             nodes_new=response.doc_b.nodes,
             canvas_layout=canvas_layout,
         )
+        added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
+        modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
+        steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
         html = HTMLRenderer().render(
             result,
             file_a=str(workflow_a.resolve()),
             file_b=str(workflow_b.resolve()),
             graph_html=graph_html,
             metadata=metadata,  # CLI-04: governance footer in HTML report
+            workflow_steps=steps,
         )
         output.write_text(html, encoding="utf-8")
         webbrowser.open(output.resolve().as_uri())
@@ -191,7 +196,8 @@ def inspect(  # noqa: B008
         raise typer.Exit(code=2) from None
 
     out_path = output or pathlib.Path(workflow.stem + "_report.html")
-    html = SingleGraphRenderer().render(doc)
+    steps = summarize(doc)
+    html = SingleGraphRenderer().render(doc, workflow_steps=steps)
     out_path.write_text(html, encoding="utf-8")
     typer.echo(
         f"Report written to {out_path}"
