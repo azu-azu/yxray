@@ -109,6 +109,10 @@ def summarize(
             continue
         short_type, category = _classify(node.tool_type)
         description = _describe(node.tool_type, node.config)
+        # ToolContainer without a caption is pure layout noise — skip it.
+        # Ones with a caption carry human-assigned structural labels worth showing.
+        if "ToolContainer" in node.tool_type and not description:
+            continue
         change: str | None = None
         if added_ids and tid in added_ids:
             change = "added"
@@ -297,6 +301,10 @@ def _describe(tool_type: str, config: dict[str, Any]) -> str:
     if segment == "RunCommand":
         cmd = _get_text(config, "Command") or config.get("@command", "")
         return _truncate(str(cmd), 50) if cmd else ""
+
+    if segment == "ToolContainer":
+        caption = _get_text(config, "Caption")
+        return _truncate(caption, 60) if caption else ""
 
     return ""
 

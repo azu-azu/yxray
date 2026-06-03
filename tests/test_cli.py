@@ -14,10 +14,19 @@ from __future__ import annotations
 
 import json
 import pathlib
+from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from yxray.cli import app
+
+
+@pytest.fixture(autouse=True)
+def no_browser():
+    """Prevent webbrowser.open from launching a browser during tests."""
+    with patch("yxray.cli.webbrowser.open"):
+        yield
 from tests.fixtures.cli import (
     IDENTICAL_YXMD,
     MALFORMED_XML,
