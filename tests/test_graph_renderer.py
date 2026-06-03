@@ -56,6 +56,9 @@ def test_standalone_graph_report_button_reuses_existing_companion_window() -> No
     """Graph -> report navigation uses a stable window target and focuses it."""
     html = GraphRenderer().render_standalone(EMPTY_DIFF, (), (), ())
 
+    assert "function companionWindowName(url)" in html
+    assert "window.name = companionWindowName(window.location.href)" in html
+    assert "'yxray_companion_' + kind + '_'" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
@@ -68,6 +71,9 @@ def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
     """Inspect report -> graph navigation reuses an existing graph tab/window."""
     html = InspectReportRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
 
+    assert "function companionWindowName(url)" in html
+    assert "window.name = companionWindowName(window.location.href)" in html
+    assert "'yxray_companion_' + kind + '_'" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
@@ -80,6 +86,9 @@ def test_single_graph_report_button_reuses_existing_companion_window() -> None:
     """Single graph -> inspect report navigation reuses an existing report tab/window."""
     html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
 
+    assert "function companionWindowName(url)" in html
+    assert "window.name = companionWindowName(window.location.href)" in html
+    assert "'yxray_companion_' + kind + '_'" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
