@@ -167,18 +167,20 @@ html.light .tool-row:hover { background: #f1f5f9; }
 }
 .before-row {
   border-left: 3px solid var(--accent-removed); background: var(--accent-removed-bg);
-  padding: 6px 10px; margin: 4px 0;
+  padding: 6px 10px; margin: 4px 0; display: flex; align-items: baseline;
 }
 .after-row {
   border-left: 3px solid var(--accent-added); background: var(--accent-added-bg);
-  padding: 6px 10px; margin: 4px 0;
+  padding: 6px 10px; margin: 4px 0; display: flex; align-items: baseline;
 }
-.before-label { font-weight: 600; color: var(--accent-removed); }
-.after-label { font-weight: 600; color: var(--accent-added); }
+.before-label { font-weight: 600; color: var(--accent-removed); flex-shrink: 0; width: 54px; }
+.after-label { font-weight: 600; color: var(--accent-added); flex-shrink: 0; width: 54px; }
 .value-block {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap; word-break: break-all; font-size: 13px; color: var(--text);
 }
+.diff-del { background: var(--accent-removed); border-radius: 2px; padding: 0 1px; }
+.diff-ins { background: var(--accent-added);   border-radius: 2px; padding: 0 1px; }
 .empty { color: var(--text-muted); font-style: italic; }
 /* ---- Governance footer ---- */
 #governance {
@@ -442,7 +444,6 @@ function buildDetail(toolId, section, container) {
             beforeLabel.textContent = 'Before: ';
             var beforeVal = document.createElement('span');
             beforeVal.className = 'value-block';
-            beforeVal.textContent = formatVal(fd.before);
             beforeRow.appendChild(beforeLabel);
             beforeRow.appendChild(beforeVal);
             var afterRow = document.createElement('div');
@@ -452,7 +453,15 @@ function buildDetail(toolId, section, container) {
             afterLabel.textContent = 'After: ';
             var afterVal = document.createElement('span');
             afterVal.className = 'value-block';
-            afterVal.textContent = formatVal(fd.after);
+            var aStr = formatVal(fd.before), bStr = formatVal(fd.after);
+            var runs = diffChars(aStr, bStr);
+            if (runs) {
+                fillDiffSpans(beforeVal, runs, 'delete');
+                fillDiffSpans(afterVal, runs, 'insert');
+            } else {
+                beforeVal.textContent = aStr;
+                afterVal.textContent = bStr;
+            }
             afterRow.appendChild(afterLabel);
             afterRow.appendChild(afterVal);
             row.appendChild(nameEl);
@@ -491,6 +500,57 @@ function formatVal(v) {
     if (v === null || v === undefined) return 'null';
     if (typeof v === 'object') return JSON.stringify(v, null, 2);
     return String(v);
+}
+
+// LCS-based char-level diff.
+// Returns [{type:'equal'|'delete'|'insert', text:string}, ...], or null if too long.
+function diffChars(a, b) {
+    if (a.length + b.length > 2000) return null;
+    var m = a.length, n = b.length;
+    var dp = new Array(m + 1);
+    var i, j;
+    for (i = 0; i <= m; i++) { dp[i] = new Array(n + 1).fill(0); }
+    for (i = 1; i <= m; i++) {
+        for (j = 1; j <= n; j++) {
+            dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+        }
+    }
+    var ops = [];
+    i = m; j = n;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+            ops.push({type: 'equal', char: a[i-1]}); i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+            ops.push({type: 'insert', char: b[j-1]}); j--;
+        } else {
+            ops.push({type: 'delete', char: a[i-1]}); i--;
+        }
+    }
+    ops.reverse();
+    // Merge consecutive same-type chars into runs
+    var runs = [];
+    ops.forEach(function(op) {
+        if (runs.length && runs[runs.length-1].type === op.type) {
+            runs[runs.length-1].text += op.char;
+        } else {
+            runs.push({type: op.type, text: op.char});
+        }
+    });
+    return runs;
+}
+
+// Populate `container` with inline-diff spans.
+// showType: 'delete' for the before side, 'insert' for the after side.
+function fillDiffSpans(container, runs, showType) {
+    runs.forEach(function(run) {
+        if (run.type !== 'equal' && run.type !== showType) return; // skip the other side's changes
+        var span = document.createElement('span');
+        span.textContent = run.text;
+        if (run.type === showType) {
+            span.className = showType === 'delete' ? 'diff-del' : 'diff-ins';
+        }
+        container.appendChild(span);
+    });
 }
 
 function expandAll(containerId) {
