@@ -613,9 +613,10 @@ function expandCluster(cid) {
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 
   // Re-apply search highlights to the newly visible member nodes.
+  // skipFocus=true: avoid conflicting with the moveTo() animation above.
   if (searchActive) {
     var q = document.getElementById('search-input').value;
-    if (q) doSearch(q);
+    if (q) doSearch(q, true);
   }
 }
 
@@ -1303,7 +1304,7 @@ function baseNodeColorUpdate(n, col) {
   }, font: {color: col.font}};
 }
 
-function doSearch(query) {
+function doSearch(query, skipFocus) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
@@ -1401,7 +1402,7 @@ function doSearch(query) {
   });
 
   nodesDataset.update(updates);
-  if (firstMatch !== null) {
+  if (!skipFocus && firstMatch !== null) {
     network.focus(firstMatch, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
   }
 }
