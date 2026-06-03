@@ -114,6 +114,24 @@ body {
 .section-header-removed { border-left: 3px solid var(--accent-removed); }
 .section-header-modified { border-left: 3px solid var(--accent-modified); }
 .section-header-conn { border-left: 3px solid var(--accent-conn); }
+.section-header-summary { border-left: 3px solid var(--text-muted); }
+/* ---- Workflow summary ---- */
+.summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.summary-step { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 6px; }
+.summary-step-input  { background: var(--accent-conn-bg); }
+.summary-step-output { background: var(--accent-added-bg); }
+.summary-step-transform { background: var(--surface); }
+.summary-step-unknown { background: var(--surface); opacity: 0.7; }
+.summary-step-added    { outline: 1px solid var(--accent-added-border); }
+.summary-step-modified { outline: 1px solid var(--accent-modified-border); }
+.step-num { font-size: 11px; color: var(--text-muted); min-width: 22px; text-align: right; flex-shrink: 0; }
+.step-badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 7px; border: 1px solid; flex-shrink: 0; }
+.step-badge-input    { color: var(--accent-conn);     background: var(--accent-conn-bg);     border-color: var(--accent-conn-border); }
+.step-badge-output   { color: var(--accent-added);    background: var(--accent-added-bg);    border-color: var(--accent-added-border); }
+.step-badge-transform { color: var(--accent-modified); background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
+.step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
+.step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
+.count-pill-summary { background: var(--surface-2); border-color: var(--border); color: var(--text-muted); }
 .section-title { font-size: 14px; font-weight: 600; color: var(--text); margin: 0; }
 .count-pill {
   border-radius: 9999px; padding: 2px 10px; font-size: 12px; border: 1px solid;
@@ -241,6 +259,24 @@ html.light .tool-row:hover { background: #f1f5f9; }
   </div>
 </header>
 <div class="container">
+{% if workflow_steps %}
+<div class="section-wrap">
+  <div class="section-header section-header-summary">
+    <span class="section-title">Workflow Summary</span>
+    <span class="count-pill count-pill-summary">{{ workflow_steps | length }} steps</span>
+  </div>
+  <ol class="summary-steps">
+    {% for step in workflow_steps %}
+    <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}">
+      <span class="step-num">{{ loop.index }}.</span>
+      <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+      {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+      {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}
 <section id="summary">
   <div class="stat-cards">
     <a href="#heading-added" onclick="expandSection('added'); return true;" class="stat-card stat-card-added">
@@ -651,6 +687,7 @@ class HTMLRenderer:
         *,
         graph_html: str = "",
         metadata: dict[str, Any] | None = None,
+        workflow_steps: list[Any] | None = None,
     ) -> str:
         """Render result to a self-contained HTML string.
 
@@ -687,6 +724,11 @@ class HTMLRenderer:
             diff_data=self._build_diff_data(result),
             graph_html=graph_html,
             metadata=metadata,
+            workflow_steps=[
+                {"short_type": s.short_type, "category": s.category,
+                 "description": s.description, "change": s.change}
+                for s in workflow_steps
+            ] if workflow_steps else None,
         )
 
     def _build_diff_data(self, result: DiffResult) -> dict[str, Any]:
