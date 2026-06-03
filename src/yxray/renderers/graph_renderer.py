@@ -151,7 +151,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 }
 
 .split-pane + .split-pane {
-  border-top: 2px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 .split-header {
@@ -360,7 +360,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 /* Responsive */
 @media (max-width: 800px) {
   .split-view { flex-direction: column; height: auto; }
-  .split-graphs-col { min-height: 600px; }
+  .split-pane { min-height: 400px; }
   .split-changes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); }
 }
 .graph-search-wrap { position: relative; display: flex; align-items: center; }
