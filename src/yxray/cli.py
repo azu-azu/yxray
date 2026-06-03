@@ -14,7 +14,7 @@ from yxray.exceptions import MalformedXMLError, ParseError
 from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
-from yxray.renderers import GraphRenderer, HTMLRenderer, SingleGraphRenderer
+from yxray.renderers import GraphRenderer, HTMLRenderer, InspectReportRenderer, SingleGraphRenderer
 from yxray.summarizer import summarize
 
 app = typer.Typer(no_args_is_help=True)
@@ -124,12 +124,16 @@ def diff(  # noqa: B008
         json_str = _cli_json_output(result, metadata)
         typer.echo(json_str)  # stdout — pipe-friendly
     else:
-        graph_renderer = GraphRenderer()
-        graph_html = graph_renderer.render(
+        file_a_str = str(workflow_a.resolve())
+        file_b_str = str(workflow_b.resolve())
+        all_connections = response.doc_a.connections + response.doc_b.connections
+        graph_html_page = GraphRenderer().render_standalone(
             result,
-            all_connections=(response.doc_a.connections + response.doc_b.connections),
+            all_connections=all_connections,
             nodes_old=response.doc_a.nodes,
             nodes_new=response.doc_b.nodes,
+            file_a=file_a_str,
+            file_b=file_b_str,
             canvas_layout=canvas_layout,
         )
         added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
@@ -137,14 +141,17 @@ def diff(  # noqa: B008
         steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
         html = HTMLRenderer().render(
             result,
-            file_a=str(workflow_a.resolve()),
-            file_b=str(workflow_b.resolve()),
-            graph_html=graph_html,
+            file_a=file_a_str,
+            file_b=file_b_str,
+            graph_html="",
             metadata=metadata,  # CLI-04: governance footer in HTML report
             workflow_steps=steps,
         )
+        graph_output = _graph_path(output)
         output.write_text(html, encoding="utf-8")
+        graph_output.write_text(graph_html_page, encoding="utf-8")
         webbrowser.open(output.resolve().as_uri())
+        webbrowser.open(graph_output.resolve().as_uri())
         if not quiet:
             change_count = (
                 len(result.added_nodes)
@@ -153,7 +160,7 @@ def diff(  # noqa: B008
                 + len(result.edge_diffs)
             )
             typer.echo(
-                f"Report written to {output} ({change_count} changes detected)",
+                f"Report written to {output}, graph to {graph_output} ({change_count} changes detected)",
                 err=True,
             )
 
@@ -196,15 +203,29 @@ def inspect(  # noqa: B008
         raise typer.Exit(code=2) from None
 
     out_path = output or pathlib.Path(workflow.stem + "_report.html")
+    graph_out_path = _graph_path(out_path)
     steps = summarize(doc)
-    html = SingleGraphRenderer().render(doc, workflow_steps=steps)
-    out_path.write_text(html, encoding="utf-8")
+    graph_html = SingleGraphRenderer().render(doc)
+    report_html = InspectReportRenderer().render(doc, workflow_steps=steps)
+    out_path.write_text(report_html, encoding="utf-8")
+    graph_out_path.write_text(graph_html, encoding="utf-8")
     typer.echo(
-        f"Report written to {out_path}"
+        f"Report written to {out_path}, graph to {graph_out_path}"
         f" ({len(doc.nodes)} nodes, {len(doc.connections)} connections)",
         err=True,
     )
     webbrowser.open(out_path.resolve().as_uri())
+    webbrowser.open(graph_out_path.resolve().as_uri())
+
+
+def _graph_path(report_path: pathlib.Path) -> pathlib.Path:
+    """Derive _graph.html path from a _report.html path."""
+    stem = report_path.stem
+    if stem.endswith("_report"):
+        graph_stem = stem[: -len("_report")] + "_graph"
+    else:
+        graph_stem = stem + "_graph"
+    return report_path.with_stem(graph_stem)
 
 
 def _file_sha256(path: pathlib.Path) -> str:

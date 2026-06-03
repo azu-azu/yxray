@@ -20,13 +20,6 @@ import pytest
 from typer.testing import CliRunner
 
 from yxray.cli import app
-
-
-@pytest.fixture(autouse=True)
-def no_browser():
-    """Prevent webbrowser.open from launching a browser during tests."""
-    with patch("yxray.cli.webbrowser.open"):
-        yield
 from tests.fixtures.cli import (
     IDENTICAL_YXMD,
     MALFORMED_XML,
@@ -35,6 +28,13 @@ from tests.fixtures.cli import (
     POSITION_YXMD_A,
     POSITION_YXMD_B,
 )
+
+
+@pytest.fixture(autouse=True)
+def no_browser():
+    """Prevent webbrowser.open from launching a browser during tests."""
+    with patch("yxray.cli.webbrowser.open"):
+        yield
 
 runner = CliRunner()  # Click 8.2+ separates stdout/stderr by default
 

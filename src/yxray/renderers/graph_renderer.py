@@ -886,6 +886,107 @@ switchView(currentView);
 """
 
 
+_GRAPH_STANDALONE_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <style>
+:root {
+  --bg: #0f172a; --surface: #1e293b; --surface-2: #131f31;
+  --border: #1e3a5f; --border-subtle: #334155;
+  --text: #e2e8f0; --text-muted: #64748b;
+  --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534; --accent-added-text: #001a00;
+  --accent-removed: #f87171; --accent-removed-bg: #2d1515; --accent-removed-border: #7f1d1d; --accent-removed-text: #1a0000;
+  --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
+  --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
+}
+html.light {
+  --bg: #ffffff; --surface: #f8f9fb; --surface-2: #f1f5f9;
+  --border: #e2e8f0; --border-subtle: #f1f5f9;
+  --text: #0f172a; --text-muted: #64748b;
+  --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0; --accent-added-text: #fff;
+  --accent-removed: #dc2626; --accent-removed-bg: #fef2f2; --accent-removed-border: #fecaca; --accent-removed-text: #fff;
+  --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
+  --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--text);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.site-header {
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; justify-content: space-between; align-items: center;
+}
+.header-left { display: flex; flex-direction: column; gap: 2px; }
+.header-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.header-meta { font-size: 12px; color: var(--text-muted); }
+.header-meta-label { color: var(--text); font-weight: 600; }
+.theme-toggle {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9999px;
+  padding: 6px 14px; cursor: pointer; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-family: inherit; transition: background 0.15s ease;
+}
+.theme-toggle:hover { background: var(--surface-2); }
+.content { padding: 16px 24px; }
+  </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-left">
+    <div class="header-title">Workflow Graph</div>
+    <div class="header-meta">
+      <span class="header-meta-label">Before:</span> {{ file_a }}
+      &nbsp;&nbsp;
+      <span class="header-meta-label">After:</span> {{ file_b }}
+    </div>
+  </div>
+  <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <span id="theme-label">Dark</span>
+  </button>
+</header>
+<script type="application/json" id="diff-data">{{ diff_data_json | safe }}</script>
+<div class="content">
+{{ graph_fragment | safe }}
+</div>
+<script>
+function setTheme(theme) {
+    if (theme === 'light') {
+        document.documentElement.classList.add('light');
+    } else {
+        document.documentElement.classList.remove('light');
+    }
+    localStorage.setItem('alteryx-diff-theme', theme);
+    var toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+        toggle.textContent = theme === 'dark' ? '\\u263d Dark' : '\\u2600 Light';
+    }
+}
+
+function toggleTheme() {
+    var isLight = document.documentElement.classList.contains('light');
+    setTheme(isLight ? 'dark' : 'light');
+}
+
+(function() {
+    var saved = localStorage.getItem('alteryx-diff-theme');
+    if (saved) { setTheme(saved); return; }
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTheme(prefersDark !== false ? 'dark' : 'light');
+})();
+</script>
+</body>
+</html>
+"""
+
+
 class GraphRenderer:
     """Render a DiffResult as an interactive vis-network graph HTML fragment.
 
@@ -1001,4 +1102,61 @@ class GraphRenderer:
             nodes_old_json=json.dumps(old_vis_nodes),
             nodes_new_json=json.dumps(new_vis_nodes),
             vis_js=vis_js,
+        )
+
+    def render_standalone(
+        self,
+        result: DiffResult,
+        all_connections: tuple[AlteryxConnection, ...],
+        nodes_old: tuple[AlteryxNode, ...],
+        nodes_new: tuple[AlteryxNode, ...],
+        *,
+        file_a: str = "",
+        file_b: str = "",
+        canvas_layout: bool = False,
+    ) -> str:
+        """Render a DiffResult as a full standalone HTML page with vis-network graph.
+
+        The graph fragment produced by ``render()`` is embedded into a minimal
+        full HTML document that includes the required ``<script id="diff-data">``
+        JSON element that the fragment's JavaScript reads at runtime.
+
+        Args:
+            result: The diff output with added/removed/modified nodes and edge diffs.
+            all_connections: Combined connections from both old and new workflows.
+            nodes_old: Nodes from the baseline (old) workflow.
+            nodes_new: Nodes from the changed (new) workflow.
+            file_a: Display name for the baseline workflow file.
+            file_b: Display name for the changed workflow file.
+            canvas_layout: If True, use raw Alteryx X/Y canvas coordinates.
+
+        Returns:
+            A full standalone HTML string (with ``<!DOCTYPE html>``).
+        """
+        from yxray.renderers.html_renderer import HTMLRenderer
+
+        graph_fragment = self.render(
+            result,
+            all_connections,
+            nodes_old,
+            nodes_new,
+            canvas_layout=canvas_layout,
+        )
+
+        diff_data = HTMLRenderer()._build_diff_data(result)
+        diff_data_json = json.dumps(diff_data, ensure_ascii=False)
+
+        title = "Workflow Graph"
+        if file_a or file_b:
+            title = f"Graph: {file_a} → {file_b}"
+
+        env = Environment(autoescape=True)  # noqa: S701
+        env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
+        template = env.from_string(_GRAPH_STANDALONE_TEMPLATE)
+        return template.render(
+            title=title,
+            file_a=file_a,
+            file_b=file_b,
+            diff_data_json=diff_data_json,
+            graph_fragment=graph_fragment,
         )
