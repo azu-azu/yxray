@@ -63,7 +63,9 @@ body {
   background: #57ef92; animation: pulse 2s ease-in-out infinite; flex-shrink: 0;
 }
 .header-title { font-size: 18px; font-weight: 600; color: var(--text); margin: 0; }
-.header-meta { font-size: 12px; color: var(--text-muted); margin: 0; }
+.header-meta { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.7; }
+.header-meta-label { color: var(--text); font-weight: 600; }
+.header-meta-generated { margin-top: 2px; font-size: 11px; }
 .theme-toggle {
   background: var(--surface); border: 1px solid var(--border); border-radius: 9999px;
   padding: 6px 14px; cursor: pointer; color: var(--text-muted);
@@ -228,7 +230,9 @@ html.light .tool-row:hover { background: #f1f5f9; }
         <span class="pulse-dot"></span>
         <h1 class="header-title">Alteryx Workflow Diff Report</h1>
       </div>
-      <p class="header-meta">{{ file_a }} &#x2192; {{ file_b }} &middot; Generated: {{ timestamp }}</p>
+      <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
+      <p class="header-meta"><span class="header-meta-label">After:</span> &nbsp;{{ file_b }}</p>
+      <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
     <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
