@@ -1307,6 +1307,10 @@ function doSearch(query) {
   var updates = [];
   var firstMatch = null;
 
+  // Build a lookup from original node data (pre-clustering) for member searches.
+  var nodeDataLookup = {};
+  NODES_DATA.forEach(function(nd) { nodeDataLookup[nd.id] = nd; });
+
   allNodes.forEach(function(n) {
     // Memo nodes: match on label text only
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
@@ -1318,6 +1322,20 @@ function doSearch(query) {
     // Regular nodes: search id, label, and flattened config values
     var configStr = JSON.stringify(CONFIG_MAP[n.id] || {});
     var matches = testStr(String(n.id)) || testStr(n.label || '') || testStr(configStr);
+
+    // Cluster nodes: also search inside each member node
+    if (!matches && AppState.clusterMap[n.id]) {
+      var memberIds = AppState.clusterMap[n.id].memberIds || [];
+      for (var mi = 0; mi < memberIds.length; mi++) {
+        var mid = memberIds[mi];
+        var mnd = nodeDataLookup[mid];
+        var mConfigStr = JSON.stringify(CONFIG_MAP[mid] || {});
+        if (testStr(String(mid)) || testStr((mnd && mnd.label) || '') || testStr(mConfigStr)) {
+          matches = true;
+          break;
+        }
+      }
+    }
 
     if (matches) {
       if (firstMatch === null) firstMatch = n.id;
