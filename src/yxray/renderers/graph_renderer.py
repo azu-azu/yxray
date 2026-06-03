@@ -18,6 +18,7 @@ from jinja2 import Environment
 
 from yxray.models import DiffResult
 from yxray.models.workflow import AlteryxConnection, AlteryxNode
+from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._graph_builder import (
     build_digraph,
     build_split_node_list,
@@ -981,8 +982,10 @@ function toggleTheme() {
     setTheme(isLight ? 'dark' : 'light');
 }
 
+{{ companion_window_js | safe }}
+
 function openReport() {
-    window.open(window.location.href.replace(/_graph(\\.[^.]+)$/, '_report$1'));
+    openCompanionFile(window.location.href.replace(/_graph(\\.[^./?#]+)([?#].*)?$/, '_report$1$2'));
 }
 
 (function() {
@@ -1169,4 +1172,5 @@ class GraphRenderer:
             file_b=file_b,
             diff_data_json=diff_data_json,
             graph_fragment=graph_fragment,
+            companion_window_js=COMPANION_WINDOW_JS,
         )

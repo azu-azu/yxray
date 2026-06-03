@@ -14,6 +14,7 @@ from typing import Any
 from jinja2 import Environment
 
 from yxray.models.workflow import WorkflowDoc
+from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 
 _INSPECT_REPORT_TEMPLATE = """\
 <!DOCTYPE html>
@@ -175,8 +176,10 @@ function toggleTheme() {
     setTheme(isLight ? 'dark' : 'light');
 }
 
+{{ companion_window_js | safe }}
+
 function openGraph() {
-    window.open(window.location.href.replace(/_report(\\.[^.]+)$/, '_graph$1'));
+    openCompanionFile(window.location.href.replace(/_report(\\.[^./?#]+)([?#].*)?$/, '_graph$1$2'));
 }
 
 (function() {
@@ -237,4 +240,5 @@ class InspectReportRenderer:
             node_count=data_node_count,
             edge_count=len(doc.connections),
             workflow_steps=steps_dicts,
+            companion_window_js=COMPANION_WINDOW_JS,
         )

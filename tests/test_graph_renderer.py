@@ -6,8 +6,13 @@ import json
 
 from yxray.models import DiffResult
 from yxray.models.types import ToolID
-from yxray.models.workflow import AlteryxNode
-from yxray.renderers import GraphRenderer, HTMLRenderer
+from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.renderers import (
+    GraphRenderer,
+    HTMLRenderer,
+    InspectReportRenderer,
+    SingleGraphRenderer,
+)
 from yxray.renderers._graph_builder import COLOR_MAP
 from tests.fixtures.graph import (
     ALL_CHANGE_TYPES_DIFF,
@@ -45,6 +50,42 @@ def test_render_self_contained() -> None:
     assert "cdn." not in html
     assert "graph-container" in html
     assert "vis.Network" in html
+
+
+def test_standalone_graph_report_button_reuses_existing_companion_window() -> None:
+    """Graph -> report navigation uses a stable window target and focuses it."""
+    html = GraphRenderer().render_standalone(EMPTY_DIFF, (), (), ())
+
+    assert "function openCompanionFile(url)" in html
+    assert "window.open(url, targetName)" in html
+    assert "existingOrNew.focus()" in html
+    assert "openCompanionFile(window.location.href.replace" in html
+    assert "_graph" in html
+    assert "_report$1$2" in html
+
+
+def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
+    """Inspect report -> graph navigation reuses an existing graph tab/window."""
+    html = InspectReportRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
+
+    assert "function openCompanionFile(url)" in html
+    assert "window.open(url, targetName)" in html
+    assert "existingOrNew.focus()" in html
+    assert "openCompanionFile(window.location.href.replace" in html
+    assert "_report" in html
+    assert "_graph$1$2" in html
+
+
+def test_single_graph_report_button_reuses_existing_companion_window() -> None:
+    """Single graph -> inspect report navigation reuses an existing report tab/window."""
+    html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
+
+    assert "function openCompanionFile(url)" in html
+    assert "window.open(url, targetName)" in html
+    assert "existingOrNew.focus()" in html
+    assert "openCompanionFile(window.location.href.replace" in html
+    assert "_graph" in html
+    assert "_report$1$2" in html
 
 
 def test_render_returns_fragment_not_full_document() -> None:
