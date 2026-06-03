@@ -9,6 +9,7 @@ types fall back to the short class name from the plugin string.
 
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -65,6 +66,16 @@ class WorkflowStep:
     category: str   # "input" | "transform" | "output" | "unknown"
     description: str
     change: str | None  # "added" | "modified" | None
+
+    def to_dict(self, *, include_change: bool = False) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "short_type": self.short_type,
+            "category": self.category,
+            "description": self.description,
+        }
+        if include_change:
+            d["change"] = self.change
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -185,8 +196,6 @@ def _describe(tool_type: str, config: dict[str, Any]) -> str:
         path = _get_text(config, "File")
         if not path:
             return ""
-        # Show only the filename, not the full path
-        import pathlib
         try:
             return pathlib.Path(path).name
         except Exception:

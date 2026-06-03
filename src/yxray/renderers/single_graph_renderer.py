@@ -59,6 +59,9 @@ _HTML_TEMPLATE = """\
       --node-hover: #2563eb;
       --node-select: #1e40af;
       --edge-color: #475569;
+      --sp-input-color: #38bdf8; --sp-input-border: #0c4a6e; --sp-input-bg: #082f49;
+      --sp-output-color: #4ade80; --sp-output-border: #14532d; --sp-output-bg: #052e16;
+      --sp-transform-color: #fbbf24; --sp-transform-border: #78350f; --sp-transform-bg: #1c1506;
     }
     html.light {
       --bg: #f8fafc;
@@ -75,6 +78,9 @@ _HTML_TEMPLATE = """\
       --node-hover: #bfdbfe;
       --node-select: #60a5fa;
       --edge-color: #94a3b8;
+      --sp-input-color: #0369a1; --sp-input-border: #bae6fd; --sp-input-bg: #f0f9ff;
+      --sp-output-color: #16a34a; --sp-output-border: #bbf7d0; --sp-output-bg: #f0fdf4;
+      --sp-transform-color: #d97706; --sp-transform-border: #fde68a; --sp-transform-bg: #fffbeb;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -138,14 +144,11 @@ _HTML_TEMPLATE = """\
     .summary-panel-step { display: flex; align-items: baseline; gap: 8px; padding: 3px 6px; border-radius: 4px; font-size: 12px; }
     .sp-num { color: var(--text-muted); min-width: 20px; text-align: right; flex-shrink: 0; }
     .sp-badge { font-size: 11px; font-weight: 600; border-radius: 3px; padding: 1px 6px; border: 1px solid; flex-shrink: 0; }
-    .sp-badge-input    { color: #38bdf8; border-color: #0c4a6e; background: #082f49; }
-    .sp-badge-output   { color: #4ade80; border-color: #14532d; background: #052e16; }
-    .sp-badge-transform { color: #fbbf24; border-color: #78350f; background: #1c1506; }
+    .sp-badge-input    { color: var(--sp-input-color); border-color: var(--sp-input-border); background: var(--sp-input-bg); }
+    .sp-badge-output   { color: var(--sp-output-color); border-color: var(--sp-output-border); background: var(--sp-output-bg); }
+    .sp-badge-transform { color: var(--sp-transform-color); border-color: var(--sp-transform-border); background: var(--sp-transform-bg); }
     .sp-badge-unknown  { color: var(--text-muted); border-color: var(--border); background: var(--surface-2); }
     .sp-desc { color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
-    html.light .sp-badge-input    { color: #0369a1; border-color: #bae6fd; background: #f0f9ff; }
-    html.light .sp-badge-output   { color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; }
-    html.light .sp-badge-transform { color: #d97706; border-color: #fde68a; background: #fffbeb; }
     #graph-wrapper {
       flex: 1;
       background: var(--bg);
@@ -356,10 +359,7 @@ class SingleGraphRenderer:
             graph_data_json=graph_data_json,
             vis_js=vis_js,
             single_graph_js=single_graph_js,
-            workflow_steps=[
-                {"short_type": s.short_type, "category": s.category, "description": s.description}
-                for s in workflow_steps
-            ] if workflow_steps else None,
+            workflow_steps=[s.to_dict() for s in workflow_steps] if workflow_steps else None,
         )
 
     def _build_graph_data(
