@@ -158,7 +158,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
 /* ---- Expanded detail panel ---- */
 .tool-detail {
   background: var(--surface-2); border: 1px solid var(--border); border-top: none;
-  border-radius: 0 0 8px 8px; padding: 12px 16px 12px 40px;
+  border-radius: 0 0 8px 8px; padding: 12px 16px 12px 40px; cursor: pointer;
 }
 .field-row { margin: 6px 0; }
 .field-name {
@@ -272,7 +272,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-added">added</span></span>
   </div>
-  <div class="tool-detail" id="detail-added-{{ tool.tool_id }}" hidden></div>
+  <div class="tool-detail" id="detail-added-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'added')" hidden></div>
   {% else %}
   <p class="empty">No added tools.</p>
   {% endfor %}
@@ -296,7 +296,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-removed">removed</span></span>
   </div>
-  <div class="tool-detail" id="detail-removed-{{ tool.tool_id }}" hidden></div>
+  <div class="tool-detail" id="detail-removed-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'removed')" hidden></div>
   {% else %}
   <p class="empty">No removed tools.</p>
   {% endfor %}
@@ -320,7 +320,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-modified">{{ tool.field_diffs | length }} fields</span></span>
   </div>
-  <div class="tool-detail" id="detail-modified-{{ tool.tool_id }}" hidden></div>
+  <div class="tool-detail" id="detail-modified-{{ tool.tool_id }}" onclick="toggleTool({{ tool.tool_id }}, 'modified')" hidden></div>
   {% else %}
   <p class="empty">No modified tools.</p>
   {% endfor %}
@@ -343,7 +343,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
     <span class="tool-type-name">{{ e.src_tool }}:{{ e.src_anchor }} to {{ e.dst_tool }}:{{ e.dst_anchor }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-conn">{{ e.change_type }}</span></span>
   </div>
-  <div class="tool-detail" id="detail-connections-{{ loop.index }}" hidden></div>
+  <div class="tool-detail" id="detail-connections-{{ loop.index }}" onclick="toggleTool({{ loop.index }}, 'connections')" hidden></div>
   {% else %}
   <p class="empty">No connection changes.</p>
   {% endfor %}
