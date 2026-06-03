@@ -190,7 +190,7 @@ def inspect(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
-    out_path = output or workflow.with_stem(workflow.stem + "_report").with_suffix(".html")
+    out_path = output or pathlib.Path(workflow.stem + "_report.html")
     html = SingleGraphRenderer().render(doc)
     out_path.write_text(html, encoding="utf-8")
     typer.echo(
