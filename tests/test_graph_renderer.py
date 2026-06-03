@@ -59,6 +59,9 @@ def test_standalone_graph_report_button_reuses_existing_companion_window() -> No
     assert "function companionWindowName(url)" in html
     assert "window.name = companionWindowName(window.location.href)" in html
     assert "'yxray_companion_' + kind + '_'" in html
+    assert "localStorage.setItem(COMPANION_INFO.storageKey" in html
+    assert "new BroadcastChannel('yxray_companion_'" in html
+    assert "focusCompanionViaBroadcast(url)" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
@@ -74,6 +77,9 @@ def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
     assert "function companionWindowName(url)" in html
     assert "window.name = companionWindowName(window.location.href)" in html
     assert "'yxray_companion_' + kind + '_'" in html
+    assert "localStorage.setItem(COMPANION_INFO.storageKey" in html
+    assert "new BroadcastChannel('yxray_companion_'" in html
+    assert "focusCompanionViaBroadcast(url)" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
@@ -89,6 +95,9 @@ def test_single_graph_report_button_reuses_existing_companion_window() -> None:
     assert "function companionWindowName(url)" in html
     assert "window.name = companionWindowName(window.location.href)" in html
     assert "'yxray_companion_' + kind + '_'" in html
+    assert "localStorage.setItem(COMPANION_INFO.storageKey" in html
+    assert "new BroadcastChannel('yxray_companion_'" in html
+    assert "focusCompanionViaBroadcast(url)" in html
     assert "function openCompanionFile(url)" in html
     assert "window.open(url, targetName)" in html
     assert "existingOrNew.focus()" in html
