@@ -139,6 +139,7 @@ def diff(  # noqa: B008
             metadata=metadata,  # CLI-04: governance footer in HTML report
         )
         output.write_text(html, encoding="utf-8")
+        webbrowser.open(output.resolve().as_uri())
         if not quiet:
             change_count = (
                 len(result.added_nodes)

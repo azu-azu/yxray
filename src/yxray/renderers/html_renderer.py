@@ -181,6 +181,23 @@ html.light .tool-row:hover { background: #f1f5f9; }
 }
 .diff-del { background: var(--accent-removed); border-radius: 2px; padding: 0 1px; }
 .diff-ins { background: var(--accent-added);   border-radius: 2px; padding: 0 1px; }
+.diff-unified {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
+  border: 1px solid var(--border);
+}
+.diff-line { display: flex; line-height: 1.5; }
+.diff-line-del { background: var(--accent-removed-bg); }
+.diff-line-ins { background: var(--accent-added-bg); }
+.diff-line-ctx { color: var(--text-muted); }
+.diff-gutter {
+  width: 18px; flex-shrink: 0; text-align: center; font-weight: 700; padding: 0 2px;
+  user-select: none;
+}
+.diff-line-del .diff-gutter { color: var(--accent-removed); }
+.diff-line-ins .diff-gutter { color: var(--accent-added); }
+.diff-text { flex: 1; white-space: pre-wrap; word-break: break-all; padding: 0 6px; color: var(--text); }
+.diff-line-ctx .diff-text { color: var(--text-muted); }
 .empty { color: var(--text-muted); font-style: italic; }
 /* ---- Governance footer ---- */
 #governance {
@@ -437,36 +454,40 @@ function buildDetail(toolId, section, container) {
             var nameEl = document.createElement('div');
             nameEl.className = 'field-name';
             nameEl.textContent = fd.field;
-            var beforeRow = document.createElement('div');
-            beforeRow.className = 'before-row';
-            var beforeLabel = document.createElement('span');
-            beforeLabel.className = 'before-label';
-            beforeLabel.textContent = 'Before: ';
-            var beforeVal = document.createElement('span');
-            beforeVal.className = 'value-block';
-            beforeRow.appendChild(beforeLabel);
-            beforeRow.appendChild(beforeVal);
-            var afterRow = document.createElement('div');
-            afterRow.className = 'after-row';
-            var afterLabel = document.createElement('span');
-            afterLabel.className = 'after-label';
-            afterLabel.textContent = 'After: ';
-            var afterVal = document.createElement('span');
-            afterVal.className = 'value-block';
             var aStr = formatVal(fd.before), bStr = formatVal(fd.after);
-            var runs = diffChars(aStr, bStr);
-            if (runs) {
-                fillDiffSpans(beforeVal, runs, 'delete');
-                fillDiffSpans(afterVal, runs, 'insert');
-            } else {
-                beforeVal.textContent = aStr;
-                afterVal.textContent = bStr;
-            }
-            afterRow.appendChild(afterLabel);
-            afterRow.appendChild(afterVal);
             row.appendChild(nameEl);
-            row.appendChild(beforeRow);
-            row.appendChild(afterRow);
+            if (aStr.includes('\n') || bStr.includes('\n')) {
+                row.appendChild(buildUnifiedDiff(aStr, bStr));
+            } else {
+                var beforeRow = document.createElement('div');
+                beforeRow.className = 'before-row';
+                var beforeLabel = document.createElement('span');
+                beforeLabel.className = 'before-label';
+                beforeLabel.textContent = 'Before: ';
+                var beforeVal = document.createElement('span');
+                beforeVal.className = 'value-block';
+                beforeRow.appendChild(beforeLabel);
+                beforeRow.appendChild(beforeVal);
+                var afterRow = document.createElement('div');
+                afterRow.className = 'after-row';
+                var afterLabel = document.createElement('span');
+                afterLabel.className = 'after-label';
+                afterLabel.textContent = 'After: ';
+                var afterVal = document.createElement('span');
+                afterVal.className = 'value-block';
+                var runs = diffChars(aStr, bStr);
+                if (runs) {
+                    fillDiffSpans(beforeVal, runs, 'delete');
+                    fillDiffSpans(afterVal, runs, 'insert');
+                } else {
+                    beforeVal.textContent = aStr;
+                    afterVal.textContent = bStr;
+                }
+                afterRow.appendChild(afterLabel);
+                afterRow.appendChild(afterVal);
+                row.appendChild(beforeRow);
+                row.appendChild(afterRow);
+            }
             frag.appendChild(row);
         });
     } else if (section === 'added' || section === 'removed') {
@@ -502,38 +523,42 @@ function formatVal(v) {
     return String(v);
 }
 
-// LCS-based char-level diff.
-// Returns [{type:'equal'|'delete'|'insert', text:string}, ...], or null if too long.
-function diffChars(a, b) {
-    if (a.length + b.length > 2000) return null;
-    var m = a.length, n = b.length;
+// Shared LCS core: operates on arbitrary arrays.
+// Returns [{type:'equal'|'delete'|'insert', val:element}, ...].
+function lcsOps(arr, brr) {
+    var m = arr.length, n = brr.length;
     var dp = new Array(m + 1);
     var i, j;
     for (i = 0; i <= m; i++) { dp[i] = new Array(n + 1).fill(0); }
     for (i = 1; i <= m; i++) {
         for (j = 1; j <= n; j++) {
-            dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+            dp[i][j] = arr[i-1] === brr[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
         }
     }
     var ops = [];
     i = m; j = n;
     while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
-            ops.push({type: 'equal', char: a[i-1]}); i--; j--;
+        if (i > 0 && j > 0 && arr[i-1] === brr[j-1]) {
+            ops.push({type: 'equal',  val: arr[i-1]}); i--; j--;
         } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-            ops.push({type: 'insert', char: b[j-1]}); j--;
+            ops.push({type: 'insert', val: brr[j-1]}); j--;
         } else {
-            ops.push({type: 'delete', char: a[i-1]}); i--;
+            ops.push({type: 'delete', val: arr[i-1]}); i--;
         }
     }
     ops.reverse();
-    // Merge consecutive same-type chars into runs
+    return ops;
+}
+
+// Char-level diff. Returns [{type, text}] runs, or null if too long.
+function diffChars(a, b) {
+    if (a.length + b.length > 2000) return null;
     var runs = [];
-    ops.forEach(function(op) {
+    lcsOps(a.split(''), b.split('')).forEach(function(op) {
         if (runs.length && runs[runs.length-1].type === op.type) {
-            runs[runs.length-1].text += op.char;
+            runs[runs.length-1].text += op.val;
         } else {
-            runs.push({type: op.type, text: op.char});
+            runs.push({type: op.type, text: op.val});
         }
     });
     return runs;
@@ -551,6 +576,37 @@ function fillDiffSpans(container, runs, showType) {
         }
         container.appendChild(span);
     });
+}
+
+// Line-level diff. Returns [{type, text}] per line.
+// Falls back to full delete+insert when too many lines (avoids O(m×n) lag).
+function diffLines(a, b) {
+    var aLines = a.split('\n'), bLines = b.split('\n');
+    if (aLines.length + bLines.length > 500) {
+        return aLines.map(function(l) { return {type: 'delete', text: l}; })
+               .concat(bLines.map(function(l) { return {type: 'insert', text: l}; }));
+    }
+    return lcsOps(aLines, bLines).map(function(op) { return {type: op.type, text: op.val}; });
+}
+
+function buildUnifiedDiff(a, b) {
+    var wrap = document.createElement('div');
+    wrap.className = 'diff-unified';
+    diffLines(a, b).forEach(function(op) {
+        var lineEl = document.createElement('div');
+        var cls = op.type === 'equal' ? 'ctx' : op.type === 'delete' ? 'del' : 'ins';
+        lineEl.className = 'diff-line diff-line-' + cls;
+        var gutter = document.createElement('span');
+        gutter.className = 'diff-gutter';
+        gutter.textContent = op.type === 'equal' ? ' ' : op.type === 'delete' ? '-' : '+';
+        var text = document.createElement('span');
+        text.className = 'diff-text';
+        text.textContent = op.text;
+        lineEl.appendChild(gutter);
+        lineEl.appendChild(text);
+        wrap.appendChild(lineEl);
+    });
+    return wrap;
 }
 
 function expandAll(containerId) {
