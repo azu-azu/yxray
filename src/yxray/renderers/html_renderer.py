@@ -456,7 +456,7 @@ function buildDetail(toolId, section, container) {
             nameEl.textContent = fd.field;
             var aStr = formatVal(fd.before), bStr = formatVal(fd.after);
             row.appendChild(nameEl);
-            if (aStr.includes('\n') || bStr.includes('\n')) {
+            if (aStr.includes('\\n') || bStr.includes('\\n')) {
                 row.appendChild(buildUnifiedDiff(aStr, bStr));
             } else {
                 var beforeRow = document.createElement('div');
@@ -581,7 +581,7 @@ function fillDiffSpans(container, runs, showType) {
 // Line-level diff. Returns [{type, text}] per line.
 // Falls back to full delete+insert when too many lines (avoids O(m×n) lag).
 function diffLines(a, b) {
-    var aLines = a.split('\n'), bLines = b.split('\n');
+    var aLines = a.split('\\n'), bLines = b.split('\\n');
     if (aLines.length + bLines.length > 500) {
         return aLines.map(function(l) { return {type: 'delete', text: l}; })
                .concat(bLines.map(function(l) { return {type: 'insert', text: l}; }));
