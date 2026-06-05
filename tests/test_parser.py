@@ -24,14 +24,6 @@ import pathlib
 
 import pytest
 
-from yxray.exceptions import (
-    MalformedXMLError,
-    MissingFileError,
-    ParseError,
-    UnreadableFileError,
-)
-from yxray.models import AlteryxConnection, AlteryxNode, WorkflowDoc
-from yxray.parser import parse
 from tests.fixtures import (
     BINARY_CONTENT,
     CONTAINER_YXMD,
@@ -42,6 +34,14 @@ from tests.fixtures import (
     REPEATED_FIELDS_YXMD,
     TWO_NODE_YXMD,
 )
+from yxray.exceptions import (
+    MalformedXMLError,
+    MissingFileError,
+    ParseError,
+    UnreadableFileError,
+)
+from yxray.models import AlteryxConnection, AlteryxNode, WorkflowDoc
+from yxray.parser import parse
 
 # ---------------------------------------------------------------------------
 # Helper

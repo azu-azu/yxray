@@ -18,4 +18,10 @@ from yxray.renderers.inspect_report_renderer import InspectReportRenderer
 from yxray.renderers.json_renderer import JSONRenderer
 from yxray.renderers.single_graph_renderer import SingleGraphRenderer
 
-__all__ = ["JSONRenderer", "HTMLRenderer", "GraphRenderer", "SingleGraphRenderer", "InspectReportRenderer"]
+__all__ = [
+    "JSONRenderer",
+    "HTMLRenderer",
+    "GraphRenderer",
+    "SingleGraphRenderer",
+    "InspectReportRenderer",
+]

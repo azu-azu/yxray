@@ -25,7 +25,8 @@ from yxray.models import (
 )
 
 # Excluded field paths (dotted notation) — start empty per research recommendation.
-# TODO: populate from real fixture inspection before v1.0 (e.g. GUID-like Annotation.@Id)
+# TODO: populate from real fixture inspection before v1.0.
+# Example: GUID-like Annotation.@Id values once confirmed from fixtures.
 _EXCLUDED_FIELDS: frozenset[str] = frozenset()
 
 
@@ -161,6 +162,96 @@ def _get_nested_value(config: dict[str, Any], deepdiff_path: str) -> Any:
     return current
 
 
+def _add_field_diff(
+    field_diffs: dict[str, tuple[Any, Any]],
+    dotted_path: str,
+    old_value: Any,
+    new_value: Any,
+) -> None:
+    if dotted_path not in _EXCLUDED_FIELDS:
+        field_diffs[dotted_path] = (old_value, new_value)
+
+
+def _add_value_changes(
+    field_diffs: dict[str, tuple[Any, Any]],
+    changes: dict[str, Any],
+) -> None:
+    for path, change in changes.items():
+        _add_field_diff(
+            field_diffs,
+            _deepdiff_path_to_dotted(path),
+            change["old_value"],
+            change["new_value"],
+        )
+
+
+def _add_dictionary_changes(
+    field_diffs: dict[str, tuple[Any, Any]],
+    changes: Any,
+    config: dict[str, Any],
+    *,
+    added: bool,
+) -> None:
+    for path in changes:
+        value = _get_nested_value(config, path)
+        old_value, new_value = (None, value) if added else (value, None)
+        _add_field_diff(
+            field_diffs,
+            _deepdiff_path_to_dotted(path),
+            old_value,
+            new_value,
+        )
+
+
+def _add_iterable_changes(
+    field_diffs: dict[str, tuple[Any, Any]],
+    changes: Any,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> None:
+    for path in changes:
+        parent_path = _get_parent_path(path)
+        _add_field_diff(
+            field_diffs,
+            _deepdiff_path_to_dotted(path),
+            _get_nested_value(old_config, parent_path),
+            _get_nested_value(new_config, parent_path),
+        )
+
+
+def _add_type_changes(
+    field_diffs: dict[str, tuple[Any, Any]],
+    changes: dict[str, Any],
+) -> None:
+    for path, change in changes.items():
+        _add_field_diff(
+            field_diffs,
+            _deepdiff_path_to_dotted(path),
+            change.get("old_value"),
+            change.get("new_value"),
+        )
+
+
+def _collect_field_diffs(
+    deep_diff: dict[str, Any],
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> dict[str, tuple[Any, Any]]:
+    field_diffs: dict[str, tuple[Any, Any]] = {}
+    for change_type, changes in deep_diff.items():
+        if change_type == "values_changed":
+            _add_value_changes(field_diffs, changes)
+        elif change_type == "dictionary_item_added":
+            _add_dictionary_changes(field_diffs, changes, new_config, added=True)
+        elif change_type == "dictionary_item_removed":
+            _add_dictionary_changes(field_diffs, changes, old_config, added=False)
+        elif change_type in ("iterable_item_added", "iterable_item_removed"):
+            _add_iterable_changes(field_diffs, changes, old_config, new_config)
+        elif change_type == "type_changes":
+            _add_type_changes(field_diffs, changes)
+    return field_diffs
+
+
 def _diff_node(old_node: AlteryxNode, new_node: AlteryxNode) -> NodeDiff:
     """Compute field-level config diff between two matched nodes.
 
@@ -186,51 +277,7 @@ def _diff_node(old_node: AlteryxNode, new_node: AlteryxNode) -> NodeDiff:
         verbose_level=2,
     )
 
-    field_diffs: dict[str, tuple[Any, Any]] = {}
-
-    # Process each change type from DeepDiff output
-    for change_type, changes in dd.items():
-        if change_type == "values_changed":
-            for path, change in changes.items():
-                dotted = _deepdiff_path_to_dotted(path)
-                if dotted not in _EXCLUDED_FIELDS:
-                    field_diffs[dotted] = (change["old_value"], change["new_value"])
-
-        elif change_type == "dictionary_item_added":
-            for path in changes:
-                dotted = _deepdiff_path_to_dotted(path)
-                if dotted not in _EXCLUDED_FIELDS:
-                    new_val = _get_nested_value(new_node.config, path)
-                    field_diffs[dotted] = (None, new_val)
-
-        elif change_type == "dictionary_item_removed":
-            for path in changes:
-                dotted = _deepdiff_path_to_dotted(path)
-                if dotted not in _EXCLUDED_FIELDS:
-                    old_val = _get_nested_value(old_node.config, path)
-                    field_diffs[dotted] = (old_val, None)
-
-        elif change_type in ("iterable_item_added", "iterable_item_removed"):
-            # List fields are treated atomically — surface the PARENT list as
-            # before/after rather than individual element changes.
-            for path in changes:
-                parent_dotted = _deepdiff_path_to_dotted(path)
-                if parent_dotted not in _EXCLUDED_FIELDS:
-                    # Get the full list from both sides (atomic treatment)
-                    # Find the parent path by stripping the numeric index
-                    parent_path = _get_parent_path(path)
-                    old_list = _get_nested_value(old_node.config, parent_path)
-                    new_list = _get_nested_value(new_node.config, parent_path)
-                    field_diffs[parent_dotted] = (old_list, new_list)
-
-        elif change_type == "type_changes":
-            for path, change in changes.items():
-                dotted = _deepdiff_path_to_dotted(path)
-                if dotted not in _EXCLUDED_FIELDS:
-                    field_diffs[dotted] = (
-                        change.get("old_value"),
-                        change.get("new_value"),
-                    )
+    field_diffs = _collect_field_diffs(dd, old_node.config, new_node.config)
 
     if not field_diffs:
         raise ValueError(

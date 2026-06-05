@@ -22,6 +22,15 @@ build-backend = "hatchling.build"
 [project.scripts]
 acd = "yxray.cli:app"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.15",
+    "lxml-stubs>=0.5",
+    "ruff>=0.15",
+    "scipy-stubs>=1.17.1.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
