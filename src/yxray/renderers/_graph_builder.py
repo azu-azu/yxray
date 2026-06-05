@@ -15,6 +15,7 @@ graph_renderer.py. Unit tests import directly from here.
 from __future__ import annotations
 
 import importlib.resources as pkg_resources
+import json
 from collections import defaultdict
 from typing import Any
 
@@ -241,7 +242,9 @@ def _make_vis_node(node: AlteryxNode, status: str) -> dict[str, Any]:
     tool_id = int(node.tool_id)
     short_label = node.tool_type.split(".")[-1]
     config_str = " ".join(
-        str(v) for k, v in node.config.items() if not k.startswith("@")
+        json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+        for k, v in node.config.items()
+        if not k.startswith("@")
     )
     return {
         "id": tool_id,
