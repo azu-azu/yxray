@@ -15,6 +15,7 @@ from jinja2 import Environment
 
 from yxray.models.workflow import WorkflowDoc
 from yxray.renderers._companion_window import COMPANION_WINDOW_JS
+from yxray.renderers._report_assets import REPORT_BASE_CSS, STEP_DETAIL_JS
 
 _INSPECT_REPORT_TEMPLATE = """\
 <!DOCTYPE html>
@@ -24,50 +25,7 @@ _INSPECT_REPORT_TEMPLATE = """\
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }}</title>
   <style>
-:root {
-  --bg: #0f172a; --surface: #1e293b; --surface-2: #131f31;
-  --border: #1e3a5f; --border-subtle: #334155;
-  --text: #e2e8f0; --text-muted: #64748b;
-  --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534; --accent-added-text: #001a00;
-  --accent-removed: #f87171; --accent-removed-bg: #2d1515; --accent-removed-border: #7f1d1d; --accent-removed-text: #1a0000;
-  --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
-  --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
-}
-html.light {
-  --bg: #ffffff; --surface: #f8f9fb; --surface-2: #f1f5f9;
-  --border: #e2e8f0; --border-subtle: #f1f5f9;
-  --text: #0f172a; --text-muted: #64748b;
-  --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0; --accent-added-text: #fff;
-  --accent-removed: #dc2626; --accent-removed-bg: #fef2f2; --accent-removed-border: #fecaca; --accent-removed-text: #fff;
-  --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
-  --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
-}
-*, *::before, *::after { box-sizing: border-box; }
-body {
-  margin: 0; padding: 0;
-  background: var(--bg); color: var(--text);
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 14px; line-height: 1.5;
-}
-.site-header {
-  background: var(--bg); border-bottom: 1px solid var(--border);
-  padding: 16px 0; margin-bottom: 24px;
-}
-.header-inner {
-  max-width: 960px; margin: 0 auto; padding: 0 32px;
-  display: flex; justify-content: space-between; align-items: flex-start;
-}
-.header-left { display: flex; flex-direction: column; gap: 4px; }
-.header-title { font-size: 18px; font-weight: 600; color: var(--text); margin: 0; }
-.header-meta { font-size: 12px; color: var(--text-muted); margin: 0; }
-.theme-toggle {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 9999px;
-  padding: 6px 14px; cursor: pointer; color: var(--text-muted);
-  display: flex; align-items: center; gap: 6px;
-  font-size: 13px; font-family: inherit; transition: background 0.15s ease;
-}
-.theme-toggle:hover { background: var(--surface-2); }
-.container { max-width: 960px; margin: 0 auto; padding: 0 32px; }
+{{ report_base_css | safe }}
 /* ---- Section headers ---- */
 .section-wrap { margin-bottom: 24px; }
 .section-header {
@@ -86,25 +44,8 @@ body {
   border-radius: 9999px; padding: 2px 10px; font-size: 12px; border: 1px solid;
 }
 .count-pill-summary { background: var(--surface-2); border-color: var(--border); color: var(--text-muted); }
-/* ---- Workflow summary steps ---- */
-.summary-steps { list-style: none; padding: 0; margin: 0 0 4px; display: flex; flex-direction: column; gap: 4px; }
-.summary-step { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 6px; }
-.summary-step-input  { background: var(--accent-conn-bg); }
-.summary-step-output { background: var(--accent-added-bg); }
-.summary-step-transform { background: var(--surface); }
-.summary-step-unknown { background: var(--surface); opacity: 0.7; }
-.summary-step-added    { outline: 1px solid var(--accent-added-border); }
-.summary-step-modified { outline: 1px solid var(--accent-modified-border); }
-.step-num { font-size: 11px; color: var(--text-muted); min-width: 22px; text-align: right; flex-shrink: 0; }
-.step-badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 7px; border: 1px solid; flex-shrink: 0; }
-.step-badge-input    { color: var(--accent-conn);     background: var(--accent-conn-bg);     border-color: var(--accent-conn-border); }
-.step-badge-output   { color: var(--accent-added);    background: var(--accent-added-bg);    border-color: var(--accent-added-border); }
-.step-badge-transform { color: var(--accent-modified); background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
-.step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
-.step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
-.change-badge {
-  font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid;
-}
+/* ---- Workflow summary steps: shared classes live in REPORT_BASE_CSS ---- */
+.change-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
 .change-badge-added { background: var(--accent-added-bg); border-color: var(--accent-added-border); color: var(--accent-added); }
 .change-badge-removed { background: var(--accent-removed-bg); border-color: var(--accent-removed-border); color: var(--accent-removed); }
 .change-badge-modified { background: var(--accent-modified-bg); border-color: var(--accent-modified-border); color: var(--accent-modified); }
@@ -143,11 +84,18 @@ body {
       {% if workflow_steps %}
       <ol class="summary-steps">
         {% for step in workflow_steps %}
-        <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}">
-          <span class="step-num">{{ loop.index }}.</span>
-          <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
-          {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
-          {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
+        <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}"
+            onclick="toggleStepDetail(this)">
+          <div class="step-row">
+            <span class="step-num">{{ loop.index }}.</span>
+            <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+            {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+            {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
+            <span class="step-expand-arrow">&#9654;</span>
+          </div>
+          <div class="step-detail" data-config="{{ step.config | tojson }}">
+            <div class="step-detail-inner"></div>
+          </div>
         </li>
         {% endfor %}
       </ol>
@@ -196,6 +144,8 @@ function toggleSummarySection() {
     wrap.classList.toggle('collapsed');
     if (chevron) chevron.classList.toggle('open');
 }
+
+{{ step_detail_js | safe }}
 </script>
 </body>
 </html>
@@ -210,7 +160,9 @@ class InspectReportRenderer:
     _graph.html file produced by SingleGraphRenderer.
     """
 
-    def render(self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None) -> str:
+    def render(
+        self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None
+    ) -> str:
         """WorkflowDoc → standalone HTML report string.
 
         Args:
@@ -223,7 +175,9 @@ class InspectReportRenderer:
             A self-contained HTML string.
         """
         title = pathlib.Path(doc.filepath).name
-        data_node_count = sum(1 for n in doc.nodes if "ToolContainer" not in n.tool_type)
+        data_node_count = sum(
+            1 for n in doc.nodes if "ToolContainer" not in n.tool_type
+        )
 
         steps_dicts: list[Any] | None = None
         if workflow_steps:
@@ -240,5 +194,7 @@ class InspectReportRenderer:
             node_count=data_node_count,
             edge_count=len(doc.connections),
             workflow_steps=steps_dicts,
+            report_base_css=REPORT_BASE_CSS,
             companion_window_js=COMPANION_WINDOW_JS,
+            step_detail_js=STEP_DETAIL_JS,
         )

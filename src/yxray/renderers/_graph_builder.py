@@ -156,7 +156,10 @@ def hierarchical_positions(
 
     if canvas_y is None:
         return {
-            int(node): (float(coords[0]) * LAYOUT_SCALE, float(coords[1]) * LAYOUT_SCALE)
+            int(node): (
+                float(coords[0]) * LAYOUT_SCALE,
+                float(coords[1]) * LAYOUT_SCALE,
+            )
             for node, coords in raw_pos.items()
         }
 
@@ -176,7 +179,7 @@ def hierarchical_positions(
             (p[0] for p in node_y_pairs),
             key=lambda nid: canvas_y.get(nid, 0.0),
         )
-        for node_id, y_raw in zip(node_ids, y_slots):
+        for node_id, y_raw in zip(node_ids, y_slots, strict=True):
             result[node_id] = (x_raw * LAYOUT_SCALE, y_raw * LAYOUT_SCALE)
     return result
 
@@ -237,6 +240,9 @@ def _make_vis_node(node: AlteryxNode, status: str) -> dict[str, Any]:
     """Build a vis-network node dict for split-view graphs."""
     tool_id = int(node.tool_id)
     short_label = node.tool_type.split(".")[-1]
+    config_str = " ".join(
+        str(v) for k, v in node.config.items() if not k.startswith("@")
+    )
     return {
         "id": tool_id,
         "label": short_label + "\n(" + str(tool_id) + ")",
@@ -244,6 +250,7 @@ def _make_vis_node(node: AlteryxNode, status: str) -> dict[str, Any]:
         "y": node.y,
         "fixed": False,
         "status": status,
+        "configStr": config_str,
         "color": {
             "background": COLOR_MAP[status],
             "border": BORDER_COLOR_MAP[status],
