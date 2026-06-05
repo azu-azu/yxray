@@ -56,6 +56,10 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   <button id="fit-both-btn" class="ctrl-btn" onclick="if(networkLeft)networkLeft.fit();if(networkRight)networkRight.fit();">Fit Both</button>
   <button id="split-fullscreen-btn" class="ctrl-btn">Fullscreen</button>
   <button id="split-toggle-changes" class="ctrl-btn">Show Only Changes</button>
+  <div class="graph-search-wrap">
+    <input type="text" id="split-search-input" class="graph-search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
+    <button class="graph-search-clear" id="split-search-clear" aria-label="Clear">&times;</button>
+  </div>
   <span class="graph-legend">
     <span class="legend-dot legend-dot-added"></span>Added
     <span class="legend-dot legend-dot-removed"></span>Removed
@@ -656,6 +660,53 @@ document.getElementById('graph-search-clear').addEventListener('click', function
   document.getElementById('graph-search-input').focus();
 });
 
+// ── Split view search ─────────────────────────────────────────────────────
+function doSplitSearch(q) {
+  var clearBtn = document.getElementById('split-search-clear');
+  clearBtn.style.display = q ? 'block' : 'none';
+  var dim = isDark()
+    ? {bg: '#1e293b', bd: '#334155', font: '#475569'}
+    : {bg: '#f1f5f9', bd: '#cbd5e1', font: '#94a3b8'};
+  var re;
+  try { re = new RegExp(q, 'i'); } catch(e) { re = null; }
+  function testStr(s) { return re ? re.test(s) : s.toLowerCase().indexOf(q.toLowerCase()) !== -1; }
+  var firstMatch = null;
+  [
+    {dataset: nodesDatasetLeft,  nodes: NODES_OLD},
+    {dataset: nodesDatasetRight, nodes: NODES_NEW}
+  ].forEach(function(pair) {
+    if (!pair.dataset) return;
+    var updates = [];
+    pair.nodes.forEach(function(n) {
+      if (n.status === 'ghost_added' || n.status === 'ghost_removed') return;
+      var hit = !q || testStr(String(n.id)) || testStr(n.label || '') || testStr(n.configStr || '');
+      if (!hit) {
+        updates.push({id: n.id, color: {
+          background: dim.bg, border: dim.bd,
+          highlight: {background: dim.bg, border: dim.bd}
+        }, font: {color: dim.font}});
+      } else if (firstMatch === null) {
+        firstMatch = n.id;
+      }
+    });
+    pair.dataset.update(updates);
+  });
+  if (q && firstMatch !== null) focusNode(firstMatch);
+}
+
+function clearSplitSearch() {
+  document.getElementById('split-search-input').value = '';
+  doSplitSearch('');
+}
+
+document.getElementById('split-search-input').addEventListener('input', function() {
+  doSplitSearch(this.value.trim());
+});
+document.getElementById('split-search-clear').addEventListener('click', function() {
+  clearSplitSearch();
+  document.getElementById('split-search-input').focus();
+});
+
 // ── Section C: Split network + view switcher ──────────────────────────────
 var networkLeft = null, networkRight = null;
 var nodesDatasetLeft = null, nodesDatasetRight = null;
@@ -851,6 +902,7 @@ function switchView(view) {
   var btnSplit = document.getElementById('btn-split');
   var btnOverlay = document.getElementById('btn-overlay');
   if (view === 'split') {
+    clearGraphSearch();
     splitView.style.display = 'flex';
     splitControls.style.display = 'flex';
     overlayView.style.display = 'none';
@@ -864,6 +916,7 @@ function switchView(view) {
       });
     });
   } else {
+    clearSplitSearch();
     splitView.style.display = 'none';
     splitControls.style.display = 'none';
     overlayView.style.display = 'block';
