@@ -19,10 +19,6 @@ import inspect
 
 import pytest
 
-from yxray.models.types import ToolID
-from yxray.models.workflow import AlteryxNode, WorkflowDoc
-from yxray.normalizer import normalize
-from yxray.normalizer.patterns import GUID_VALUE_KEYS
 from tests.fixtures.normalization import (
     ATTR_ORDER_PAIR,
     GUID_PAIR,
@@ -35,6 +31,10 @@ from tests.fixtures.normalization import (
     US_DATE_PAIR,
     NodePair,
 )
+from yxray.models.types import ToolID
+from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.normalizer import normalize
+from yxray.normalizer.patterns import GUID_VALUE_KEYS
 
 # ---------------------------------------------------------------------------
 # Helpers

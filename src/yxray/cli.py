@@ -14,7 +14,12 @@ from yxray.exceptions import MalformedXMLError, ParseError
 from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
-from yxray.renderers import GraphRenderer, HTMLRenderer, InspectReportRenderer, SingleGraphRenderer
+from yxray.renderers import (
+    GraphRenderer,
+    HTMLRenderer,
+    InspectReportRenderer,
+    SingleGraphRenderer,
+)
 from yxray.summarizer import summarize
 
 app = typer.Typer(no_args_is_help=True)
@@ -138,7 +143,9 @@ def diff(  # noqa: B008
         )
         added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
         modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
-        steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
+        steps = summarize(
+            response.doc_b, added_ids=added_ids, modified_ids=modified_ids
+        )
         html = HTMLRenderer().render(
             result,
             file_a=file_a_str,
@@ -160,7 +167,8 @@ def diff(  # noqa: B008
                 + len(result.edge_diffs)
             )
             typer.echo(
-                f"Report written to {output}, graph to {graph_output} ({change_count} changes detected)",
+                f"Report written to {output}, graph to {graph_output} "
+                f"({change_count} changes detected)",
                 err=True,
             )
 

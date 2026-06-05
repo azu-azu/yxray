@@ -11,11 +11,10 @@ Same-type BFS clusters (purple) and ToolContainer dashed borders are drawn.
 
 from __future__ import annotations
 
+import importlib.resources as pkg_resources
 import json
 import pathlib
 from typing import Any
-
-import importlib.resources as pkg_resources
 
 from jinja2 import Environment
 
@@ -298,7 +297,9 @@ class SingleGraphRenderer:
 
     def render(self, doc: WorkflowDoc) -> str:
         """WorkflowDoc → standalone HTML string."""
-        nodes_list, edges_list, config_map, containers_list = self._build_graph_data(doc)
+        nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
+            doc
+        )
         vis_js = load_vis_js()
         single_graph_js = _load_single_graph_js()
         title = pathlib.Path(doc.filepath).name
@@ -316,7 +317,9 @@ class SingleGraphRenderer:
         env = Environment(autoescape=True)  # noqa: S701
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_HTML_TEMPLATE)
-        data_node_count = sum(1 for n in doc.nodes if "ToolContainer" not in n.tool_type)
+        data_node_count = sum(
+            1 for n in doc.nodes if "ToolContainer" not in n.tool_type
+        )
         return template.render(
             title=title,
             node_count=data_node_count,
@@ -329,7 +332,9 @@ class SingleGraphRenderer:
 
     def _build_graph_data(
         self, doc: WorkflowDoc
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    ) -> tuple[
+        list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]
+    ]:
         data_nodes = [n for n in doc.nodes if "ToolContainer" not in n.tool_type]
         data_node_ids = {int(n.tool_id) for n in data_nodes}
 
@@ -415,9 +420,15 @@ class SingleGraphRenderer:
                 if style_int > 9:
                     return _hex_or_int_to_rgb(text)
                 _STYLE_COLORS: dict[int, str] = {
-                    1: "#dbeafe", 2: "#dcfce7", 3: "#fef9c3",
-                    4: "#ffedd5", 5: "#fce7f3", 6: "#ede9fe",
-                    7: "#d1fae5", 8: "#e0f2fe", 9: "#fee2e2",
+                    1: "#dbeafe",
+                    2: "#dcfce7",
+                    3: "#fef9c3",
+                    4: "#ffedd5",
+                    5: "#fce7f3",
+                    6: "#ede9fe",
+                    7: "#d1fae5",
+                    8: "#e0f2fe",
+                    9: "#fee2e2",
                 }
                 return _STYLE_COLORS.get(style_int)
             except ValueError:
@@ -426,7 +437,11 @@ class SingleGraphRenderer:
         # Tint: Qt ARGB32 packed integer
         tint_entry = config.get("Tint")
         if tint_entry:
-            raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
+            raw = (
+                tint_entry.get("#text", "")
+                if isinstance(tint_entry, dict)
+                else str(tint_entry)
+            )
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result
@@ -434,7 +449,11 @@ class SingleGraphRenderer:
         # FillColor: top-level hex string (some versions)
         fill_entry = config.get("FillColor") or config.get("fillColor")
         if fill_entry:
-            raw = fill_entry.get("#text", "") if isinstance(fill_entry, dict) else str(fill_entry)
+            raw = (
+                fill_entry.get("#text", "")
+                if isinstance(fill_entry, dict)
+                else str(fill_entry)
+            )
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result
@@ -469,7 +488,11 @@ class SingleGraphRenderer:
         file_entry = node.config.get("File")
         if file_entry is None:
             return None
-        raw = file_entry.get("#text", "") if isinstance(file_entry, dict) else str(file_entry)
+        raw = (
+            file_entry.get("#text", "")
+            if isinstance(file_entry, dict)
+            else str(file_entry)
+        )
         return raw.strip() or None
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:

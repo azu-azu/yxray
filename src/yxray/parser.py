@@ -181,7 +181,11 @@ def _tree_to_workflow(
         gui: etree._Element | None = node_elem.find("GuiSettings")
         plugin: str = gui.get("Plugin", "") if gui is not None else ""
 
-        if filter_ui_tools and plugin.startswith("AlteryxGuiToolkit.") and "ToolContainer" not in plugin:
+        if (
+            filter_ui_tools
+            and plugin.startswith("AlteryxGuiToolkit.")
+            and "ToolContainer" not in plugin
+        ):
             continue
 
         pos: etree._Element | None = gui.find("Position") if gui is not None else None
@@ -195,11 +199,17 @@ def _tree_to_workflow(
             _element_to_dict(config_elem) if config_elem is not None else {}
         )
 
-        engine_settings: etree._Element | None = node_elem.find("Properties/EngineSettings")
-        container_id_str = (
-            engine_settings.get("ToolContainerID") if engine_settings is not None else None
+        engine_settings: etree._Element | None = node_elem.find(
+            "Properties/EngineSettings"
         )
-        container_id: int | None = int(container_id_str) if container_id_str is not None else None
+        container_id_str = (
+            engine_settings.get("ToolContainerID")
+            if engine_settings is not None
+            else None
+        )
+        container_id: int | None = (
+            int(container_id_str) if container_id_str is not None else None
+        )
 
         nodes_list.append(
             AlteryxNode(

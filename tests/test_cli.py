@@ -19,7 +19,6 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from yxray.cli import app
 from tests.fixtures.cli import (
     IDENTICAL_YXMD,
     MALFORMED_XML,
@@ -28,6 +27,7 @@ from tests.fixtures.cli import (
     POSITION_YXMD_A,
     POSITION_YXMD_B,
 )
+from yxray.cli import app
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +35,7 @@ def no_browser():
     """Prevent webbrowser.open from launching a browser during tests."""
     with patch("yxray.cli.webbrowser.open"):
         yield
+
 
 runner = CliRunner()  # Click 8.2+ separates stdout/stderr by default
 
@@ -126,7 +127,9 @@ def test_diff_writes_html_report_by_default(tmp_path: pathlib.Path) -> None:
     path_b.write_bytes(MINIMAL_YXMD_B)
     output = tmp_path / "diff_report.html"
 
-    result = runner.invoke(app, ["diff", str(path_a), str(path_b), "--output", str(output)])
+    result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--output", str(output)]
+    )
 
     assert result.exit_code == 1
     assert output.exists()
@@ -142,7 +145,9 @@ def test_diff_html_report_contains_governance_metadata(tmp_path: pathlib.Path) -
     path_b.write_bytes(MINIMAL_YXMD_B)
     output = tmp_path / "diff_report.html"
 
-    result = runner.invoke(app, ["diff", str(path_a), str(path_b), "--output", str(output)])
+    result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--output", str(output)]
+    )
 
     assert result.exit_code == 1
     content = output.read_text(encoding="utf-8")
@@ -164,7 +169,9 @@ def test_diff_output_flag_writes_custom_path(tmp_path: pathlib.Path) -> None:
     path_b.write_bytes(MINIMAL_YXMD_B)
     custom = tmp_path / "custom_report.html"
 
-    result = runner.invoke(app, ["diff", str(path_a), str(path_b), "--output", str(custom)])
+    result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--output", str(custom)]
+    )
 
     assert result.exit_code == 1
     assert custom.exists()
@@ -178,7 +185,9 @@ def test_diff_no_file_written_on_clean_diff(tmp_path: pathlib.Path) -> None:
     path_b.write_bytes(IDENTICAL_YXMD)
     output = tmp_path / "diff_report.html"
 
-    result = runner.invoke(app, ["diff", str(path_a), str(path_b), "--output", str(output)])
+    result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--output", str(output)]
+    )
 
     assert result.exit_code == 0
     assert not output.exists()

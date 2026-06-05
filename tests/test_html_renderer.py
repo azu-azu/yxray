@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
-from yxray.renderers import HTMLRenderer
 from tests.fixtures.html_report import (
     EMPTY_DIFF,
     SINGLE_ADDED,
     SINGLE_MODIFIED,
     WITH_CONNECTION,
 )
+from yxray.renderers import HTMLRenderer
 
 
 def test_render_self_contained() -> None:
