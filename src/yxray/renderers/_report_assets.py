@@ -90,7 +90,6 @@ body {
 .step-expand-arrow { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; transition: transform 0.15s ease; }
 .step-expand-arrow.open { transform: rotate(90deg); }
 .step-detail { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
-.step-detail.open { max-height: none; }
 .step-detail-inner { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
 .step-config-row { display: flex; gap: 8px; align-items: baseline; }
 .step-config-key { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; flex-shrink: 0; min-width: 120px; }

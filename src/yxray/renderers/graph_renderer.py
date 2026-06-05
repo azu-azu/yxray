@@ -664,6 +664,7 @@ document.getElementById('graph-search-clear').addEventListener('click', function
 function doSplitSearch(q) {
   var clearBtn = document.getElementById('split-search-clear');
   clearBtn.style.display = q ? 'block' : 'none';
+  if (!q) { applyThemeColorsToSplit(); return; }
   var dim = isDark()
     ? {bg: '#1e293b', bd: '#334155', font: '#475569'}
     : {bg: '#f1f5f9', bd: '#cbd5e1', font: '#94a3b8'};
