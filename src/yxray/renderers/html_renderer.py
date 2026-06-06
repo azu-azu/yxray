@@ -9,7 +9,6 @@ from jinja2 import Environment
 from yxray.models import DiffResult, NodeDiff
 from yxray.models.diff import EdgeDiff
 from yxray.models.workflow import AlteryxNode
-from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._report_assets import REPORT_BASE_CSS, STEP_DETAIL_JS
 
 _TEMPLATE = """<!DOCTYPE html>
@@ -168,6 +167,28 @@ html.light .tool-row:hover { background: #f1f5f9; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px; color: var(--text-muted); line-height: 1.8; padding: 8px 0;
 }
+/* ---- Report search ---- */
+.report-search-wrap { position: relative; display: flex; align-items: center; }
+.report-search-input {
+  width: 180px; padding: 6px 28px 6px 12px;
+  border: 1px solid var(--border); border-radius: 9999px;
+  background: var(--surface); color: var(--text);
+  font-size: 13px; outline: none; font-family: inherit;
+  transition: border-color 0.15s, width 0.2s;
+}
+.report-search-input:focus { border-color: var(--accent-modified); width: 230px; }
+.report-search-input::placeholder { color: var(--text-muted); }
+.report-search-clear {
+  position: absolute; right: 9px;
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 14px; line-height: 1; display: none; padding: 0;
+}
+.report-search-clear:hover { color: var(--text); }
+.report-search-count {
+  font-size: 11px; color: var(--text-muted); white-space: nowrap;
+  min-width: 48px; text-align: right;
+}
 /* ---- Print ---- */
 @media print {
   .ctrl-btn, .theme-toggle { display: none; }
@@ -190,7 +211,12 @@ html.light .tool-row:hover { background: #f1f5f9; }
       <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="theme-toggle" onclick="openGraph()" aria-label="Open graph">
+      <div class="report-search-wrap">
+        <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
+        <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
+      </div>
+      <span class="report-search-count" id="report-search-count"></span>
+      <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Graph
       </button>
@@ -394,10 +420,81 @@ function toggleTheme() {
     setTheme(isLight ? 'dark' : 'light');
 }
 
-{{ companion_window_js | safe }}
-
 function openGraph() {
-    openCompanionFile(window.location.href.replace(/_report(\\.[^./?#]+)([?#].*)?$/, '_graph$1$2'));
+    var section = document.getElementById('graph-section');
+    if (section) section.scrollIntoView({behavior: 'smooth'});
+}
+
+function doReportSearch(q) {
+    var clearBtn = document.getElementById('report-search-clear');
+    var countEl = document.getElementById('report-search-count');
+    q = q.toLowerCase();
+    if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+    var secNames = ['added', 'modified', 'removed', 'connections'];
+    var totalMatch = 0;
+    for (var s = 0; s < secNames.length; s++) {
+        var sec = secNames[s];
+        var container = document.getElementById('section-' + sec);
+        if (!container) continue;
+        var rows = container.querySelectorAll('.tool-row');
+        var visibleCount = 0;
+        for (var r = 0; r < rows.length; r++) {
+            var row = rows[r];
+            var nameEl = row.querySelector('.tool-type-name');
+            var idEl = row.querySelector('.tool-id-pill');
+            var text = (nameEl ? nameEl.textContent : '') + ' ' + (idEl ? idEl.textContent : '');
+            var match = !q || text.toLowerCase().indexOf(q) !== -1;
+            row.style.display = match ? '' : 'none';
+            if (!match && row.classList.contains('expanded')) {
+                var detailId = row.id.replace('row-', 'detail-');
+                var detail = document.getElementById(detailId);
+                if (detail) detail.hidden = true;
+                row.classList.remove('expanded');
+            }
+            if (match) visibleCount++;
+        }
+        totalMatch += visibleCount;
+        // Update section count pill
+        var pill = document.querySelector('#heading-' + sec + ' .count-pill');
+        if (pill) {
+            if (q) {
+                pill.dataset.origText = pill.dataset.origText || pill.textContent;
+                pill.textContent = visibleCount + ' / ' + rows.length;
+            } else if (pill.dataset.origText) {
+                pill.textContent = pill.dataset.origText;
+            }
+        }
+        var noResultEl = document.getElementById('no-results-' + sec);
+        if (q && visibleCount === 0 && rows.length > 0) {
+            if (!noResultEl) {
+                noResultEl = document.createElement('p');
+                noResultEl.id = 'no-results-' + sec;
+                noResultEl.className = 'empty';
+                noResultEl.textContent = 'No matches.';
+                container.appendChild(noResultEl);
+            }
+            noResultEl.style.display = '';
+        } else if (noResultEl) {
+            noResultEl.style.display = 'none';
+        }
+    }
+    if (countEl) countEl.textContent = q ? totalMatch + ' hit' + (totalMatch !== 1 ? 's' : '') : '';
+    // Scroll to first visible match
+    if (q) {
+        var scrolled = false;
+        for (var s2 = 0; s2 < secNames.length && !scrolled; s2++) {
+            var c2 = document.getElementById('section-' + secNames[s2]);
+            if (!c2) continue;
+            var allRows = c2.querySelectorAll('.tool-row');
+            for (var r2 = 0; r2 < allRows.length; r2++) {
+                if (allRows[r2].style.display !== 'none') {
+                    allRows[r2].scrollIntoView({behavior: 'smooth', block: 'center'});
+                    scrolled = true;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 (function() {
@@ -633,6 +730,12 @@ function toggleSummarySection() {
 }
 
 {{ step_detail_js | safe }}
+
+(function() {
+    var inp = document.getElementById('report-search-input');
+    if (!inp) return;
+    inp.addEventListener('input', function() { doReportSearch(this.value.trim()); });
+})();
 </script>
 </div>
 </body>
@@ -694,7 +797,6 @@ class HTMLRenderer:
             graph_html=graph_html,
             metadata=metadata,
             report_base_css=REPORT_BASE_CSS,
-            companion_window_js=COMPANION_WINDOW_JS,
             step_detail_js=STEP_DETAIL_JS,
             workflow_steps=[s.to_dict(include_change=True) for s in workflow_steps]
             if workflow_steps
