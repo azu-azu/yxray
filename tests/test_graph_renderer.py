@@ -82,19 +82,13 @@ def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
     assert "_graph$1$2" in html
 
 
-def test_single_graph_report_button_reuses_existing_companion_window() -> None:
-    """Single graph -> inspect report navigation reuses an existing companion."""
+def test_single_graph_has_summary_panel_js() -> None:
+    """Single graph includes summary panel open/close functions."""
     html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
 
-    assert "function companionWindowName(url)" in html
-    assert "window.name = companionWindowName(window.location.href)" in html
-    assert "'yxray_companion_' + kind + '_'" in html
-    assert "function openCompanionFile(url)" in html
-    assert "window.open(url, targetName)" in html
-    assert "existingOrNew.focus()" in html
-    assert "openCompanionFile(window.location.href.replace" in html
-    assert "_graph" in html
-    assert "_report$1$2" in html
+    assert "openSummaryPanel" in html
+    assert "closeSummaryPanel" in html
+    assert "toggleStepDetail" in html
 
 
 def test_render_returns_fragment_not_full_document() -> None:
