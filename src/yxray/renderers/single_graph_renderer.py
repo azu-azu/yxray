@@ -19,8 +19,8 @@ from typing import Any
 from jinja2 import Environment
 
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
-from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._graph_builder import load_vis_js
+from yxray.renderers._report_assets import STEP_DETAIL_JS
 
 
 def _load_single_graph_js() -> str:
@@ -59,6 +59,9 @@ _HTML_TEMPLATE = """\
       --node-hover: #2563eb;
       --node-select: #1e40af;
       --edge-color: #475569;
+      --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534;
+      --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
+      --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
     }
     html.light {
       --bg: #f8fafc;
@@ -75,6 +78,9 @@ _HTML_TEMPLATE = """\
       --node-hover: #bfdbfe;
       --node-select: #60a5fa;
       --edge-color: #94a3b8;
+      --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0;
+      --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
+      --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -234,6 +240,52 @@ _HTML_TEMPLATE = """\
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
+    /* ---- Summary panel (workflow steps) ---- */
+    #summary-panel {
+      position: fixed;
+      top: 0; left: 0;
+      width: 320px; height: 100%;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+      overflow-y: auto;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 1000;
+      border-radius: 0 8px 8px 0;
+    }
+    #summary-panel.open { transform: translateX(0); }
+    #summary-panel-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #summary-panel-body { padding: 10px 12px; }
+    .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
+    .summary-step:hover { filter: brightness(1.08); }
+    .summary-step-input  { background: var(--accent-conn-bg); }
+    .summary-step-output { background: var(--accent-added-bg); }
+    .summary-step-transform { background: var(--surface-2); }
+    .summary-step-unknown { background: var(--surface-2); opacity: 0.7; }
+    .summary-step-added    { outline: 1px solid var(--accent-added-border); }
+    .summary-step-modified { outline: 1px solid var(--accent-modified-border); }
+    .step-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; }
+    .step-num { font-size: 11px; color: var(--text-muted); min-width: 22px; text-align: right; flex-shrink: 0; }
+    .step-badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 7px; border: 1px solid; flex-shrink: 0; }
+    .step-badge-input    { color: var(--accent-conn);     background: var(--accent-conn-bg);     border-color: var(--accent-conn-border); }
+    .step-badge-output   { color: var(--accent-added);    background: var(--accent-added-bg);    border-color: var(--accent-added-border); }
+    .step-badge-transform { color: var(--accent-modified); background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
+    .step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
+    .step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
+    .step-expand-arrow { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; transition: transform 0.15s ease; }
+    .step-expand-arrow.open { transform: rotate(90deg); }
+    .step-detail { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
+    .step-detail-inner { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
+    .step-config-row { display: flex; gap: 8px; align-items: baseline; }
+    .step-config-key { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; flex-shrink: 0; min-width: 120px; }
+    .step-config-val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text); word-break: break-all; }
   </style>
 </head>
 <body>
@@ -254,7 +306,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
-      <button class="ctrl-btn" id="report-btn" onclick="openReport()">Report</button>
+      {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
@@ -264,6 +316,32 @@ _HTML_TEMPLATE = """\
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
   </div>
+  {% if workflow_steps %}
+  <div id="summary-panel">
+    <div id="summary-panel-header">
+      <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
+      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+    </div>
+    <div id="summary-panel-body">
+      <ol class="summary-steps">
+        {% for step in workflow_steps %}
+        <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}"
+            onclick="toggleStepDetail(this)">
+          <div class="step-row">
+            <span class="step-num">{{ loop.index }}.</span>
+            <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+            {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+            <span class="step-expand-arrow">&#9654;</span>
+          </div>
+          <div class="step-detail" data-config="{{ step.config | tojson }}">
+            <div class="step-detail-inner"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  {% endif %}
   <div id="config-panel">
     <div id="panel-drag-handle"></div>
     <div class="panel-title">
@@ -290,10 +368,15 @@ _HTML_TEMPLATE = """\
 {{ single_graph_js | safe }}
   </script>
   <script>
-{{ companion_window_js | safe }}
+{{ step_detail_js | safe }}
 
-function openReport() {
-    openCompanionFile(window.location.href.replace(/_graph(\\.[^./?#]+)([?#].*)?$/, '_report$1$2'));
+function openSummaryPanel() {
+    var p = document.getElementById('summary-panel');
+    if (p) p.classList.add('open');
+}
+function closeSummaryPanel() {
+    var p = document.getElementById('summary-panel');
+    if (p) p.classList.remove('open');
 }
   </script>
 </body>
@@ -308,14 +391,28 @@ class SingleGraphRenderer:
     vis-network UMD is inlined — zero CDN references.
     """
 
-    def render(self, doc: WorkflowDoc) -> str:
-        """WorkflowDoc → standalone HTML string."""
+    def render(self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None) -> str:
+        """WorkflowDoc → standalone HTML string.
+
+        Args:
+            doc: The parsed workflow document.
+            workflow_steps: Optional list of WorkflowStep objects (or dicts with
+                ``short_type``, ``category``, ``description``, ``change``, ``config``
+                keys). When provided, a collapsible Summary panel is shown.
+        """
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
         )
         vis_js = load_vis_js()
         single_graph_js = _load_single_graph_js()
         title = pathlib.Path(doc.filepath).name
+
+        steps_dicts: list[Any] | None = None
+        if workflow_steps:
+            steps_dicts = [
+                s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
+                for s in workflow_steps
+            ]
 
         graph_data_json = json.dumps(
             {
@@ -340,7 +437,8 @@ class SingleGraphRenderer:
             graph_data_json=graph_data_json,
             vis_js=vis_js,
             single_graph_js=single_graph_js,
-            companion_window_js=COMPANION_WINDOW_JS,
+            step_detail_js=STEP_DETAIL_JS,
+            workflow_steps=steps_dicts,
         )
 
     def _build_graph_data(
