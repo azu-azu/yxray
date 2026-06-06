@@ -68,7 +68,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   </span>
 </div>
 
-<div id="diff-panel" class="diff-panel"></div>
+<div id="diff-panel" class="diff-panel"><div class="diff-panel-drag-handle"></div><div id="diff-panel-body"></div></div>
 <div id="graph-overlay" class="graph-overlay"></div>
 
 <div id="overlay-view" class="overlay-view">
@@ -237,21 +237,33 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 .diff-panel {
   position: fixed;
   top: 0;
-  right: -420px;
+  right: 0;
   width: 400px;
   height: 100%;
   background: var(--surface);
   border-left: 1px solid var(--border);
   box-shadow: -2px 0 8px rgba(0,0,0,0.15);
   overflow-y: auto;
-  transition: right 0.2s ease;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
   z-index: 1000;
   padding: 16px;
   box-sizing: border-box;
   border-radius: 8px 0 0 8px;
   color: var(--text);
 }
-.diff-panel.open { right: 0; }
+.diff-panel.open { transform: translateX(0); }
+.diff-panel-drag-handle {
+  position: absolute;
+  top: 0; left: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.diff-panel-drag-handle:hover, .diff-panel-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
+}
 
 .graph-overlay {
   display: none;
@@ -455,16 +467,21 @@ function isDark() {
   return !document.documentElement.classList.contains('light');
 }
 
+function contrastColor(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? '#000000' : '#ffffff';
+}
+
 function applyThemeColors() {
-  var dark = isDark();
-  var palette = dark ? DARK_COLORS : LIGHT_COLORS;
-  var fontLight = '#ffffff';
-  var fontDark  = '#1e293b';
-  var fontMuted = '#cbd5e1';
+  var palette = isDark() ? DARK_COLORS : LIGHT_COLORS;
   nodesDataset.update(GRAPH_NODES.map(function(n) {
     var c = palette[n.status];
-    var fontColor = dark ? (n.status === 'unchanged' ? fontMuted : fontLight) : fontDark;
-    return {id: n.id, color: {background: c.background, border: c.border, highlight: {background: c.background, border: c.border}, hover: {background: c.background, border: c.border}}, font: {color: fontColor}};
+    return {id: n.id, color: {background: c.background, border: c.border, highlight: {background: c.background, border: c.border}, hover: {background: c.background, border: c.border}}, font: {color: contrastColor(c.background)}};
   }));
   // Sync legend dots
   document.querySelectorAll('[data-legend]').forEach(function(dot) {
@@ -541,15 +558,42 @@ document.addEventListener('fullscreenchange', function() {
 
 // Panel open/close
 function openSidePanel(nodeId, entry) {
-  var panel = document.getElementById('diff-panel');
-  while (panel.firstChild) { panel.removeChild(panel.firstChild); }
-  buildPanelContent(panel, entry);
-  panel.classList.add('open');
+  var body = document.getElementById('diff-panel-body');
+  while (body.firstChild) { body.removeChild(body.firstChild); }
+  buildPanelContent(body, entry);
+  document.getElementById('diff-panel').classList.add('open');
 }
 
 function closeSidePanel() {
   document.getElementById('diff-panel').classList.remove('open');
 }
+
+// Diff panel drag-resize
+(function() {
+  var panel = document.getElementById('diff-panel');
+  var handle = panel ? panel.querySelector('.diff-panel-drag-handle') : null;
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = startX - e.clientX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 function buildPanelContent(panel, entry) {
   var titleEl = document.createElement('div');

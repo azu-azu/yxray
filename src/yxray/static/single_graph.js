@@ -22,7 +22,16 @@ var CONT_PAD_Y          = 36; // vertical padding around container boundary box
 var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
-var NODE_LABEL_FONT_COLOR  = '#000000'; // text inside vis-network node boxes
+// Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
+function contrastColor(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? '#000000' : '#ffffff';
+}
 
 // ── Cluster color palette ─────────────────────────────────────────────────
 // type = same-type BFS cluster (purple); container = ToolContainer group (red).
@@ -209,7 +218,7 @@ function buildClusters(skipSet) {
         highlight: {background: '#5b21b6', border: '#7c3aed'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
-      font: {color: NODE_LABEL_FONT_COLOR, size: 13}
+      font: {color: contrastColor('#4c1d95'), size: 13}
     });
   });
 
@@ -312,7 +321,7 @@ function _containerNodeStyle(fillHex) {
   // Returns {color, fontColor} for a container cluster node.
   // Falls back to default red if fill is null / near-white / near-gray.
   if (!fillHex || _isNearWhiteOrGray(fillHex)) {
-    return {color: CLUSTER_STYLE.container.normal, fontColor: NODE_LABEL_FONT_COLOR};
+    return {color: CLUSTER_STYLE.container.normal, fontColor: contrastColor('#7f1d1d')};
   }
   var dark = _darkenHex(fillHex, 20);
   return {
@@ -321,7 +330,7 @@ function _containerNodeStyle(fillHex) {
       highlight: {background: _darkenHex(fillHex, 8), border: dark},
       hover:     {background: _darkenHex(fillHex, 8), border: dark}
     },
-    fontColor: NODE_LABEL_FONT_COLOR
+    fontColor: contrastColor(fillHex)
   };
 }
 
@@ -458,7 +467,7 @@ function recollapseGroup(groupKey) {
   var cPos = centroid(group.memberIds);
   var ns = isContainer
     ? _containerNodeStyle(group.fillColorHex || null)
-    : {color: CLUSTER_STYLE.type.normal, fontColor: NODE_LABEL_FONT_COLOR};
+    : {color: CLUSTER_STYLE.type.normal, fontColor: contrastColor('#4c1d95')};
   nodesDataset.add({
     id: groupKey,
     label: group.toolType + ' \xd7' + group.memberIds.length,
@@ -507,7 +516,7 @@ function recollapseGroup(groupKey) {
     isContainer: group.isContainer || false,
     containerNodeId: group.containerNodeId,
     fillColorHex: group.fillColorHex || null,
-    fontColorHex: group.fontColorHex || NODE_LABEL_FONT_COLOR,
+    fontColorHex: group.fontColorHex || (group.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95')),
   };
 
   // Clean up expanded state
@@ -543,7 +552,7 @@ function expandCluster(cid) {
       color: {background: col.bg, border: col.bd,
               highlight: {background: col.sel, border: col.bd},
               hover: {background: col.hover, border: col.bd}},
-      font: {color: NODE_LABEL_FONT_COLOR}
+      font: {color: contrastColor(col.bg)}
     });
   });
 
@@ -553,7 +562,7 @@ function expandCluster(cid) {
   var expandedIsContainer = c.isContainer || false;
   var expandedContainerNodeId = c.containerNodeId;
   var expandedFillColorHex = c.fillColorHex || null;
-  var expandedFontColorHex = c.fontColorHex || NODE_LABEL_FONT_COLOR;
+  var expandedFontColorHex = c.fontColorHex || (c.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95'));
   delete AppState.clusterMap[cid];
   AppState.groupMembers[cid] = {
     memberIds: expandedMemberIds,
@@ -626,7 +635,7 @@ function _memoNodeDef(id, text, x, y, w, h) {
       highlight: {background: '#fef08a', border: '#a16207'},
       hover:     {background: '#fef08a', border: '#a16207'}
     },
-    font: {color: NODE_LABEL_FONT_COLOR, size: 13},
+    font: {color: '#000000', size: 13},
     borderWidth: 2,
     shapeProperties: {borderRadius: 4}
   };
@@ -1284,16 +1293,16 @@ function baseNodeColorUpdate(n, col) {
       return {id: n.id, color: ns.color, font: {color: ns.fontColor}};
     }
     var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-    return {id: n.id, color: cs.normal, font: {color: NODE_LABEL_FONT_COLOR}};
+    return {id: n.id, color: cs.normal, font: {color: contrastColor(cs.normal.background)}};
   }
   if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
-    return {id: n.id, font: {color: NODE_LABEL_FONT_COLOR}};
+    return {id: n.id, font: {color: '#000000'}};
   }
   return {id: n.id, color: {
     background: col.bg, border: col.bd,
     highlight: {background: col.sel, border: col.bd},
     hover: {background: col.hover, border: col.bd}
-  }, font: {color: NODE_LABEL_FONT_COLOR}};
+  }, font: {color: contrastColor(col.bg)}};
 }
 
 function buildNodeDataLookup() {
@@ -1385,7 +1394,7 @@ function doSearch(query, skipFocus) {
     // Memo nodes: match on label text only
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
       var mMatch = testStr(n.label || '');
-      updates.push({id: n.id, font: {color: NODE_LABEL_FONT_COLOR}});
+      updates.push({id: n.id, font: {color: '#000000'}});
       if (mMatch && firstMatch === null) firstMatch = n.id;
       return;
     }
@@ -1412,36 +1421,38 @@ function doSearch(query, skipFocus) {
           background: matchBg, border: '#f59e0b',
           highlight: {background: matchBg, border: '#f59e0b'},
           hover:     {background: matchBg, border: '#f59e0b'}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+        }, font: {color: contrastColor(matchBg)}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: '#f59e0b',
           highlight: {background: col.sel, border: '#f59e0b'},
           hover: {background: col.hover, border: '#f59e0b'}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+        }, font: {color: contrastColor(col.bg)}});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
         var cm2 = AppState.clusterMap[n.id];
         var dimColor;
+        var dimBg;
         if (cm2.isContainer && cm2.fillColorHex) {
-          var dimmed = _darkenHex(cm2.fillColorHex, 35);
-          dimColor = {background: dimmed, border: dimmed,
-                      highlight: {background: dimmed, border: dimmed},
-                      hover:     {background: dimmed, border: dimmed}};
+          dimBg = _darkenHex(cm2.fillColorHex, 35);
+          dimColor = {background: dimBg, border: dimBg,
+                      highlight: {background: dimBg, border: dimBg},
+                      hover:     {background: dimBg, border: dimBg}};
         } else {
           var cd = (cm2.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type).dim;
-          dimColor = {background: cd.background, border: cd.border,
-                      highlight: {background: cd.background, border: cd.border},
-                      hover:     {background: cd.background, border: cd.border}};
+          dimBg = cd.background;
+          dimColor = {background: dimBg, border: cd.border,
+                      highlight: {background: dimBg, border: dimBg},
+                      hover:     {background: dimBg, border: dimBg}};
         }
-        updates.push({id: n.id, color: dimColor, font: {color: NODE_LABEL_FONT_COLOR}});
+        updates.push({id: n.id, color: dimColor, font: {color: contrastColor(dimBg)}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: col.bd,
           highlight: {background: col.bg, border: col.bd},
           hover: {background: col.bg, border: col.bd}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+        }, font: {color: contrastColor(col.bg)}});
       }
     }
   });
@@ -1505,7 +1516,7 @@ function applyTheme(theme) {
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
       highlight: {background: nodeSel, border: nodeBd},
-      hover: {background: nodeHover, border: nodeBd}}, font: {color: NODE_LABEL_FONT_COLOR}});
+      hover: {background: nodeHover, border: nodeBd}}, font: {color: contrastColor(nodeBg)}});
   });
   nodesDataset.update(nodeUpdates);
   edgesDataset.update(edgesDataset.getIds().map(function(id) {
@@ -1519,3 +1530,30 @@ document.getElementById('theme-btn').addEventListener('click', function() {
 });
 var savedTheme = localStorage.getItem('yxray-theme') || 'dark';
 applyTheme(savedTheme);
+
+// ── Config panel drag-resize ──────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('config-panel');
+  var handle = document.getElementById('panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = startX - e.clientX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();

@@ -135,18 +135,30 @@ _HTML_TEMPLATE = """\
     #graph-canvas { width: 100%; height: 100%; }
     #config-panel {
       position: fixed;
-      top: 0; right: -420px;
+      top: 0; right: 0;
       width: 400px; height: 100%;
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -2px 0 12px rgba(0,0,0,0.2);
       overflow-y: auto;
-      transition: right 0.2s ease;
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
       z-index: 1000;
       padding: 20px;
       border-radius: 8px 0 0 8px;
     }
-    #config-panel.open { right: 0; }
+    #config-panel.open { transform: translateX(0); }
+    #panel-drag-handle {
+      position: absolute;
+      top: 0; left: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      user-select: none;
+    }
+    #panel-drag-handle:hover, #panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
     #panel-overlay {
       display: none;
       position: fixed;
@@ -253,6 +265,7 @@ _HTML_TEMPLATE = """\
     <div id="graph-canvas"></div>
   </div>
   <div id="config-panel">
+    <div id="panel-drag-handle"></div>
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
       <span id="panel-title-text"></span>
