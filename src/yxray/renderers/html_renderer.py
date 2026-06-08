@@ -10,6 +10,7 @@ from yxray.models import DiffResult, NodeDiff
 from yxray.models.diff import EdgeDiff
 from yxray.models.workflow import AlteryxNode
 from yxray.renderers._report_assets import REPORT_BASE_CSS, STEP_DETAIL_JS
+from yxray.summarizer import _classify
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -306,7 +307,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
   <div class="tool-row" id="row-added-{{ tool.tool_id }}"
        onclick="toggleTool({{ tool.tool_id }}, 'added')">
     <span class="chevron">&#9654;</span>
-    <span class="tool-type-name">{{ tool.tool_type }}</span>
+    <span class="tool-type-name">{{ tool.short_type }}</span>
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-added">added</span></span>
   </div>
@@ -330,7 +331,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
   <div class="tool-row" id="row-modified-{{ tool.tool_id }}"
        onclick="toggleTool({{ tool.tool_id }}, 'modified')">
     <span class="chevron">&#9654;</span>
-    <span class="tool-type-name">{{ tool.tool_type }}</span>
+    <span class="tool-type-name">{{ tool.short_type }}</span>
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-modified">{{ tool.field_diffs | length }} fields</span></span>
   </div>
@@ -354,7 +355,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
   <div class="tool-row" id="row-removed-{{ tool.tool_id }}"
        onclick="toggleTool({{ tool.tool_id }}, 'removed')">
     <span class="chevron">&#9654;</span>
-    <span class="tool-type-name">{{ tool.tool_type }}</span>
+    <span class="tool-type-name">{{ tool.short_type }}</span>
     <span class="tool-id-pill">ID: {{ tool.tool_id }}</span>
     <span class="tool-row-right"><span class="change-badge change-badge-removed">removed</span></span>
   </div>
@@ -817,6 +818,7 @@ class HTMLRenderer:
         return {
             "tool_id": int(node.tool_id),
             "tool_type": node.tool_type,
+            "short_type": _classify(node.tool_type)[0],
             "config": dict(node.config),
         }
 
@@ -824,6 +826,7 @@ class HTMLRenderer:
         return {
             "tool_id": int(nd.tool_id),
             "tool_type": nd.old_node.tool_type,
+            "short_type": _classify(nd.old_node.tool_type)[0],
             "field_diffs": [
                 {"field": k, "before": v[0], "after": v[1]}
                 for k, v in nd.field_diffs.items()
