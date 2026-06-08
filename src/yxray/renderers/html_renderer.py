@@ -248,7 +248,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
           {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
           <span class="step-expand-arrow">&#9654;</span>
         </div>
-        <div class="step-detail" data-config="{{ step.config | tojson }}">
+        <div class="step-detail" data-config='{{ step.config | tojson }}'>
           <div class="step-detail-inner"></div>
         </div>
       </li>
