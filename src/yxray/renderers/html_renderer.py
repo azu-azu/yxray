@@ -389,7 +389,6 @@ html.light .tool-row:hover { background: #f1f5f9; }
   </div>
 </div>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
-{{ graph_html | safe }}
 {% if metadata %}
 <details id="governance">
   <summary>Governance Metadata (ALCOA+)</summary>
@@ -739,6 +738,7 @@ function toggleSummarySection() {
 })();
 </script>
 </div>
+{{ graph_html | safe }}
 </body>
 </html>
 """
