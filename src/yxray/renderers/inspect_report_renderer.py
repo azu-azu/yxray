@@ -93,7 +93,7 @@ _INSPECT_REPORT_TEMPLATE = """\
             {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
           </div>
-          <div class="step-detail" data-config="{{ step.config | tojson }}">
+          <div class="step-detail" data-config="{{ step.config | tojson | forceescape }}">
             <div class="step-detail-inner"></div>
           </div>
         </li>
