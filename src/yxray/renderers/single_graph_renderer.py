@@ -333,7 +333,7 @@ _HTML_TEMPLATE = """\
             {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
           </div>
-          <div class="step-detail" data-config="{{ step.config | tojson }}">
+          <div class="step-detail" data-config="{{ step.config | tojson | forceescape }}">
             <div class="step-detail-inner"></div>
           </div>
         </li>
