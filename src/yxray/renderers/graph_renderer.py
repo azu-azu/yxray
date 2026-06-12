@@ -875,16 +875,56 @@ function applyThemeColorsToSplit() {
   });
 }
 
+var _focusHighlightId = null;
+var _focusHighlightOrigOverlay = null;
+var _focusHighlightOrigLeft = null;
+var _focusHighlightOrigRight = null;
+var _FOCUS_COLOR = {
+  background: '#92400e', border: '#f59e0b',
+  highlight: {background: '#78350f', border: '#fbbf24'},
+  hover:     {background: '#78350f', border: '#fbbf24'}
+};
+var _FOCUS_SHADOW = {enabled: true, color: 'rgba(245,158,11,0.55)', size: 14, x: 0, y: 0};
+
 function focusNode(toolId) {
-  var pos = null;
-  try { pos = networkLeft.getPosition(toolId); } catch(e) { pos = null; }
-  if (!pos) {
-    try { pos = networkRight.getPosition(toolId); } catch(e) { pos = null; }
+  // Restore previous highlighted node
+  if (_focusHighlightId !== null) {
+    if (nodesDataset && nodesDataset.get(_focusHighlightId) !== null)
+      nodesDataset.update({id: _focusHighlightId, color: _focusHighlightOrigOverlay, shadow: false});
+    if (nodesDatasetLeft && nodesDatasetLeft.get(_focusHighlightId) !== null)
+      nodesDatasetLeft.update({id: _focusHighlightId, color: _focusHighlightOrigLeft, shadow: false});
+    if (nodesDatasetRight && nodesDatasetRight.get(_focusHighlightId) !== null)
+      nodesDatasetRight.update({id: _focusHighlightId, color: _focusHighlightOrigRight, shadow: false});
+    _focusHighlightId = null;
   }
-  if (pos) {
-    var moveOpts = {position: pos, scale: 1.2, animation: {duration: 300, easingFunction: 'easeInOutQuad'}};
-    networkLeft.moveTo(moveOpts);
-    networkRight.moveTo(moveOpts);
+
+  // Snapshot original colours and apply amber highlight
+  _focusHighlightId = toolId;
+  var nO = nodesDataset ? nodesDataset.get(toolId) : null;
+  _focusHighlightOrigOverlay = nO ? (nO.color || null) : null;
+  if (nO) nodesDataset.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  var nL = nodesDatasetLeft ? nodesDatasetLeft.get(toolId) : null;
+  _focusHighlightOrigLeft = nL ? (nL.color || null) : null;
+  if (nL) nodesDatasetLeft.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  var nR = nodesDatasetRight ? nodesDatasetRight.get(toolId) : null;
+  _focusHighlightOrigRight = nR ? (nR.color || null) : null;
+  if (nR) nodesDatasetRight.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  // Move viewport to the node
+  if (currentView === 'overlay' && network && nO) {
+    network.focus(toolId, {scale: 1.5, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+    network.selectNodes([toolId]);
+  } else {
+    var pos = null;
+    try { pos = networkLeft ? networkLeft.getPosition(toolId) : null; } catch(e) { pos = null; }
+    if (!pos) { try { pos = networkRight ? networkRight.getPosition(toolId) : null; } catch(e) { pos = null; } }
+    if (pos) {
+      var moveOpts = {position: pos, scale: 1.2, animation: {duration: 300, easingFunction: 'easeInOutQuad'}};
+      if (networkLeft) { networkLeft.moveTo(moveOpts); if (nL) networkLeft.selectNodes([toolId]); }
+      if (networkRight) { networkRight.moveTo(moveOpts); if (nR) networkRight.selectNodes([toolId]); }
+    }
   }
 }
 
@@ -977,6 +1017,7 @@ function switchView(view) {
 }
 
 window.switchView = switchView;
+window.graphFocusNode = focusNode;
 switchView(currentView);
 
 })();
