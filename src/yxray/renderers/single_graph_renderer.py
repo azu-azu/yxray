@@ -240,8 +240,8 @@ _HTML_TEMPLATE = """\
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    /* ---- Summary panel (workflow steps) ---- */
-    #summary-panel {
+    /* ---- Left panels (summary + insights) ---- */
+    #summary-panel, #insights-panel {
       position: fixed;
       top: 0; left: 0;
       width: 320px; height: 100%;
@@ -254,8 +254,8 @@ _HTML_TEMPLATE = """\
       z-index: 1000;
       border-radius: 0 8px 8px 0;
     }
-    #summary-panel.open { transform: translateX(0); }
-    #summary-panel-drag-handle {
+    #summary-panel.open, #insights-panel.open { transform: translateX(0); }
+    #summary-panel-drag-handle, #insights-panel-drag-handle {
       position: absolute;
       top: 0; right: 0;
       width: 6px; height: 100%;
@@ -263,24 +263,18 @@ _HTML_TEMPLATE = """\
       z-index: 10;
       user-select: none;
     }
-    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging {
+    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging,
+    #insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging {
       background: rgba(148,163,184,0.18);
     }
-    #summary-panel-header {
+    #summary-panel-header, #insights-panel-header {
       padding: 12px 16px 10px;
       border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
     }
-    #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #summary-panel-body { padding: 10px 12px; }
-    /* ---- Key Insights (at-a-glance section) ---- */
-    #key-insights { border-bottom: 1px solid var(--border); padding: 10px 12px 8px; }
-    #ki-header { display: flex; align-items: center; justify-content: space-between;
-      font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
-      letter-spacing: 0.05em; cursor: pointer; user-select: none; margin-bottom: 6px; }
-    #ki-header:hover { color: var(--text); }
-    #ki-body { display: flex; flex-direction: column; gap: 4px; }
-    #ki-body.collapsed { display: none; }
+    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; }
     .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
       padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -338,6 +332,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
       {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
@@ -348,6 +343,23 @@ _HTML_TEMPLATE = """\
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
   </div>
+  {% if key_insights %}
+  <div id="insights-panel">
+    <div id="insights-panel-drag-handle"></div>
+    <div id="insights-panel-header">
+      <span>At a Glance</span>
+      <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+    </div>
+    <div id="insights-panel-body">
+      {% for insight in key_insights %}
+      <div class="ki-row">
+        <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
+        <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   {% if workflow_steps %}
   <div id="summary-panel">
     <div id="summary-panel-drag-handle"></div>
@@ -355,22 +367,6 @@ _HTML_TEMPLATE = """\
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
       <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
     </div>
-    {% if key_insights %}
-    <div id="key-insights">
-      <div id="ki-header" onclick="toggleKeyInsights(this)">
-        At a Glance
-        <span class="step-expand-arrow open">&#9654;</span>
-      </div>
-      <div id="ki-body">
-        {% for insight in key_insights %}
-        <div class="ki-row">
-          <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
-          <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
     <div id="summary-panel-body">
       <ol class="summary-steps">
         {% for step in workflow_steps %}
@@ -419,21 +415,53 @@ _HTML_TEMPLATE = """\
   <script>
 {{ step_detail_js | safe }}
 
+function openInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    if (sp) sp.classList.remove('open');
+    if (ip) ip.classList.add('open');
+}
+function closeInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    if (ip) ip.classList.remove('open');
+}
 function openSummaryPanel() {
-    var p = document.getElementById('summary-panel');
-    if (p) p.classList.add('open');
+    var sp = document.getElementById('summary-panel');
+    var ip = document.getElementById('insights-panel');
+    if (ip) ip.classList.remove('open');
+    if (sp) sp.classList.add('open');
 }
 function closeSummaryPanel() {
-    var p = document.getElementById('summary-panel');
-    if (p) p.classList.remove('open');
+    var sp = document.getElementById('summary-panel');
+    if (sp) sp.classList.remove('open');
 }
-function toggleKeyInsights(header) {
-    var body = document.getElementById('ki-body');
-    var arrow = header ? header.querySelector('.step-expand-arrow') : null;
-    if (!body) return;
-    var collapsed = body.classList.toggle('collapsed');
-    if (arrow) { collapsed ? arrow.classList.remove('open') : arrow.classList.add('open'); }
-}
+
+// ── Insights panel drag-resize ────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('insights-panel');
+  var handle = document.getElementById('insights-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Summary panel drag-resize ─────────────────────────────────────────────
 (function() {
