@@ -228,7 +228,10 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         )
         if role is None:
             continue
-        description = _describe(node.tool_type, node.config)
+        if role in ("input", "output"):
+            description = _first_text(node.config, "File", "FileName") or _describe(node.tool_type, node.config)
+        else:
+            description = _describe(node.tool_type, node.config)
         insights.append(KeyInsight(
             tool_id=int(tid),
             short_type=short_type,
