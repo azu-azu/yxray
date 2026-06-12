@@ -21,7 +21,7 @@ _TEMPLATE = """<!DOCTYPE html>
 <style>
 {{ report_base_css | safe }}
 .site-header { position: sticky; top: 0; z-index: 100; }
-.header-left { min-width: 0; }
+.header-left { flex: 1; min-width: 0; overflow: hidden; }
 .header-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* ---- Summary stat cards ---- */
 .stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
@@ -246,7 +246,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
       <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
       <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
       <div class="report-search-wrap">
         <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
         <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
