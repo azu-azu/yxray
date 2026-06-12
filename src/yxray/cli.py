@@ -19,7 +19,7 @@ from yxray.renderers import (
     HTMLRenderer,
     SingleGraphRenderer,
 )
-from yxray.summarizer import summarize
+from yxray.summarizer import extract_key_insights, summarize
 
 app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
@@ -205,7 +205,8 @@ def inspect(  # noqa: B008
 
     out_path = output or pathlib.Path(workflow.stem + "_report.html")
     steps = summarize(doc)
-    html = SingleGraphRenderer().render(doc, workflow_steps=steps)
+    insights = extract_key_insights(doc)
+    html = SingleGraphRenderer().render(doc, workflow_steps=steps, key_insights=insights)
     out_path.write_text(html, encoding="utf-8")
     typer.echo(
         f"Report written to {out_path}"
