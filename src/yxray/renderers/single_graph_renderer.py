@@ -255,6 +255,17 @@ _HTML_TEMPLATE = """\
       border-radius: 0 8px 8px 0;
     }
     #summary-panel.open { transform: translateX(0); }
+    #summary-panel-drag-handle {
+      position: absolute;
+      top: 0; right: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      user-select: none;
+    }
+    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
     #summary-panel-header {
       padding: 12px 16px 10px;
       border-bottom: 1px solid var(--border);
@@ -318,6 +329,7 @@ _HTML_TEMPLATE = """\
   </div>
   {% if workflow_steps %}
   <div id="summary-panel">
+    <div id="summary-panel-drag-handle"></div>
     <div id="summary-panel-header">
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
       <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
@@ -378,6 +390,33 @@ function closeSummaryPanel() {
     var p = document.getElementById('summary-panel');
     if (p) p.classList.remove('open');
 }
+
+// ── Summary panel drag-resize ─────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('summary-panel');
+  var handle = document.getElementById('summary-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
   </script>
 </body>
 </html>
