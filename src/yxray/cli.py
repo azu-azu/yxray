@@ -143,6 +143,7 @@ def diff(  # noqa: B008
         steps = summarize(
             response.doc_b, added_ids=added_ids, modified_ids=modified_ids
         )
+        insights = extract_key_insights(response.doc_b)
         html = HTMLRenderer().render(
             result,
             file_a=file_a_str,
@@ -150,6 +151,7 @@ def diff(  # noqa: B008
             graph_html=graph_html,
             metadata=metadata,
             workflow_steps=steps,
+            key_insights=insights,
         )
         output.write_text(html, encoding="utf-8")
         webbrowser.open(output.resolve().as_uri())

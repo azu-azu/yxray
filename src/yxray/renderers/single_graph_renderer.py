@@ -240,6 +240,23 @@ _HTML_TEMPLATE = """\
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
+    /* ---- IO stat bar (above graph) ---- */
+    #io-stat-bar {
+      display: flex; gap: 8px; padding: 6px 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+    .io-stat-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 12px; border-radius: 12px; cursor: pointer;
+      font-size: 11px; font-weight: 600; border: 1px solid;
+      transition: opacity 0.15s; font: inherit;
+    }
+    .io-stat-btn:hover { opacity: 0.75; }
+    .io-stat-input  { color: #065f46; border-color: #6ee7b7; background: #d1fae5; }
+    .io-stat-output { color: #1e40af; border-color: #93c5fd; background: #dbeafe; }
+    .io-stat-join   { color: #5b21b6; border-color: #c4b5fd; background: #ede9fe; }
+    .io-stat-count  { font-size: 12px; font-weight: 700; }
     /* ---- Left panels (summary + insights) ---- */
     #summary-panel, #insights-panel {
       position: fixed;
@@ -347,6 +364,18 @@ _HTML_TEMPLATE = """\
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
+  {% if key_insights %}
+  {% set _input_count = key_insights | selectattr('role', 'equalto', 'input') | list | length %}
+  {% set _output_count = key_insights | selectattr('role', 'equalto', 'output') | list | length %}
+  {% set _join_count = key_insights | selectattr('role', 'equalto', 'join') | list | length %}
+  {% if _input_count or _output_count or _join_count %}
+  <div id="io-stat-bar">
+    {% if _input_count %}<button class="io-stat-btn io-stat-input" onclick="openInsightsPanelFiltered('input')">Input <span class="io-stat-count">{{ _input_count }}</span></button>{% endif %}
+    {% if _output_count %}<button class="io-stat-btn io-stat-output" onclick="openInsightsPanelFiltered('output')">Output <span class="io-stat-count">{{ _output_count }}</span></button>{% endif %}
+    {% if _join_count %}<button class="io-stat-btn io-stat-join" onclick="openInsightsPanelFiltered('join')">Join <span class="io-stat-count">{{ _join_count }}</span></button>{% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
   </div>
@@ -354,7 +383,7 @@ _HTML_TEMPLATE = """\
   <div id="insights-panel">
     <div id="insights-panel-drag-handle"></div>
     <div id="insights-panel-header">
-      <span>At a Glance</span>
+      <span id="insights-panel-title">At a Glance</span>
       <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
     </div>
     <div id="insights-panel-body">
@@ -362,7 +391,7 @@ _HTML_TEMPLATE = """\
       {% if insight.role == "summary" %}
       <div class="ki-summary">{{ insight.description }}</div>
       {% else %}
-      <div class="ki-row" onclick="focusNode({{ insight.tool_id }}, this)">
+      <div class="ki-row" data-role="{{ insight.role }}" onclick="focusNode({{ insight.tool_id }}, this)">
         <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
@@ -479,24 +508,53 @@ function focusNode(toolId, clickedEl) {
     }
 }
 
+var _insightsPanelActiveRole = null;
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
     if (!ip) return;
-    if (ip.classList.contains('open')) { ip.classList.remove('open'); return; }
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); return; }
     if (sp) sp.classList.remove('open');
+    _insightsPanelActiveRole = null;
+    // Reset filter — show all rows
+    var titleEl = document.getElementById('insights-panel-title');
+    if (titleEl) titleEl.textContent = 'At a Glance';
+    ip.querySelectorAll('.ki-row').forEach(function(row) { row.style.display = ''; });
+    var summary = ip.querySelector('.ki-summary');
+    if (summary) summary.style.display = '';
+    ip.classList.add('open');
+}
+function openInsightsPanelFiltered(role) {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    if (!ip) return;
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === role) {
+        ip.classList.remove('open');
+        _insightsPanelActiveRole = null;
+        return;
+    }
+    if (sp) sp.classList.remove('open');
+    _insightsPanelActiveRole = role;
+    // Filter rows to matching role
+    var titleEl = document.getElementById('insights-panel-title');
+    if (titleEl) titleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1) + 's';
+    ip.querySelectorAll('.ki-row').forEach(function(row) {
+        row.style.display = (row.dataset.role === role) ? '' : 'none';
+    });
+    var summary = ip.querySelector('.ki-summary');
+    if (summary) summary.style.display = 'none';
     ip.classList.add('open');
 }
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
-    if (ip) ip.classList.remove('open');
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
 }
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
     if (!sp) return;
     if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
-    if (ip) ip.classList.remove('open');
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
     sp.classList.add('open');
 }
 function closeSummaryPanel() {

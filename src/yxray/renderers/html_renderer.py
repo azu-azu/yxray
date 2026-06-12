@@ -65,6 +65,65 @@ _TEMPLATE = """<!DOCTYPE html>
 .stat-card-removed .stat-count { color: var(--accent-removed); }
 .stat-card-modified .stat-count { color: var(--accent-modified); }
 .stat-card-conn .stat-count { color: var(--accent-conn); }
+/* Input/Output/Join stat card variants */
+:root { --accent-join: #c4b5fd; --accent-join-bg: #1e0937; --accent-join-border: #4c1d95; }
+html.light { --accent-join: #7c3aed; --accent-join-bg: #f5f3ff; --accent-join-border: #ddd6fe; }
+button.stat-card { font: inherit; text-align: left; cursor: pointer; }
+.stat-card-input  { background: var(--accent-conn-bg);  border-color: var(--accent-conn-border); }
+.stat-card-output { background: var(--accent-added-bg); border-color: var(--accent-added-border); }
+.stat-card-join   { background: var(--accent-join-bg);  border-color: var(--accent-join-border); }
+.stat-card-input  .stat-label { color: var(--accent-conn);  opacity: 0.8; }
+.stat-card-output .stat-label { color: var(--accent-added); opacity: 0.8; }
+.stat-card-join   .stat-label { color: var(--accent-join);  opacity: 0.8; }
+.stat-card-input  .stat-dot   { background: var(--accent-conn); }
+.stat-card-output .stat-dot   { background: var(--accent-added); }
+.stat-card-join   .stat-dot   { background: var(--accent-join); }
+.stat-card-input  .stat-count { color: var(--accent-conn); }
+.stat-card-output .stat-count { color: var(--accent-added); }
+.stat-card-join   .stat-count { color: var(--accent-join); }
+/* Insights panel (input/output/join list) */
+#insights-panel {
+  position: fixed; top: 0; left: 0;
+  width: 360px; height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+  z-index: 1002;
+  border-radius: 0 8px 8px 0;
+}
+#insights-panel.open { transform: translateX(0); }
+#insights-panel-drag-handle {
+  position: absolute; top: 0; right: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize; z-index: 10; user-select: none;
+}
+#insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
+}
+#insights-panel-header {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+#insights-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+#insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+#insights-panel .panel-close {
+  cursor: pointer; color: var(--text-muted);
+  font-size: 18px; line-height: 1; background: none; border: none;
+}
+#insights-panel .panel-close:hover { color: var(--text); }
+.ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 4px 8px; }
+.ki-row:hover { background: rgba(148,163,184,0.12); }
+.ki-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+.ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid; }
+.ki-badge-input  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.ki-badge-output { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+.ki-badge-join   { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); word-break: break-all; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 /* ---- Section headers ---- */
 .section-wrap { margin-bottom: 24px; }
@@ -319,6 +378,18 @@ html.light .tool-row:hover { background: #f1f5f9; }
       <div class="stat-count">{{ summary.connections }}</div>
       <span class="sr-only">Connections: {{ summary.connections }}</span>
     </a>
+    {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
+      <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.inputs }}</div>
+    </button>{% endif %}
+    {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
+      <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.outputs }}</div>
+    </button>{% endif %}
+    {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
+      <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.joins }}</div>
+    </button>{% endif %}
   </div>
 </section>
 <div class="section-wrap">
@@ -773,14 +844,86 @@ function toggleDiffDetails() {
 
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
+    var ip = document.getElementById('insights-panel');
     if (!sp) return;
     if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (ip) { ip.classList.remove('open'); _insightsPanelRole = null; }
     sp.classList.add('open');
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
 }
+// ── Insights panel (input/output/join list) ───────────────────────────────
+var _insightsData = (function() {
+  var el = document.getElementById('insights-data');
+  return el ? JSON.parse(el.textContent) : [];
+})();
+var _insightsPanelRole = null;
+function openInsightsPanel(role) {
+  var panel = document.getElementById('insights-panel');
+  var sp = document.getElementById('summary-panel');
+  if (!panel) return;
+  if (panel.classList.contains('open') && _insightsPanelRole === role) {
+    panel.classList.remove('open');
+    _insightsPanelRole = null;
+    return;
+  }
+  if (sp) sp.classList.remove('open');
+  _insightsPanelRole = role;
+  var items = _insightsData.filter(function(d) { return d.role === role; });
+  var titleEl = document.getElementById('insights-panel-title');
+  if (titleEl) titleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1) + 's (' + items.length + ')';
+  var body = document.getElementById('insights-panel-body');
+  if (body) {
+    body.innerHTML = '';
+    items.forEach(function(d) {
+      var row = document.createElement('div');
+      row.className = 'ki-row';
+      var badge = document.createElement('span');
+      badge.className = 'ki-badge ki-badge-' + d.role;
+      badge.textContent = d.short_type;
+      var desc = document.createElement('span');
+      desc.className = 'ki-desc';
+      desc.textContent = d.description || d.short_type;
+      row.appendChild(badge);
+      row.appendChild(desc);
+      (function(toolId, rowEl) {
+        rowEl.addEventListener('click', function() { focusNode(toolId, rowEl); });
+      })(d.tool_id, row);
+      body.appendChild(row);
+    });
+  }
+  panel.classList.add('open');
+}
+function closeInsightsPanel() {
+  var panel = document.getElementById('insights-panel');
+  if (panel) { panel.classList.remove('open'); _insightsPanelRole = null; }
+}
+// ── Insights panel drag-resize ────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('insights-panel');
+  var handle = document.getElementById('insights-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    startX = e.clientX; startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Summary panel drag-resize ─────────────────────────────────────────────
 (function() {
@@ -827,6 +970,17 @@ function focusNode(toolId, clickedEl) {
 </div>
 </div>
 {{ graph_html | safe }}
+{% if key_insights %}
+<script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
+<div id="insights-panel">
+  <div id="insights-panel-drag-handle"></div>
+  <div id="insights-panel-header">
+    <span id="insights-panel-title"></span>
+    <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+  </div>
+  <div id="insights-panel-body"></div>
+</div>
+{% endif %}
 {% if workflow_steps %}
 <div id="summary-panel">
   <div id="summary-panel-drag-handle"></div>
@@ -877,6 +1031,7 @@ class HTMLRenderer:
         graph_html: str = "",
         metadata: dict[str, Any] | None = None,
         workflow_steps: list[Any] | None = None,
+        key_insights: list[Any] | None = None,
     ) -> str:
         """Render result to a self-contained HTML string.
 
@@ -900,6 +1055,19 @@ class HTMLRenderer:
         env = Environment(autoescape=True)
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False, "sort_keys": True}
         template = env.from_string(_TEMPLATE)
+
+        def _role(ki: Any) -> str:
+            return ki.role if hasattr(ki, "role") else ki.get("role", "")
+
+        input_count = sum(1 for ki in key_insights if _role(ki) == "input") if key_insights else 0
+        output_count = sum(1 for ki in key_insights if _role(ki) == "output") if key_insights else 0
+        join_count = sum(1 for ki in key_insights if _role(ki) == "join") if key_insights else 0
+        insights_list = (
+            [ki.to_dict() if hasattr(ki, "to_dict") else ki for ki in key_insights if _role(ki) != "summary"]
+            if key_insights
+            else None
+        )
+
         return template.render(
             timestamp=datetime.now(UTC).isoformat(),
             file_a=file_a,
@@ -909,6 +1077,9 @@ class HTMLRenderer:
                 "removed": len(result.removed_nodes),
                 "modified": len(result.modified_nodes),
                 "connections": len(result.edge_diffs),
+                "inputs": input_count,
+                "outputs": output_count,
+                "joins": join_count,
             },
             diff_data=self._build_diff_data(result),
             graph_html=graph_html,
@@ -918,6 +1089,7 @@ class HTMLRenderer:
             workflow_steps=[s.to_dict(include_change=True) for s in workflow_steps]
             if workflow_steps
             else None,
+            key_insights=insights_list,
         )
 
     def _build_diff_data(self, result: DiffResult) -> dict[str, Any]:
