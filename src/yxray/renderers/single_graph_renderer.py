@@ -277,7 +277,10 @@ _HTML_TEMPLATE = """\
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
       border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-    .ki-row { display: flex; align-items: baseline; gap: 6px; }
+    .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+    .ki-row:hover { background: rgba(148,163,184,0.12); }
+    .step-badge { cursor: pointer; }
+    .step-badge:hover { filter: brightness(0.88); }
     .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
       padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
     .ki-badge-input    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
@@ -357,7 +360,7 @@ _HTML_TEMPLATE = """\
       {% if insight.role == "summary" %}
       <div class="ki-summary">{{ insight.description }}</div>
       {% else %}
-      <div class="ki-row">
+      <div class="ki-row" onclick="focusNode({{ insight.tool_id }})">
         <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
@@ -380,7 +383,7 @@ _HTML_TEMPLATE = """\
             onclick="toggleStepDetail(this)">
           <div class="step-row">
             <span class="step-num">{{ loop.index }}.</span>
-            <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+            <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }})">{{ step.short_type }}</span>
             {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
           </div>
@@ -420,6 +423,12 @@ _HTML_TEMPLATE = """\
   </script>
   <script>
 {{ step_detail_js | safe }}
+
+function focusNode(toolId) {
+    if (typeof network === 'undefined' || !network || toolId < 0) return;
+    network.focus(toolId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.selectNodes([toolId]);
+}
 
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
