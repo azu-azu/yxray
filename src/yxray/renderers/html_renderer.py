@@ -21,6 +21,8 @@ _TEMPLATE = """<!DOCTYPE html>
 <style>
 {{ report_base_css | safe }}
 .site-header { position: sticky; top: 0; z-index: 100; }
+.header-left { min-width: 0; }
+.header-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* ---- Summary stat cards ---- */
 .stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
 .stat-card {
