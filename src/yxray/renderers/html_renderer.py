@@ -190,6 +190,8 @@ html.light .tool-row:hover { background: #f1f5f9; }
   font-size: 11px; color: var(--text-muted); white-space: nowrap;
   min-width: 48px; text-align: right;
 }
+/* ---- Workflow summary step badge focus ---- */
+.step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
 /* ---- Print ---- */
 @media print {
   .ctrl-btn, .theme-toggle { display: none; }
@@ -243,7 +245,7 @@ html.light .tool-row:hover { background: #f1f5f9; }
           onclick="toggleStepDetail(this)">
         <div class="step-row">
           <span class="step-num">{{ loop.index }}.</span>
-          <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+          <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
           {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
           {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
           <span class="step-expand-arrow">&#9654;</span>
@@ -727,6 +729,15 @@ function toggleSummarySection() {
     if (!wrap) return;
     wrap.classList.toggle('collapsed');
     if (chevron) chevron.classList.toggle('open');
+}
+
+var _focusPanelEl = null;
+function focusNode(toolId, clickedEl) {
+    if (_focusPanelEl) { _focusPanelEl.classList.remove('focused'); _focusPanelEl = null; }
+    if (typeof window.graphFocusNode === 'function') window.graphFocusNode(toolId);
+    var section = document.getElementById('graph-section');
+    if (section) section.scrollIntoView({behavior: 'smooth', block: 'start'});
+    if (clickedEl) { clickedEl.classList.add('focused'); _focusPanelEl = clickedEl; }
 }
 
 {{ step_detail_js | safe }}
