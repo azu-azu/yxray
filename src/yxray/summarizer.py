@@ -214,8 +214,9 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
     order = _topo_sort(doc)
 
     insights: list[KeyInsight] = []
+    input_count = 0
     join_count = 0
-    first_join_pos: int | None = None
+    output_count = 0
 
     for tid in order:
         node = node_map.get(tid)
@@ -231,11 +232,12 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         )
         if role is None:
             continue
-        if role == "join":
+        if role == "input":
+            input_count += 1
+        elif role == "join":
             join_count += 1
-            if first_join_pos is None:
-                first_join_pos = len(insights)
-            continue
+        elif role == "output":
+            output_count += 1
         if role in ("input", "output"):
             description = _first_text(node.config, "File", "FileName") or _describe(node.tool_type, node.config)
         else:
@@ -247,13 +249,20 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
             description=description,
         ))
 
-    if join_count > 0:
-        pos = first_join_pos if first_join_pos is not None else len(insights)
-        insights.insert(pos, KeyInsight(
+    # Summary count row at the top
+    parts = []
+    if input_count:
+        parts.append(f"Input × {input_count}")
+    if join_count:
+        parts.append(f"Join × {join_count}")
+    if output_count:
+        parts.append(f"Output × {output_count}")
+    if parts:
+        insights.insert(0, KeyInsight(
             tool_id=-1,
-            short_type="Join",
-            role="join",
-            description=f"× {join_count}",
+            short_type="",
+            role="summary",
+            description="  ·  ".join(parts),
         ))
 
     return insights

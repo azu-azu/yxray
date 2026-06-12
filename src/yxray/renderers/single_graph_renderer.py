@@ -275,6 +275,8 @@ _HTML_TEMPLATE = """\
     #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #summary-panel-body { padding: 10px 12px; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
+      border-bottom: 1px solid var(--border); margin-bottom: 4px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; }
     .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
       padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -352,10 +354,14 @@ _HTML_TEMPLATE = """\
     </div>
     <div id="insights-panel-body">
       {% for insight in key_insights %}
+      {% if insight.role == "summary" %}
+      <div class="ki-summary">{{ insight.description }}</div>
+      {% else %}
       <div class="ki-row">
         <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
+      {% endif %}
       {% endfor %}
     </div>
   </div>
