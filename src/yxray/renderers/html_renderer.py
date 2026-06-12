@@ -23,6 +23,19 @@ _TEMPLATE = """<!DOCTYPE html>
 .site-header { position: sticky; top: 0; z-index: 100; }
 .theme-toggle { line-height: 1; }
 .theme-toggle svg { display: block; }
+/* ---- Diff details collapsible ---- */
+#diff-details-toggle {
+  max-width: 960px; margin: 0 auto; padding: 7px 32px;
+  display: flex; align-items: center; gap: 7px;
+  cursor: pointer; user-select: none;
+  font-size: 12px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+#diff-details-toggle:hover { color: var(--text); }
+.diff-chevron { font-style: normal; transition: transform 0.2s ease; display: inline-block; font-size: 10px; }
+.diff-chevron.closed { transform: rotate(-90deg); }
+#diff-details-wrap { overflow: hidden; transition: max-height 0.25s ease; }
+#diff-details-wrap.collapsed { max-height: 0 !important; }
 /* ---- Summary stat cards ---- */
 .stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
 .stat-card {
@@ -266,6 +279,11 @@ html.light .tool-row:hover { background: #f1f5f9; }
     </div>
   </div>
 </header>
+<div id="diff-details-toggle" onclick="toggleDiffDetails()">
+  <span class="diff-chevron" id="diff-chevron">&#9660;</span>
+  Diff Details
+</div>
+<div id="diff-details-wrap">
 <div class="container">
 <section id="summary">
   <div class="stat-cards">
@@ -731,6 +749,28 @@ function collapseAll(containerId) {
     for (var i = 0; i < rows.length; i++) { rows[i].click(); }
 }
 
+function toggleDiffDetails() {
+    var wrap = document.getElementById('diff-details-wrap');
+    var chevron = document.getElementById('diff-chevron');
+    if (!wrap) return;
+    var isOpen = !wrap.classList.contains('collapsed');
+    if (isOpen) {
+        wrap.style.maxHeight = wrap.scrollHeight + 'px';
+        requestAnimationFrame(function() {
+            wrap.style.maxHeight = '0';
+            wrap.classList.add('collapsed');
+        });
+    } else {
+        wrap.classList.remove('collapsed');
+        wrap.style.maxHeight = wrap.scrollHeight + 'px';
+        wrap.addEventListener('transitionend', function onEnd() {
+            wrap.style.maxHeight = '';
+            wrap.removeEventListener('transitionend', onEnd);
+        });
+    }
+    if (chevron) chevron.classList.toggle('closed', isOpen);
+}
+
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (!sp) return;
@@ -784,6 +824,7 @@ function focusNode(toolId, clickedEl) {
     inp.addEventListener('input', function() { doReportSearch(this.value.trim()); });
 })();
 </script>
+</div>
 </div>
 {{ graph_html | safe }}
 {% if workflow_steps %}
