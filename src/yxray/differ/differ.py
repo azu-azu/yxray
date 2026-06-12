@@ -168,8 +168,9 @@ def _add_field_diff(
     old_value: Any,
     new_value: Any,
 ) -> None:
-    if dotted_path not in _EXCLUDED_FIELDS:
-        field_diffs[dotted_path] = (old_value, new_value)
+    if _EXCLUDED_FIELDS and dotted_path in _EXCLUDED_FIELDS:
+        return
+    field_diffs[dotted_path] = (old_value, new_value)
 
 
 def _add_value_changes(
