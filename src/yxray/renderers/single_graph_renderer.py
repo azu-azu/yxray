@@ -279,8 +279,10 @@ _HTML_TEMPLATE = """\
       border-bottom: 1px solid var(--border); margin-bottom: 4px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
     .ki-row:hover { background: rgba(148,163,184,0.12); }
+    .ki-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
     .step-badge { cursor: pointer; }
     .step-badge:hover { filter: brightness(0.88); }
+    .step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
     .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
       padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
     .ki-badge-input    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
@@ -360,7 +362,7 @@ _HTML_TEMPLATE = """\
       {% if insight.role == "summary" %}
       <div class="ki-summary">{{ insight.description }}</div>
       {% else %}
-      <div class="ki-row" onclick="focusNode({{ insight.tool_id }})">
+      <div class="ki-row" onclick="focusNode({{ insight.tool_id }}, this)">
         <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
@@ -383,7 +385,7 @@ _HTML_TEMPLATE = """\
             onclick="toggleStepDetail(this)">
           <div class="step-row">
             <span class="step-num">{{ loop.index }}.</span>
-            <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }})">{{ step.short_type }}</span>
+            <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
             {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
           </div>
@@ -424,12 +426,57 @@ _HTML_TEMPLATE = """\
   <script>
 {{ step_detail_js | safe }}
 
-function focusNode(toolId) {
+// ── focusNode: highlight a graph node and the clicked panel element ────────
+var _focusHighlightId = null;
+var _focusHighlightOrigColor = null;
+var _focusHighlightPanelEl = null;
+
+function focusNode(toolId, clickedEl) {
+    // Restore previous node colour
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var restore = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(restore);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+
+    // Remove focused class from previous panel element
+    if (_focusHighlightPanelEl) {
+        _focusHighlightPanelEl.classList.remove('focused');
+        _focusHighlightPanelEl = null;
+    }
+
     if (typeof network === 'undefined' || !network || toolId < 0) return;
     var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
     if (visibleId === null) return;
+
+    // Save original colour then apply vivid amber highlight
+    var nodeData = nodesDataset ? nodesDataset.get(visibleId) : null;
+    if (nodeData) {
+        _focusHighlightId = visibleId;
+        _focusHighlightOrigColor = nodeData.color || null;
+        nodesDataset.update({
+            id: visibleId,
+            color: {
+                background: '#92400e',
+                border: '#f59e0b',
+                highlight: {background: '#78350f', border: '#fbbf24'},
+                hover:     {background: '#78350f', border: '#fbbf24'}
+            },
+            shadow: {enabled: true, color: 'rgba(245,158,11,0.55)', size: 14, x: 0, y: 0}
+        });
+    }
+
     network.focus(visibleId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
     network.selectNodes([visibleId]);
+
+    // Highlight the clicked panel element
+    if (clickedEl) {
+        clickedEl.classList.add('focused');
+        _focusHighlightPanelEl = clickedEl;
+    }
 }
 
 function openInsightsPanel() {
