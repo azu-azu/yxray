@@ -20,6 +20,7 @@ _TEMPLATE = """<!DOCTYPE html>
 <title>Alteryx Workflow Diff Report</title>
 <style>
 {{ report_base_css | safe }}
+.site-header { position: sticky; top: 0; z-index: 100; }
 /* ---- Summary stat cards ---- */
 .stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
 .stat-card {
