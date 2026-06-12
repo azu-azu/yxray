@@ -21,7 +21,6 @@ _TEMPLATE = """<!DOCTYPE html>
 <style>
 {{ report_base_css | safe }}
 .site-header { position: sticky; top: 0; z-index: 100; }
-.header-left { flex: 1; min-width: 0; }
 .theme-toggle { line-height: 1; }
 .theme-toggle svg { display: block; }
 /* ---- Summary stat cards ---- */
@@ -237,31 +236,33 @@ html.light .tool-row:hover { background: #f1f5f9; }
 </head>
 <body>
 <header class="site-header">
-  <div class="header-inner">
-    <div class="header-left">
+  <div class="header-inner" style="flex-direction:column;gap:6px;align-items:stretch;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
       <div class="header-title-row">
         <span class="pulse-dot"></span>
         <h1 class="header-title">Alteryx Workflow Diff Report</h1>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        <div class="report-search-wrap">
+          <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
+          <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
+        </div>
+        <span class="report-search-count" id="report-search-count"></span>
+        {% if workflow_steps %}<button class="theme-toggle" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+        <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Graph
+        </button>
+        <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="theme-label">Dark</span>
+        </button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
       <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
       <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
       <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-      <div class="report-search-wrap">
-        <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
-        <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
-      </div>
-      <span class="report-search-count" id="report-search-count"></span>
-      {% if workflow_steps %}<button class="theme-toggle" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
-      <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        Graph
-      </button>
-      <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="theme-label">Dark</span>
-      </button>
     </div>
   </div>
 </header>
