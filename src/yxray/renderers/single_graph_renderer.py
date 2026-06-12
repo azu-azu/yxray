@@ -244,7 +244,7 @@ _HTML_TEMPLATE = """\
     #summary-panel, #insights-panel {
       position: fixed;
       top: 0; left: 0;
-      width: 320px; height: 100%;
+      width: 640px; height: 100%;
       background: var(--surface);
       border-right: 1px solid var(--border);
       box-shadow: 2px 0 12px rgba(0,0,0,0.2);
