@@ -426,8 +426,10 @@ _HTML_TEMPLATE = """\
 
 function focusNode(toolId) {
     if (typeof network === 'undefined' || !network || toolId < 0) return;
-    network.focus(toolId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
-    network.selectNodes([toolId]);
+    var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
+    if (visibleId === null) return;
+    network.focus(visibleId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.selectNodes([visibleId]);
 }
 
 function openInsightsPanel() {
