@@ -240,11 +240,11 @@ _HTML_TEMPLATE = """\
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    /* ---- Summary panel (workflow steps) ---- */
-    #summary-panel {
+    /* ---- Left panels (summary + insights) ---- */
+    #summary-panel, #insights-panel {
       position: fixed;
       top: 0; left: 0;
-      width: 320px; height: 100%;
+      width: 640px; height: 100%;
       background: var(--surface);
       border-right: 1px solid var(--border);
       box-shadow: 2px 0 12px rgba(0,0,0,0.2);
@@ -254,8 +254,8 @@ _HTML_TEMPLATE = """\
       z-index: 1000;
       border-radius: 0 8px 8px 0;
     }
-    #summary-panel.open { transform: translateX(0); }
-    #summary-panel-drag-handle {
+    #summary-panel.open, #insights-panel.open { transform: translateX(0); }
+    #summary-panel-drag-handle, #insights-panel-drag-handle {
       position: absolute;
       top: 0; right: 0;
       width: 6px; height: 100%;
@@ -263,16 +263,38 @@ _HTML_TEMPLATE = """\
       z-index: 10;
       user-select: none;
     }
-    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging {
+    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging,
+    #insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging {
       background: rgba(148,163,184,0.18);
     }
-    #summary-panel-header {
+    #summary-panel-header, #insights-panel-header {
       padding: 12px 16px 10px;
       border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
     }
-    #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #summary-panel-body { padding: 10px 12px; }
+    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
+      border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+    .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+    .ki-row:hover { background: rgba(148,163,184,0.12); }
+    .ki-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+    .step-badge { cursor: pointer; }
+    .step-badge:hover { filter: brightness(0.88); }
+    .step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
+    .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
+      padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+    .ki-badge-input    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .ki-badge-output   { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .ki-badge-join     { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+    .ki-badge-union    { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .ki-badge-aggregate{ background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .ki-badge-filter   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .ki-badge-formula  { background: #cffafe; color: #155e75; border: 1px solid #67e8f9; }
+    .ki-badge-reshape  { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+    .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; color: var(--text); word-break: break-all; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
     .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
     .summary-step:hover { filter: brightness(1.08); }
@@ -317,6 +339,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
       {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
@@ -327,6 +350,27 @@ _HTML_TEMPLATE = """\
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
   </div>
+  {% if key_insights %}
+  <div id="insights-panel">
+    <div id="insights-panel-drag-handle"></div>
+    <div id="insights-panel-header">
+      <span>At a Glance</span>
+      <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+    </div>
+    <div id="insights-panel-body">
+      {% for insight in key_insights %}
+      {% if insight.role == "summary" %}
+      <div class="ki-summary">{{ insight.description }}</div>
+      {% else %}
+      <div class="ki-row" onclick="focusNode({{ insight.tool_id }}, this)">
+        <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
+        <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   {% if workflow_steps %}
   <div id="summary-panel">
     <div id="summary-panel-drag-handle"></div>
@@ -341,7 +385,7 @@ _HTML_TEMPLATE = """\
             onclick="toggleStepDetail(this)">
           <div class="step-row">
             <span class="step-num">{{ loop.index }}.</span>
-            <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
+            <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
             {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
           </div>
@@ -382,14 +426,110 @@ _HTML_TEMPLATE = """\
   <script>
 {{ step_detail_js | safe }}
 
+// ── focusNode: highlight a graph node and the clicked panel element ────────
+var _focusHighlightId = null;
+var _focusHighlightOrigColor = null;
+var _focusHighlightPanelEl = null;
+
+function focusNode(toolId, clickedEl) {
+    // Restore previous node colour
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var restore = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(restore);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+
+    // Remove focused class from previous panel element
+    if (_focusHighlightPanelEl) {
+        _focusHighlightPanelEl.classList.remove('focused');
+        _focusHighlightPanelEl = null;
+    }
+
+    if (typeof network === 'undefined' || !network || toolId < 0) return;
+    var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
+    if (visibleId === null) return;
+
+    // Save original colour then apply vivid amber highlight
+    var nodeData = nodesDataset ? nodesDataset.get(visibleId) : null;
+    if (nodeData) {
+        _focusHighlightId = visibleId;
+        _focusHighlightOrigColor = nodeData.color || null;
+        nodesDataset.update({
+            id: visibleId,
+            color: {
+                background: '#92400e',
+                border: '#f59e0b',
+                highlight: {background: '#78350f', border: '#fbbf24'},
+                hover:     {background: '#78350f', border: '#fbbf24'}
+            },
+            shadow: {enabled: true, color: 'rgba(245,158,11,0.55)', size: 14, x: 0, y: 0}
+        });
+    }
+
+    network.focus(visibleId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.selectNodes([visibleId]);
+
+    // Highlight the clicked panel element
+    if (clickedEl) {
+        clickedEl.classList.add('focused');
+        _focusHighlightPanelEl = clickedEl;
+    }
+}
+
+function openInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    if (!ip) return;
+    if (ip.classList.contains('open')) { ip.classList.remove('open'); return; }
+    if (sp) sp.classList.remove('open');
+    ip.classList.add('open');
+}
+function closeInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    if (ip) ip.classList.remove('open');
+}
 function openSummaryPanel() {
-    var p = document.getElementById('summary-panel');
-    if (p) p.classList.add('open');
+    var sp = document.getElementById('summary-panel');
+    var ip = document.getElementById('insights-panel');
+    if (!sp) return;
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (ip) ip.classList.remove('open');
+    sp.classList.add('open');
 }
 function closeSummaryPanel() {
-    var p = document.getElementById('summary-panel');
-    if (p) p.classList.remove('open');
+    var sp = document.getElementById('summary-panel');
+    if (sp) sp.classList.remove('open');
 }
+
+// ── Insights panel drag-resize ────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('insights-panel');
+  var handle = document.getElementById('insights-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Summary panel drag-resize ─────────────────────────────────────────────
 (function() {
@@ -430,14 +570,21 @@ class SingleGraphRenderer:
     vis-network UMD is inlined — zero CDN references.
     """
 
-    def render(self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None) -> str:
+    def render(
+        self,
+        doc: WorkflowDoc,
+        *,
+        workflow_steps: list[Any] | None = None,
+        key_insights: list[Any] | None = None,
+    ) -> str:
         """WorkflowDoc → standalone HTML string.
 
         Args:
             doc: The parsed workflow document.
-            workflow_steps: Optional list of WorkflowStep objects (or dicts with
-                ``short_type``, ``category``, ``description``, ``change``, ``config``
-                keys). When provided, a collapsible Summary panel is shown.
+            workflow_steps: Optional list of WorkflowStep objects. When provided,
+                a collapsible Summary panel is shown.
+            key_insights: Optional list of KeyInsight objects shown as an
+                at-a-glance summary at the top of the Summary panel.
         """
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
@@ -451,6 +598,12 @@ class SingleGraphRenderer:
             steps_dicts = [
                 s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
                 for s in workflow_steps
+            ]
+
+        insights_dicts: list[Any] | None = None
+        if key_insights:
+            insights_dicts = [
+                i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights
             ]
 
         graph_data_json = json.dumps(
@@ -478,6 +631,7 @@ class SingleGraphRenderer:
             single_graph_js=single_graph_js,
             step_detail_js=STEP_DETAIL_JS,
             workflow_steps=steps_dicts,
+            key_insights=insights_dicts,
         )
 
     def _build_graph_data(

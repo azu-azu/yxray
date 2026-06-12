@@ -16,7 +16,7 @@ from typing import Any
 
 from yxray.models.workflow import WorkflowDoc
 
-__all__ = ["WorkflowStep", "summarize"]
+__all__ = ["WorkflowStep", "KeyInsight", "summarize", "extract_key_insights"]
 
 # ---------------------------------------------------------------------------
 # Tool type registry
@@ -99,6 +99,24 @@ class WorkflowStep:
         return d
 
 
+@dataclass
+class KeyInsight:
+    """A single 'important' node distilled for the at-a-glance summary."""
+
+    tool_id: int
+    short_type: str
+    role: str  # "input"|"output"|"join"|"union"|"aggregate"|"filter"|"formula"|"reshape"
+    description: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tool_id": self.tool_id,
+            "short_type": self.short_type,
+            "role": self.role,
+            "description": self.description,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -159,6 +177,95 @@ def summarize(
             )
         )
     return steps
+
+
+def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
+    """Return the most structurally important nodes as human-readable insights.
+
+    Importance is determined by tool type and graph topology:
+    - Input/Output tools: always included
+    - Join/Union/Append/Summarize/CrossTab/Transpose: always included
+    - Filter/Formula: only when they feed >= 20% of total nodes downstream
+    - Select: only when they rename >= 2 or drop >= 3 fields
+    """
+    node_ids = {n.tool_id for n in doc.nodes}
+    successors: dict[Any, list[Any]] = {n.tool_id: [] for n in doc.nodes}
+    predecessors: dict[Any, list[Any]] = {n.tool_id: [] for n in doc.nodes}
+    for c in doc.connections:
+        if c.src_tool in node_ids:
+            successors[c.src_tool].append(c.dst_tool)
+        if c.dst_tool in node_ids:
+            predecessors[c.dst_tool].append(c.src_tool)
+
+    def _downstream_count(tid: Any) -> int:
+        visited: set[Any] = set()
+        stack = list(successors.get(tid, []))
+        while stack:
+            n = stack.pop()
+            if n not in visited:
+                visited.add(n)
+                stack.extend(successors.get(n, []))
+        return len(visited)
+
+    total = max(len(doc.nodes), 1)
+    trunk_threshold = max(3, total // 5)
+
+    node_map = {n.tool_id: n for n in doc.nodes}
+    order = _topo_sort(doc)
+
+    insights: list[KeyInsight] = []
+    input_count = 0
+    join_count = 0
+    output_count = 0
+
+    for tid in order:
+        node = node_map.get(tid)
+        if node is None:
+            continue
+        short_type, category = _classify(node.tool_type)
+        segment = node.tool_type.split(".")[-1]
+        dc = _downstream_count(tid)
+        role = _insight_role(
+            segment, category, node.config,
+            successors.get(tid, []),
+            dc, trunk_threshold,
+        )
+        if role is None:
+            continue
+        if role == "input":
+            input_count += 1
+        elif role == "join":
+            join_count += 1
+        elif role == "output":
+            output_count += 1
+        if role in ("input", "output"):
+            description = _first_text(node.config, "File", "FileName") or _describe(node.tool_type, node.config)
+        else:
+            description = _describe(node.tool_type, node.config)
+        insights.append(KeyInsight(
+            tool_id=int(tid),
+            short_type=short_type,
+            role=role,
+            description=description,
+        ))
+
+    # Summary count row at the top
+    parts = []
+    if input_count:
+        parts.append(f"Input × {input_count}")
+    if join_count:
+        parts.append(f"Join × {join_count}")
+    if output_count:
+        parts.append(f"Output × {output_count}")
+    if parts:
+        insights.insert(0, KeyInsight(
+            tool_id=-1,
+            short_type="",
+            role="summary",
+            description="  ·  ".join(parts),
+        ))
+
+    return insights
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +590,56 @@ def _describe_container(config: dict[str, Any], members: list[Any] | None) -> st
     summary = _count_by_short_type(member_nodes)
     prefix = f"{caption}: " if caption else ""
     return _truncate(f"{prefix}contains {len(member_nodes)} tools ({summary})", 110)
+
+
+_JOIN_SEGMENTS = frozenset({"AlteryxJoin", "Join", "AlteryxAppend", "Append"})
+_UNION_SEGMENTS = frozenset({"AlteryxUnion", "Union"})
+_AGGREGATE_SEGMENTS = frozenset(
+    {"AlteryxSummarize", "Summarize", "AlteryxCrossTab", "CrossTab", "AlteryxTranspose", "Transpose"}
+)
+_FILTER_SEGMENTS = frozenset({"AlteryxFilter", "Filter"})
+_FORMULA_SEGMENTS = frozenset({"AlteryxFormula", "Formula", "MultiFieldFormula"})
+_SELECT_SEGMENTS = frozenset({"AlteryxSelect", "Select"})
+
+
+def _insight_role(
+    segment: str,
+    category: str,
+    config: dict[str, Any],
+    succs: list[Any],
+    downstream_count: int,
+    trunk_threshold: int,
+) -> str | None:
+    if category == "input" and "Browse" not in segment:
+        return "input"
+    if category == "output" and "Browse" not in segment:
+        return "output"
+    if segment in _JOIN_SEGMENTS:
+        return "join"
+    if segment in _UNION_SEGMENTS:
+        return "union"
+    if segment in _AGGREGATE_SEGMENTS:
+        return "aggregate"
+    if segment in _FILTER_SEGMENTS:
+        return "filter" if downstream_count >= trunk_threshold else None
+    if segment in _FORMULA_SEGMENTS:
+        return "formula" if downstream_count >= trunk_threshold else None
+    if segment in _SELECT_SEGMENTS:
+        rows = _select_field_rows(config)
+        renamed = sum(
+            1 for r in rows
+            if isinstance(r, dict)
+            and _field_name(r)
+            and (r.get("@rename") or r.get("@Rename"))
+            and (r.get("@rename") or r.get("@Rename")) != _field_name(r)
+        )
+        dropped = sum(
+            1 for r in rows
+            if isinstance(r, dict)
+            and r.get("@selected", "True") in ("False", "false")
+        )
+        return "reshape" if (renamed >= 2 or dropped >= 3) else None
+    return None
 
 
 _DESCRIBERS: dict[str, DescribeFn] = {

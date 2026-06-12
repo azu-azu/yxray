@@ -20,6 +20,22 @@ _TEMPLATE = """<!DOCTYPE html>
 <title>Alteryx Workflow Diff Report</title>
 <style>
 {{ report_base_css | safe }}
+.site-header { position: sticky; top: 0; z-index: 100; }
+.theme-toggle { line-height: 1; }
+.theme-toggle svg { display: block; }
+/* ---- Diff details collapsible ---- */
+#diff-details-toggle {
+  max-width: 960px; margin: 0 auto; padding: 7px 32px;
+  display: flex; align-items: center; gap: 7px;
+  cursor: pointer; user-select: none;
+  font-size: 12px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+#diff-details-toggle:hover { color: var(--text); }
+.diff-chevron { font-style: normal; transition: transform 0.2s ease; display: inline-block; font-size: 10px; }
+.diff-chevron.closed { transform: rotate(-90deg); }
+#diff-details-wrap { overflow: hidden; transition: max-height 0.25s ease; }
+#diff-details-wrap.collapsed { max-height: 0 !important; }
 /* ---- Summary stat cards ---- */
 .stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
 .stat-card {
@@ -61,12 +77,6 @@ _TEMPLATE = """<!DOCTYPE html>
 .section-header-removed { border-left: 3px solid var(--accent-removed); }
 .section-header-modified { border-left: 3px solid var(--accent-modified); }
 .section-header-conn { border-left: 3px solid var(--accent-conn); }
-.section-header-summary { border-left: 3px solid var(--text-muted); cursor: pointer; user-select: none; }
-.section-header-summary:hover { opacity: 0.85; }
-.summary-chevron { display: inline-block; transition: transform 0.2s ease; margin-left: auto; font-style: normal; flex-shrink: 0; }
-.summary-chevron.open { transform: rotate(90deg); }
-#summary-steps-wrap { overflow: hidden; transition: max-height 0.25s ease; max-height: 4000px; }
-#summary-steps-wrap.collapsed { max-height: 0; }
 /* ---- Workflow summary: shared classes live in REPORT_BASE_CSS ---- */
 .count-pill-summary { background: var(--surface-2); border-color: var(--border); color: var(--text-muted); }
 .section-title { font-size: 14px; font-weight: 600; color: var(--text); margin: 0; }
@@ -190,6 +200,44 @@ html.light .tool-row:hover { background: #f1f5f9; }
   font-size: 11px; color: var(--text-muted); white-space: nowrap;
   min-width: 48px; text-align: right;
 }
+/* ---- Workflow summary step badge focus ---- */
+.step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
+/* ---- Left summary panel ---- */
+#summary-panel {
+  position: fixed; top: 0; left: 0;
+  width: 640px; height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+  z-index: 1001;
+  border-radius: 0 8px 8px 0;
+}
+#summary-panel.open { transform: translateX(0); }
+#summary-panel-drag-handle {
+  position: absolute; top: 0; right: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize; z-index: 10; user-select: none;
+}
+#summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
+}
+#summary-panel-header {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+#summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+#summary-panel-body { padding: 10px 12px; }
+#summary-panel-body .change-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
+#summary-panel .panel-close {
+  float: none; cursor: pointer; color: var(--text-muted);
+  font-size: 18px; line-height: 1; background: none; border: none;
+}
+#summary-panel .panel-close:hover { color: var(--text); }
 /* ---- Print ---- */
 @media print {
   .ctrl-btn, .theme-toggle { display: none; }
@@ -201,62 +249,42 @@ html.light .tool-row:hover { background: #f1f5f9; }
 </head>
 <body>
 <header class="site-header">
-  <div class="header-inner">
-    <div class="header-left">
+  <div class="header-inner" style="flex-direction:column;gap:6px;align-items:stretch;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
       <div class="header-title-row">
         <span class="pulse-dot"></span>
         <h1 class="header-title">Alteryx Workflow Diff Report</h1>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        <div class="report-search-wrap">
+          <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
+          <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
+        </div>
+        <span class="report-search-count" id="report-search-count"></span>
+        {% if workflow_steps %}<button class="theme-toggle" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+        <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Graph
+        </button>
+        <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="theme-label">Dark</span>
+        </button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
       <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
       <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
       <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <div class="report-search-wrap">
-        <input type="text" id="report-search-input" class="report-search-input" placeholder="Search tools…" autocomplete="off" spellcheck="false" oninput="doReportSearch(this.value.trim())" />
-        <button class="report-search-clear" id="report-search-clear" aria-label="Clear" onclick="document.getElementById('report-search-input').value='';doReportSearch('');">&times;</button>
-      </div>
-      <span class="report-search-count" id="report-search-count"></span>
-      <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        Graph
-      </button>
-      <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark/light mode">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="theme-label">Dark</span>
-      </button>
-    </div>
   </div>
 </header>
-<div class="container">
-{% if workflow_steps %}
-<div class="section-wrap">
-  <div class="section-header section-header-summary" onclick="toggleSummarySection()">
-    <span class="section-title">Workflow Summary</span>
-    <span class="count-pill count-pill-summary">{{ workflow_steps | length }} steps</span>
-    <span class="summary-chevron open" id="summary-chevron">&#9654;</span>
-  </div>
-  <div id="summary-steps-wrap">
-    <ol class="summary-steps">
-      {% for step in workflow_steps %}
-      <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}"
-          onclick="toggleStepDetail(this)">
-        <div class="step-row">
-          <span class="step-num">{{ loop.index }}.</span>
-          <span class="step-badge step-badge-{{ step.category }}">{{ step.short_type }}</span>
-          {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
-          {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
-          <span class="step-expand-arrow">&#9654;</span>
-        </div>
-        <div class="step-detail" data-config="{{ step.config | tojson | forceescape }}">
-          <div class="step-detail-inner"></div>
-        </div>
-      </li>
-      {% endfor %}
-    </ol>
-  </div>
+<div id="diff-details-toggle" onclick="toggleDiffDetails()">
+  <span class="diff-chevron" id="diff-chevron">&#9660;</span>
+  Diff Details
 </div>
-{% endif %}
+<div id="diff-details-wrap">
+<div class="container">
 <section id="summary">
   <div class="stat-cards">
     <a href="#heading-added" onclick="expandSection('added'); return true;" class="stat-card stat-card-added">
@@ -721,12 +749,71 @@ function collapseAll(containerId) {
     for (var i = 0; i < rows.length; i++) { rows[i].click(); }
 }
 
-function toggleSummarySection() {
-    var wrap = document.getElementById('summary-steps-wrap');
-    var chevron = document.getElementById('summary-chevron');
+function toggleDiffDetails() {
+    var wrap = document.getElementById('diff-details-wrap');
+    var chevron = document.getElementById('diff-chevron');
     if (!wrap) return;
-    wrap.classList.toggle('collapsed');
-    if (chevron) chevron.classList.toggle('open');
+    var isOpen = !wrap.classList.contains('collapsed');
+    if (isOpen) {
+        wrap.style.maxHeight = wrap.scrollHeight + 'px';
+        requestAnimationFrame(function() {
+            wrap.style.maxHeight = '0';
+            wrap.classList.add('collapsed');
+        });
+    } else {
+        wrap.classList.remove('collapsed');
+        wrap.style.maxHeight = wrap.scrollHeight + 'px';
+        wrap.addEventListener('transitionend', function onEnd() {
+            wrap.style.maxHeight = '';
+            wrap.removeEventListener('transitionend', onEnd);
+        });
+    }
+    if (chevron) chevron.classList.toggle('closed', isOpen);
+}
+
+function openSummaryPanel() {
+    var sp = document.getElementById('summary-panel');
+    if (!sp) return;
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    sp.classList.add('open');
+}
+function closeSummaryPanel() {
+    var sp = document.getElementById('summary-panel');
+    if (sp) sp.classList.remove('open');
+}
+
+// ── Summary panel drag-resize ─────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('summary-panel');
+  var handle = document.getElementById('summary-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    startX = e.clientX; startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+var _focusPanelEl = null;
+function focusNode(toolId, clickedEl) {
+    if (_focusPanelEl) { _focusPanelEl.classList.remove('focused'); _focusPanelEl = null; }
+    if (typeof window.graphFocusNode === 'function') window.graphFocusNode(toolId);
+    var section = document.getElementById('graph-section');
+    if (section) section.scrollIntoView({behavior: 'smooth', block: 'start'});
+    if (clickedEl) { clickedEl.classList.add('focused'); _focusPanelEl = clickedEl; }
 }
 
 {{ step_detail_js | safe }}
@@ -738,7 +825,36 @@ function toggleSummarySection() {
 })();
 </script>
 </div>
+</div>
 {{ graph_html | safe }}
+{% if workflow_steps %}
+<div id="summary-panel">
+  <div id="summary-panel-drag-handle"></div>
+  <div id="summary-panel-header">
+    <span id="summary-panel-title">Workflow Summary ({{ workflow_steps | length }} steps)</span>
+    <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+  </div>
+  <div id="summary-panel-body">
+    <ol class="summary-steps">
+      {% for step in workflow_steps %}
+      <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}"
+          onclick="toggleStepDetail(this)">
+        <div class="step-row">
+          <span class="step-num">{{ loop.index }}.</span>
+          <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
+          {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+          {% if step.change %}<span class="change-badge change-badge-{{ step.change }}">{{ step.change }}</span>{% endif %}
+          <span class="step-expand-arrow">&#9654;</span>
+        </div>
+        <div class="step-detail" data-config="{{ step.config | tojson | forceescape }}">
+          <div class="step-detail-inner"></div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</div>
+{% endif %}
 </body>
 </html>
 """
