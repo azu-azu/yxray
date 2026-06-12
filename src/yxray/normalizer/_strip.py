@@ -46,7 +46,7 @@ def _strip_value(value: Any) -> Any:
 
 def _strip_dict_entry(key: str, value: Any) -> Any:
     """Apply key-targeted GUID stripping before general value stripping."""
-    if key in GUID_VALUE_KEYS and isinstance(value, str):
+    if GUID_VALUE_KEYS and key in GUID_VALUE_KEYS and isinstance(value, str):
         return GUID_SENTINEL
     return _strip_value(value)
 
