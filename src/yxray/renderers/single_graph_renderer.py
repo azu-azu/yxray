@@ -418,8 +418,10 @@ _HTML_TEMPLATE = """\
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
+    if (!ip) return;
+    if (ip.classList.contains('open')) { ip.classList.remove('open'); return; }
     if (sp) sp.classList.remove('open');
-    if (ip) ip.classList.add('open');
+    ip.classList.add('open');
 }
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
@@ -428,8 +430,10 @@ function closeInsightsPanel() {
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
+    if (!sp) return;
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
     if (ip) ip.classList.remove('open');
-    if (sp) sp.classList.add('open');
+    sp.classList.add('open');
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
