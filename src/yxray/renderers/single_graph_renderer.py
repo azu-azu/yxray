@@ -273,6 +273,27 @@ _HTML_TEMPLATE = """\
     }
     #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #summary-panel-body { padding: 10px 12px; }
+    /* ---- Key Insights (at-a-glance section) ---- */
+    #key-insights { border-bottom: 1px solid var(--border); padding: 10px 12px 8px; }
+    #ki-header { display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.05em; cursor: pointer; user-select: none; margin-bottom: 6px; }
+    #ki-header:hover { color: var(--text); }
+    #ki-body { display: flex; flex-direction: column; gap: 4px; }
+    #ki-body.collapsed { display: none; }
+    .ki-row { display: flex; align-items: baseline; gap: 6px; }
+    .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
+      padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+    .ki-badge-input    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .ki-badge-output   { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .ki-badge-join     { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+    .ki-badge-union    { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .ki-badge-aggregate{ background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .ki-badge-filter   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .ki-badge-formula  { background: #cffafe; color: #155e75; border: 1px solid #67e8f9; }
+    .ki-badge-reshape  { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+    .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; color: var(--text); word-break: break-all; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
     .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
     .summary-step:hover { filter: brightness(1.08); }
@@ -334,6 +355,22 @@ _HTML_TEMPLATE = """\
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
       <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
     </div>
+    {% if key_insights %}
+    <div id="key-insights">
+      <div id="ki-header" onclick="toggleKeyInsights(this)">
+        At a Glance
+        <span class="step-expand-arrow open">&#9654;</span>
+      </div>
+      <div id="ki-body">
+        {% for insight in key_insights %}
+        <div class="ki-row">
+          <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
+          <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
     <div id="summary-panel-body">
       <ol class="summary-steps">
         {% for step in workflow_steps %}
@@ -390,6 +427,13 @@ function closeSummaryPanel() {
     var p = document.getElementById('summary-panel');
     if (p) p.classList.remove('open');
 }
+function toggleKeyInsights(header) {
+    var body = document.getElementById('ki-body');
+    var arrow = header ? header.querySelector('.step-expand-arrow') : null;
+    if (!body) return;
+    var collapsed = body.classList.toggle('collapsed');
+    if (arrow) { collapsed ? arrow.classList.remove('open') : arrow.classList.add('open'); }
+}
 
 // ── Summary panel drag-resize ─────────────────────────────────────────────
 (function() {
@@ -430,14 +474,21 @@ class SingleGraphRenderer:
     vis-network UMD is inlined — zero CDN references.
     """
 
-    def render(self, doc: WorkflowDoc, *, workflow_steps: list[Any] | None = None) -> str:
+    def render(
+        self,
+        doc: WorkflowDoc,
+        *,
+        workflow_steps: list[Any] | None = None,
+        key_insights: list[Any] | None = None,
+    ) -> str:
         """WorkflowDoc → standalone HTML string.
 
         Args:
             doc: The parsed workflow document.
-            workflow_steps: Optional list of WorkflowStep objects (or dicts with
-                ``short_type``, ``category``, ``description``, ``change``, ``config``
-                keys). When provided, a collapsible Summary panel is shown.
+            workflow_steps: Optional list of WorkflowStep objects. When provided,
+                a collapsible Summary panel is shown.
+            key_insights: Optional list of KeyInsight objects shown as an
+                at-a-glance summary at the top of the Summary panel.
         """
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
@@ -451,6 +502,12 @@ class SingleGraphRenderer:
             steps_dicts = [
                 s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
                 for s in workflow_steps
+            ]
+
+        insights_dicts: list[Any] | None = None
+        if key_insights:
+            insights_dicts = [
+                i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights
             ]
 
         graph_data_json = json.dumps(
@@ -478,6 +535,7 @@ class SingleGraphRenderer:
             single_graph_js=single_graph_js,
             step_detail_js=STEP_DETAIL_JS,
             workflow_steps=steps_dicts,
+            key_insights=insights_dicts,
         )
 
     def _build_graph_data(
