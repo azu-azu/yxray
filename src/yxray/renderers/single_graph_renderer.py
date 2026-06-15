@@ -562,6 +562,33 @@ function closeSummaryPanel() {
     if (sp) sp.classList.remove('open');
 }
 
+// ── At a Glance panel drag-resize ────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('config-panel');
+  var handle = document.getElementById('panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW - dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
 // ── Insights panel drag-resize ────────────────────────────────────────────
 (function() {
   var panel = document.getElementById('insights-panel');
