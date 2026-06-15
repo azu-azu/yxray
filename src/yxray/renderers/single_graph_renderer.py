@@ -185,6 +185,8 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
+    #panel-title-text { cursor: pointer; }
+    #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
     .config-row { margin: 8px 0; }
     .config-key {
       font-size: 11px; font-weight: 600;
