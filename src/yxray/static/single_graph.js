@@ -209,7 +209,7 @@ function buildClusters(skipSet) {
     nodesDataset.add({
       id: c.cid,
       label: c.toolType + ' ×' + c.chain.length,
-      title: c.toolType + ' cluster — Double-click to expand',
+      title: c.toolType + ' cluster — Click to expand/collapse',
       shape: 'box',
       borderDashes: [5, 3],
       x: cPos.x, y: cPos.y,
@@ -383,7 +383,7 @@ function buildContainerClusters(membership) {
     var ns = _containerNodeStyle(c.fillColor);
     nodesDataset.add({
       id: c.cid, label: c.label,
-      title: c.caption + ' — Double-click to expand',
+      title: c.caption + ' — Click to expand/collapse',
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
       color: ns.color,
@@ -462,8 +462,8 @@ function recollapseGroup(groupKey) {
   // Re-add cluster node with appropriate colors
   var isContainer = group.isContainer || false;
   var clusterTitle = isContainer
-    ? group.toolType + ' \u2014 Double-click to expand'
-    : group.toolType + ' cluster \u2014 Double-click to expand';
+    ? group.toolType + ' \u2014 Click to expand/collapse'
+    : group.toolType + ' cluster \u2014 Click to expand/collapse';
   var cPos = centroid(group.memberIds);
   var ns = isContainer
     ? _containerNodeStyle(group.fillColorHex || null)
@@ -748,8 +748,6 @@ function exitConnectMode() {
 }
 
 // ── Network init ──────────────────────────────────────────────────────────
-var _clusterClickTimer = null;
-
 function initNetwork() {
   if (network) return;
   var canvas = document.getElementById('graph-canvas');
@@ -867,22 +865,9 @@ function initNetwork() {
       return;
     }
     if (params.nodes.length === 0) { closePanel(); return; }
-    var nodeId = params.nodes[0];
-    // Delay panel open for any node that is double-clickable (cluster or
-    // expanded member) so the overlay does not block the second tap.
-    if (AppState.clusterMap[nodeId] || AppState.expandedGroups[nodeId]) {
-      clearTimeout(_clusterClickTimer);
-      _clusterClickTimer = setTimeout(function() {
-        _clusterClickTimer = null;
-        openPanel(nodeId);
-      }, 280);
-    } else {
-      openPanel(nodeId);
-    }
+    openPanel(params.nodes[0]);
   });
   network.on('doubleClick', function(params) {
-    clearTimeout(_clusterClickTimer);
-    _clusterClickTimer = null;
     // Empty canvas double-click → create memo at that canvas position
     if (params.nodes.length === 0) {
       var cp = params.pointer.canvas;
@@ -893,12 +878,13 @@ function initNetwork() {
     // Memo node double-click → edit
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
-      return;
     }
+    // Cluster expand/collapse is now handled via panel buttons.
+    // Double-click kept as a shortcut for keyboard/power users.
     if (AppState.clusterMap[nodeId]) {
-      expandCluster(nodeId);
+      closePanel(); expandCluster(nodeId);
     } else if (AppState.expandedGroups[nodeId]) {
-      recollapseGroup(AppState.expandedGroups[nodeId]);
+      closePanel(); recollapseGroup(AppState.expandedGroups[nodeId]);
     }
   });
   // Persist memo positions after drag
@@ -1182,15 +1168,17 @@ function openPanel(nodeId) {
     return;
   }
 
-  // Cluster node — show member list
+  // Cluster node — show member list + expand button
   if (AppState.clusterMap[nodeId]) {
     var c = AppState.clusterMap[nodeId];
     document.getElementById('panel-title-text').textContent =
-      c.toolType + ' ×' + c.memberIds.length + ' nodes';
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
-    hint.textContent = 'Double-click the node to expand.';
-    body.appendChild(hint);
+      c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'ctrl-btn';
+    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
+    expandBtn.textContent = 'Expand';
+    (function(cid) { expandBtn.onclick = function() { closePanel(); expandCluster(cid); }; })(nodeId);
+    body.appendChild(expandBtn);
     c.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
       if (!entry) return;
@@ -1200,6 +1188,24 @@ function openPanel(nodeId) {
       body.appendChild(hdr);
       renderConfigRows(entry, body);
     });
+    document.getElementById('config-panel').classList.add('open');
+    return;
+  }
+
+  // Expanded cluster member — show config + collapse button
+  var _groupKey = AppState.expandedGroups[nodeId];
+  if (_groupKey) {
+    var _group = AppState.groupMembers[_groupKey];
+    var _entry = CONFIG_MAP[String(nodeId)];
+    document.getElementById('panel-title-text').textContent =
+      _entry ? _entry.label : 'Node ' + nodeId;
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
+    (function(gk) { collapseBtn.onclick = function() { closePanel(); recollapseGroup(gk); }; })(_groupKey);
+    body.appendChild(collapseBtn);
+    if (_entry) renderConfigRows(_entry, body);
     document.getElementById('config-panel').classList.add('open');
     return;
   }
