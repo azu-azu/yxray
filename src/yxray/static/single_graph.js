@@ -879,12 +879,12 @@ function initNetwork() {
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
     }
-    // Cluster expand/collapse is now handled via panel buttons.
-    // Double-click kept as a shortcut for keyboard/power users.
+    // Cluster expand/collapse via double-click (shortcut — panel stays open)
     if (AppState.clusterMap[nodeId]) {
-      closePanel(); expandCluster(nodeId);
+      expandCluster(nodeId); _refreshClusterPanel(nodeId);
     } else if (AppState.expandedGroups[nodeId]) {
-      closePanel(); recollapseGroup(AppState.expandedGroups[nodeId]);
+      var _gk = AppState.expandedGroups[nodeId];
+      recollapseGroup(_gk); _refreshClusterPanel(_gk);
     }
   });
   // Persist memo positions after drag
@@ -1100,6 +1100,57 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
+// Shared render helper: builds Expand/Collapse button + member list for a cluster.
+// Called from openPanel() and from within the buttons themselves so the panel
+// stays open and its content flips between "Expand" and "Collapse" states.
+function _refreshClusterPanel(groupKey) {
+  _panelNodeId = groupKey;
+  var body = document.getElementById('panel-body');
+  body.innerHTML = '';
+  if (AppState.clusterMap[groupKey]) {
+    // Collapsed state → show Expand button
+    var c = AppState.clusterMap[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'ctrl-btn';
+    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
+    expandBtn.textContent = 'Expand';
+    expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(expandBtn);
+    c.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  } else if (AppState.groupMembers[groupKey]) {
+    // Expanded state → show Collapse button
+    var group = AppState.groupMembers[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      group.toolType + ' \xd7' + group.memberIds.length + ' nodes';
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse';
+    collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(collapseBtn);
+    group.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  }
+  document.getElementById('config-panel').classList.add('open');
+}
+
 function renderConfigRows(entry, container) {
   var keys = Object.keys(entry.config);
   if (keys.length === 0) {
@@ -1168,27 +1219,9 @@ function openPanel(nodeId) {
     return;
   }
 
-  // Cluster node — show member list + expand button
+  // Cluster node (collapsed) — delegate to shared refresh helper
   if (AppState.clusterMap[nodeId]) {
-    var c = AppState.clusterMap[nodeId];
-    document.getElementById('panel-title-text').textContent =
-      c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
-    var expandBtn = document.createElement('button');
-    expandBtn.className = 'ctrl-btn';
-    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
-    expandBtn.textContent = 'Expand';
-    (function(cid) { expandBtn.onclick = function() { closePanel(); expandCluster(cid); }; })(nodeId);
-    body.appendChild(expandBtn);
-    c.memberIds.forEach(function(mid) {
-      var entry = CONFIG_MAP[String(mid)];
-      if (!entry) return;
-      var hdr = document.createElement('div');
-      hdr.className = 'cluster-member-header';
-      hdr.textContent = entry.label;
-      body.appendChild(hdr);
-      renderConfigRows(entry, body);
-    });
-    document.getElementById('config-panel').classList.add('open');
+    _refreshClusterPanel(nodeId);
     return;
   }
 
@@ -1203,7 +1236,7 @@ function openPanel(nodeId) {
     collapseBtn.className = 'ctrl-btn';
     collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
     collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
-    (function(gk) { collapseBtn.onclick = function() { closePanel(); recollapseGroup(gk); }; })(_groupKey);
+    collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
     if (_entry) renderConfigRows(_entry, body);
     document.getElementById('config-panel').classList.add('open');
