@@ -331,9 +331,11 @@ _HTML_TEMPLATE = """\
     #containers-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #containers-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #containers-panel-body > * { direction: ltr; }
-    .container-row { display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 4px; padding: 5px 8px; }
+    .container-row { display: flex; align-items: center; gap: 8px; cursor: grab; border-radius: 4px; padding: 5px 8px; }
     .container-row:hover { background: rgba(148,163,184,0.12); }
     .container-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+    .container-row.drag-over { border-top: 2px solid #f59e0b; }
+    .container-row.dragging { opacity: 0.4; }
     .container-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.25); }
     .container-label { font-size: 12px; color: var(--text); }
     .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
@@ -453,7 +455,7 @@ _HTML_TEMPLATE = """\
     </div>
     <div id="containers-panel-body">
       {% for c in containers_for_panel %}
-      <div class="container-row" onclick="focusContainer({{ loop.index0 }}, this)">
+      <div class="container-row" draggable="true" data-label="{{ c.label }}" onclick="focusContainer({{ loop.index0 }}, this)">
         {% if c.fill_color %}<span class="container-swatch" style="background:{{ c.fill_color }};"></span>{% endif %}
         <span class="container-label">{{ c.label }}</span>
       </div>

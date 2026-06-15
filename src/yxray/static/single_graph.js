@@ -74,7 +74,8 @@ var AppState = {
   memoHandles: {},        // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
   resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
 };
-var MEMO_STORAGE_KEY = 'yxray-memos-' + (document.title || 'default');
+var MEMO_STORAGE_KEY           = 'yxray-memos-'           + (document.title || 'default');
+var CONTAINER_ORDER_KEY        = 'yxray-container-order-' + (document.title || 'default');
 
 var options = {
   physics: {enabled: false},
@@ -688,6 +689,88 @@ function loadMemos() {
   }
 }
 
+// ── Container order persistence ───────────────────────────────────────────
+function saveContainerOrder() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  var order = Array.from(body.querySelectorAll('.container-row')).map(function(el) {
+    return el.getAttribute('data-label');
+  });
+  try {
+    localStorage.setItem(CONTAINER_ORDER_KEY, JSON.stringify(order));
+  } catch(e) {
+    console.warn('[yxray] container order save failed:', e);
+  }
+}
+
+function loadContainerOrder() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  try {
+    var raw = localStorage.getItem(CONTAINER_ORDER_KEY);
+    if (!raw) return;
+    var order = JSON.parse(raw);
+    if (!Array.isArray(order)) return;
+    var rows = Array.from(body.querySelectorAll('.container-row'));
+    var rowMap = {};
+    rows.forEach(function(el) { rowMap[el.getAttribute('data-label')] = el; });
+    // Re-append in saved order; unknown labels are skipped, new labels stay at end.
+    var placed = {};
+    order.forEach(function(label) {
+      if (rowMap[label]) { body.appendChild(rowMap[label]); placed[label] = true; }
+    });
+    rows.forEach(function(el) {
+      if (!placed[el.getAttribute('data-label')]) body.appendChild(el);
+    });
+  } catch(e) {
+    console.warn('[yxray] container order load failed:', e);
+  }
+}
+
+// ── Container row drag-to-reorder ─────────────────────────────────────────
+(function() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  var dragSrc = null;
+
+  body.addEventListener('dragstart', function(e) {
+    var row = e.target.closest('.container-row');
+    if (!row) return;
+    dragSrc = row;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  body.addEventListener('dragend', function(e) {
+    var row = e.target.closest('.container-row');
+    if (row) row.classList.remove('dragging');
+    body.querySelectorAll('.container-row.drag-over').forEach(function(el) {
+      el.classList.remove('drag-over');
+    });
+    dragSrc = null;
+  });
+
+  body.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var row = e.target.closest('.container-row');
+    body.querySelectorAll('.container-row.drag-over').forEach(function(el) {
+      el.classList.remove('drag-over');
+    });
+    if (row && row !== dragSrc) row.classList.add('drag-over');
+  });
+
+  body.addEventListener('drop', function(e) {
+    e.preventDefault();
+    var target = e.target.closest('.container-row');
+    if (!target || !dragSrc || target === dragSrc) return;
+    target.classList.remove('drag-over');
+    // Insert dragSrc before target.
+    body.insertBefore(dragSrc, target);
+    saveContainerOrder();
+  });
+})();
+
 function openMemoModal(targetId, x, y) {
   AppState.memoEditTarget = targetId;
   AppState.memoPendingPos = (x !== undefined && y !== undefined) ? {x: x, y: y} : null;
@@ -1087,6 +1170,7 @@ function initNetwork() {
 
 try {
   initNetwork();
+  loadContainerOrder();
   requestAnimationFrame(function() {
     if (network) { network.redraw(); network.fit({animation: false}); }
   });
