@@ -38,7 +38,7 @@ function contrastColor(hex) {
 var CLUSTER_STYLE = {
   type: {
     normal: {background:'#4c1d95', border:'#7c3aed',
-             highlight:{background:'#5b21b6', border:'#7c3aed'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#5b21b6', border:'#7c3aed'}},
     dim:    {background:'#2e1065', border:'#4c1d95'},
     matchBg: '#5b21b6',
@@ -46,7 +46,7 @@ var CLUSTER_STYLE = {
   },
   container: {
     normal: {background:'#7f1d1d', border:'#ef4444',
-             highlight:{background:'#991b1b', border:'#ef4444'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#991b1b', border:'#ef4444'}},
     dim:    {background:'#450a0a', border:'#7f1d1d'},
     matchBg: '#991b1b',
@@ -215,7 +215,7 @@ function buildClusters(skipSet) {
       x: cPos.x, y: cPos.y,
       color: {
         background: '#4c1d95', border: '#7c3aed',
-        highlight: {background: '#5b21b6', border: '#7c3aed'},
+        highlight: {background: '#92400e', border: '#f59e0b'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
       font: {color: contrastColor('#4c1d95'), size: 13}
@@ -327,7 +327,7 @@ function _containerNodeStyle(fillHex) {
   return {
     color: {
       background: fillHex,  border: dark,
-      highlight: {background: _darkenHex(fillHex, 8), border: dark},
+      highlight: {background: '#92400e', border: '#f59e0b'},
       hover:     {background: _darkenHex(fillHex, 8), border: dark}
     },
     fontColor: contrastColor(fillHex)
@@ -550,7 +550,7 @@ function expandCluster(cid) {
       id: orig.id, label: orig.label, title: orig.title, shape: 'box',
       x: orig.x, y: orig.y,
       color: {background: col.bg, border: col.bd,
-              highlight: {background: col.sel, border: col.bd},
+              highlight: {background: '#92400e', border: '#f59e0b'},
               hover: {background: col.hover, border: col.bd}},
       font: {color: contrastColor(col.bg)}
     });
@@ -1325,7 +1325,6 @@ function nodeColors() {
     bg:    s.getPropertyValue('--node-bg').trim(),
     bd:    s.getPropertyValue('--node-border').trim(),
     hover: s.getPropertyValue('--node-hover').trim(),
-    sel:   s.getPropertyValue('--node-select').trim(),
   };
 }
 
@@ -1346,7 +1345,7 @@ function baseNodeColorUpdate(n, col) {
   }
   return {id: n.id, color: {
     background: col.bg, border: col.bd,
-    highlight: {background: col.sel, border: col.bd},
+    highlight: {background: '#92400e', border: '#f59e0b'},
     hover: {background: col.hover, border: col.bd}
   }, font: {color: contrastColor(col.bg)}};
 }
@@ -1471,7 +1470,7 @@ function doSearch(query, skipFocus) {
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: '#f59e0b',
-          highlight: {background: col.sel, border: '#f59e0b'},
+          highlight: {background: '#92400e', border: '#f59e0b'},
           hover: {background: col.hover, border: '#f59e0b'}
         }, font: {color: contrastColor(col.bg)}});
       }
@@ -1552,7 +1551,6 @@ function applyTheme(theme) {
   var nodeBg    = s.getPropertyValue('--node-bg').trim();
   var nodeBd    = s.getPropertyValue('--node-border').trim();
   var nodeHover = s.getPropertyValue('--node-hover').trim();
-  var nodeSel   = s.getPropertyValue('--node-select').trim();
   // Iterate only nodes/edges currently in the DataSet.
   // Using NODES_DATA.map() here would re-create clustered-away nodes because
   // DataSet.update() inserts missing IDs as new (label-less) items.
@@ -1561,7 +1559,7 @@ function applyTheme(theme) {
     if (AppState.clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
-      highlight: {background: nodeSel, border: nodeBd},
+      highlight: {background: '#92400e', border: '#f59e0b'},
       hover: {background: nodeHover, border: nodeBd}}, font: {color: contrastColor(nodeBg)}});
   });
   nodesDataset.update(nodeUpdates);
