@@ -157,10 +157,6 @@ def summarize(
             current_node.config,
             members=members_by_container.get(int(tid), []),
         )
-        # ToolContainer without a caption is pure layout noise — skip it.
-        # Ones with a caption carry human-assigned structural labels worth showing.
-        if "ToolContainer" in current_node.tool_type and not description:
-            continue
         change: str | None = None
         if added_ids and tid in added_ids:
             change = "added"
@@ -274,8 +270,12 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
 
 
 def _topo_sort(doc: WorkflowDoc) -> list[Any]:
-    """Return tool IDs in topological order (sources first)."""
-    node_ids = [n.tool_id for n in doc.nodes]
+    """Return tool IDs in topological order (sources first).
+
+    ToolContainer nodes are excluded — they carry no data-flow information
+    and would otherwise appear as spurious sources (in_degree == 0).
+    """
+    node_ids = [n.tool_id for n in doc.nodes if "ToolContainer" not in n.tool_type]
     in_degree: dict[Any, int] = {nid: 0 for nid in node_ids}
     successors: dict[Any, list[Any]] = {nid: [] for nid in node_ids}
 
