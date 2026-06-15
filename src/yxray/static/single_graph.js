@@ -712,15 +712,25 @@ function loadContainerOrder() {
     var order = JSON.parse(raw);
     if (!Array.isArray(order)) return;
     var rows = Array.from(body.querySelectorAll('.container-row'));
+    // Use arrays to handle duplicate labels without losing rows.
     var rowMap = {};
-    rows.forEach(function(el) { rowMap[el.getAttribute('data-label')] = el; });
-    // Re-append in saved order; unknown labels are skipped, new labels stay at end.
-    var placed = {};
-    order.forEach(function(label) {
-      if (rowMap[label]) { body.appendChild(rowMap[label]); placed[label] = true; }
-    });
     rows.forEach(function(el) {
-      if (!placed[el.getAttribute('data-label')]) body.appendChild(el);
+      var lbl = el.getAttribute('data-label');
+      if (!rowMap[lbl]) rowMap[lbl] = [];
+      rowMap[lbl].push(el);
+    });
+    // Re-append in saved order; duplicate labels consume from the front of each array.
+    var placedSet = new Set();
+    order.forEach(function(label) {
+      if (rowMap[label] && rowMap[label].length > 0) {
+        var el = rowMap[label].shift();
+        body.appendChild(el);
+        placedSet.add(el);
+      }
+    });
+    // Append any rows not covered by saved order (new containers or leftover duplicates).
+    rows.forEach(function(el) {
+      if (!placedSet.has(el)) body.appendChild(el);
     });
   } catch(e) {
     console.warn('[yxray] container order load failed:', e);
@@ -741,12 +751,21 @@ function loadContainerOrder() {
     e.dataTransfer.effectAllowed = 'move';
   });
 
+  function clearDragIndicators() {
+    body.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(function(el) {
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+  }
+
+  function isAfterMidpoint(e, el) {
+    var rect = el.getBoundingClientRect();
+    return e.clientY > rect.top + rect.height / 2;
+  }
+
   body.addEventListener('dragend', function(e) {
     var row = e.target.closest('.container-row');
     if (row) row.classList.remove('dragging');
-    body.querySelectorAll('.container-row.drag-over').forEach(function(el) {
-      el.classList.remove('drag-over');
-    });
+    clearDragIndicators();
     dragSrc = null;
   });
 
@@ -754,19 +773,22 @@ function loadContainerOrder() {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     var row = e.target.closest('.container-row');
-    body.querySelectorAll('.container-row.drag-over').forEach(function(el) {
-      el.classList.remove('drag-over');
-    });
-    if (row && row !== dragSrc) row.classList.add('drag-over');
+    clearDragIndicators();
+    if (row && row !== dragSrc) {
+      row.classList.add(isAfterMidpoint(e, row) ? 'drag-over-bottom' : 'drag-over-top');
+    }
   });
 
   body.addEventListener('drop', function(e) {
     e.preventDefault();
     var target = e.target.closest('.container-row');
     if (!target || !dragSrc || target === dragSrc) return;
-    target.classList.remove('drag-over');
-    // Insert dragSrc before target.
-    body.insertBefore(dragSrc, target);
+    clearDragIndicators();
+    if (isAfterMidpoint(e, target)) {
+      body.insertBefore(dragSrc, target.nextSibling);  // null → appendChild 相当
+    } else {
+      body.insertBefore(dragSrc, target);
+    }
     saveContainerOrder();
   });
 })();
