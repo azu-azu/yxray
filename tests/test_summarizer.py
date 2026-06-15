@@ -82,7 +82,13 @@ def test_summarize_select_plugin_variant_describes_kept_fields() -> None:
     assert steps[0].description == "Keeps 2 fields: NAME, SITE_NAME (1 typed)"
 
 
-def test_summarize_container_describes_member_tools() -> None:
+def test_summarize_excludes_tool_containers() -> None:
+    """ToolContainers must not appear in summarize() output.
+
+    They have no data connections so they appear as spurious sources
+    (in_degree == 0) in the topological sort, which would push real
+    Input nodes away from the top of the Summary panel.
+    """
     doc = WorkflowDoc(
         filepath="workflow.yxmd",
         nodes=(
@@ -97,8 +103,6 @@ def test_summarize_container_describes_member_tools() -> None:
     )
 
     steps = summarize(doc)
-    container_step = next(step for step in steps if step.short_type == "Container")
-
-    assert container_step.description == (
-        "Validate sectors: contains 2 tools (Filter, Formula)"
-    )
+    short_types = [s.short_type for s in steps]
+    assert "Container" not in short_types
+    assert len(steps) == 2  # only Filter and Formula
