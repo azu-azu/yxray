@@ -89,12 +89,14 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
   overflow-y: auto;
+  direction: rtl;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1002;
   border-radius: 0 8px 8px 0;
 }
 #insights-panel.open { transform: translateX(0); }
+#insights-panel > * { direction: ltr; }
 #insights-panel-drag-handle {
   position: absolute; top: 0; right: 0;
   width: 6px; height: 100%;
@@ -269,11 +271,13 @@ html.light .tool-row:hover { background: #f1f5f9; }
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
   overflow-y: auto;
+  direction: rtl;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1001;
   border-radius: 0 8px 8px 0;
 }
+#summary-panel > * { direction: ltr; }
 #summary-panel.open { transform: translateX(0); }
 #summary-panel-drag-handle {
   position: absolute; top: 0; right: 0;

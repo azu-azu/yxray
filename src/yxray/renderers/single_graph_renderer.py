@@ -269,12 +269,14 @@ _HTML_TEMPLATE = """\
       border-right: 1px solid var(--border);
       box-shadow: 2px 0 12px rgba(0,0,0,0.2);
       overflow-y: auto;
+      direction: rtl;
       transform: translateX(-100%);
       transition: transform 0.2s ease;
       z-index: 1000;
       border-radius: 0 8px 8px 0;
     }
     #summary-panel.open, #insights-panel.open { transform: translateX(0); }
+    #summary-panel > *, #insights-panel > * { direction: ltr; }
     #summary-panel-drag-handle, #insights-panel-drag-handle {
       position: absolute;
       top: 0; right: 0;
