@@ -1139,7 +1139,10 @@ function renderConfigRows(entry, container) {
   });
 }
 
+var _panelNodeId = null;
+
 function openPanel(nodeId) {
+  _panelNodeId = nodeId;
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -1210,8 +1213,12 @@ function openPanel(nodeId) {
 
 function closePanel() {
   document.getElementById('config-panel').classList.remove('open');
+  _panelNodeId = null;
 }
 
+document.getElementById('panel-title-text').addEventListener('click', function() {
+  if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
+});
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
