@@ -316,7 +316,7 @@ _HTML_TEMPLATE = """\
     .ki-badge-formula  { background: #cffafe; color: #155e75; border: 1px solid #67e8f9; }
     .ki-badge-reshape  { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
     .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 11px; color: var(--text); word-break: break-all; }
+      font-size: 11px; color: var(--text); white-space: nowrap; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
     .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
     .summary-step:hover { filter: brightness(1.08); }

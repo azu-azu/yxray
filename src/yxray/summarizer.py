@@ -156,6 +156,7 @@ def summarize(
             current_node.tool_type,
             current_node.config,
             members=members_by_container.get(int(tid), []),
+            max_len=90,
         )
         change: str | None = None
         if added_ids and tid in added_ids:
@@ -420,7 +421,7 @@ def _describe_text_input(config: dict[str, Any], _members: list[Any] | None) -> 
 
 def _describe_filter(config: dict[str, Any], _members: list[Any] | None) -> str:
     expr = _first_text(config, "Expression", "CustomFilterExpression")
-    return _truncate(f"Keeps rows where {expr}", 90) if expr else "Filters rows"
+    return f"Keeps rows where {expr}" if expr else "Filters rows"
 
 
 def _formula_field_summaries(config: dict[str, Any]) -> list[str]:
@@ -454,7 +455,7 @@ def _describe_formula(config: dict[str, Any], _members: list[Any] | None) -> str
     if not formulas:
         return "Calculates fields"
     prefix = "Calculates "
-    return prefix + _truncate("; ".join(formulas), 90 - len(prefix))
+    return prefix + "; ".join(formulas)
 
 
 def _describe_join(config: dict[str, Any], _members: list[Any] | None) -> str:
@@ -506,9 +507,7 @@ def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
     if not selected:
         return "Selects or changes fields"
 
-    detail = f"Keeps {len(selected)} fields: " + _truncate(
-        ", ".join(name for name in selected if name), 70
-    )
+    detail = f"Keeps {len(selected)} fields: " + ", ".join(name for name in selected if name)
     extras: list[str] = []
     if renamed:
         extras.append(f"{len(renamed)} renamed")
@@ -529,10 +528,7 @@ def _describe_summarize(config: dict[str, Any], _members: list[Any] | None) -> s
         if isinstance(row, dict) and row.get("@action", "").lower() == "groupby"
     ]
     if groups:
-        return "Group by: " + _truncate(
-            ", ".join(group for group in groups if group),
-            50,
-        )
+        return "Group by: " + ", ".join(group for group in groups if group)
 
     actions = [
         f"{row.get('@action', '')}({row.get('@field', '')})"
@@ -540,10 +536,7 @@ def _describe_summarize(config: dict[str, Any], _members: list[Any] | None) -> s
         if isinstance(row, dict) and row.get("@action", "").lower() != "groupby"
     ]
     if actions:
-        return "Summarizes: " + _truncate(
-            ", ".join(action for action in actions if action),
-            70,
-        )
+        return "Summarizes: " + ", ".join(action for action in actions if action)
     return "Aggregates rows"
 
 
@@ -579,7 +572,7 @@ def _describe_sample(config: dict[str, Any], _members: list[Any] | None) -> str:
 
 def _describe_run_command(config: dict[str, Any], _members: list[Any] | None) -> str:
     cmd = _get_text(config, "Command") or config.get("@command", "")
-    return _truncate(str(cmd), 50) if cmd else ""
+    return str(cmd) if cmd else ""
 
 
 def _describe_container(config: dict[str, Any], members: list[Any] | None) -> str:
@@ -675,11 +668,19 @@ def _describe(
     config: dict[str, Any],
     *,
     members: list[Any] | None = None,
+    max_len: int | None = None,
 ) -> str:
-    """Return a short human-readable description of a tool's configuration."""
+    """Return a human-readable description of a tool's configuration.
+
+    Pass max_len to cap the output length (Summary panel).
+    Omit max_len (default None) for untruncated output (At a Glance panel).
+    """
     segment = tool_type.split(".")[-1]
     describer = _DESCRIBERS.get(segment)
-    return describer(config, members) if describer else ""
+    result = describer(config, members) if describer else ""
+    if max_len is not None and result:
+        result = _truncate(result, max_len)
+    return result
 
 
 def _truncate(s: str, max_len: int) -> str:
