@@ -125,7 +125,7 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 .ki-badge-input  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
 .ki-badge-output { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
 .ki-badge-join   { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
-.ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); word-break: break-all; }
+.ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 /* ---- Section headers ---- */
 .section-wrap { margin-bottom: 24px; }
