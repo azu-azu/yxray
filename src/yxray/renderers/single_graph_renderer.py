@@ -450,7 +450,6 @@ _HTML_TEMPLATE = """\
     <div id="containers-panel-drag-handle"></div>
     <div id="containers-panel-header">
       <span id="containers-panel-title">Containers ({{ containers_for_panel | length }})</span>
-      <button class="panel-close" onclick="closeContainersPanel()">&times;</button>
     </div>
     <div id="containers-panel-body">
       {% for c in containers_for_panel %}
@@ -668,9 +667,11 @@ var _containerFocusEl = null;
 function focusContainer(containerIdx, clickedEl) {
     if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
     if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
+    // Update graph highlight and redraw.
+    _focusedContainerIdx = containerIdx;
+    if (network) network.redraw();
     if (!network) return;
-    // Compute top-left of the container box in vis-network canvas coords.
-    // Mirrors the beforeDrawing calculation: minX - CONT_PAD_X, minY - CONT_PAD_Y.
+    // Compute bounding box of container members in vis-network canvas coords.
     var membership = computeContainerMembership();
     var memberIds = [];
     Object.keys(membership).forEach(function(nid) {
@@ -679,22 +680,31 @@ function focusContainer(containerIdx, clickedEl) {
             if (rep !== null && memberIds.indexOf(rep) === -1) memberIds.push(rep);
         }
     });
-    var topLeft;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     if (memberIds.length > 0) {
         var positions = network.getPositions(memberIds);
-        var minX = Infinity, minY = Infinity;
         memberIds.forEach(function(id) {
             var pos = positions[id];
-            if (pos) { minX = Math.min(minX, pos.x); minY = Math.min(minY, pos.y); }
+            if (pos) {
+                minX = Math.min(minX, pos.x); minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x); maxY = Math.max(maxY, pos.y);
+            }
         });
-        if (isFinite(minX)) topLeft = {x: minX - CONT_PAD_X, y: minY - CONT_PAD_Y};
     }
-    if (!topLeft) {
+    if (!isFinite(minX)) {
         var c = CONTAINERS_DATA[containerIdx];
-        if (c) topLeft = {x: c.x - CONT_PAD_X, y: c.y - CONT_PAD_Y};
+        if (!c) return;
+        minX = c.x; minY = c.y; maxX = c.x + (c.w || 0); maxY = c.y + (c.h || 0);
     }
-    if (!topLeft) return;
-    network.moveTo({position: topLeft, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+    // Add container padding to match the drawn box.
+    minX -= CONT_PAD_X; minY -= CONT_PAD_Y;
+    maxX += CONT_PAD_X; maxY += CONT_PAD_Y;
+    var boxW = maxX - minX;
+    var boxH = maxY - minY;
+    var canvas = network.canvas.frame.canvas;
+    var scale = Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.85;
+    var center = {x: (minX + maxX) / 2, y: (minY + maxY) / 2};
+    network.moveTo({position: center, scale: scale, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
 }
 
 // ── At a Glance panel drag-resize ────────────────────────────────────────

@@ -22,6 +22,7 @@ var CONT_PAD_Y          = 36; // vertical padding around container boundary box
 var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
+var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
 // Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
 function contrastColor(hex) {
   if (!hex || hex.length < 7) return '#ffffff';
@@ -832,16 +833,17 @@ function initNetwork() {
       ctx.lineTo(x,     y + r);
       ctx.arcTo(x,     y,     x + r, y,          r);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(244,114,182,0.06)';
+      var focused = (idx === _focusedContainerIdx);
+      ctx.fillStyle   = focused ? 'rgba(245,158,11,0.12)' : 'rgba(244,114,182,0.06)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(244,114,182,0.65)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = focused ? '#f59e0b'               : 'rgba(244,114,182,0.65)';
+      ctx.lineWidth   = focused ? 2.5                     : 1.5;
       ctx.setLineDash([8, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
       if (c.label) {
         ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
-        ctx.fillStyle = 'rgba(249,168,212,0.95)';
+        ctx.fillStyle = focused ? '#f59e0b' : 'rgba(249,168,212,0.95)';
         ctx.fillText(c.label, x + 10, y - 6);
       }
     });
