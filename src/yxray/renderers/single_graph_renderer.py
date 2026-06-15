@@ -115,6 +115,7 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
+    .ctrl-btn-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
     .search-wrap { position: relative; display: flex; align-items: center; }
     .search-input {
       width: 200px; padding: 5px 28px 5px 10px;
@@ -511,11 +512,21 @@ function focusNode(toolId, clickedEl) {
 }
 
 var _insightsPanelActiveRole = null;
+
+function _syncPanelBtnState() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var ib = document.getElementById('insights-btn');
+    var sb = document.getElementById('summary-btn');
+    if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
+    if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
+}
+
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
     if (!ip) return;
-    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); return; }
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); _syncPanelBtnState(); return; }
     if (sp) sp.classList.remove('open');
     _insightsPanelActiveRole = null;
     // Reset filter — show all rows
@@ -525,6 +536,7 @@ function openInsightsPanel() {
     var summary = ip.querySelector('.ki-summary');
     if (summary) summary.style.display = '';
     ip.classList.add('open');
+    _syncPanelBtnState();
 }
 function openInsightsPanelFiltered(role) {
     var ip = document.getElementById('insights-panel');
@@ -533,6 +545,7 @@ function openInsightsPanelFiltered(role) {
     if (ip.classList.contains('open') && _insightsPanelActiveRole === role) {
         ip.classList.remove('open');
         _insightsPanelActiveRole = null;
+        _syncPanelBtnState();
         return;
     }
     if (sp) sp.classList.remove('open');
@@ -546,22 +559,26 @@ function openInsightsPanelFiltered(role) {
     var summary = ip.querySelector('.ki-summary');
     if (summary) summary.style.display = 'none';
     ip.classList.add('open');
+    _syncPanelBtnState();
 }
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    _syncPanelBtnState();
 }
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
     if (!sp) return;
-    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); _syncPanelBtnState(); return; }
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
     sp.classList.add('open');
+    _syncPanelBtnState();
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _syncPanelBtnState();
 }
 
 // ── At a Glance panel drag-resize ────────────────────────────────────────
