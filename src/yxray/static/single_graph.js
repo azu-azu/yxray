@@ -1118,6 +1118,8 @@ function _refreshClusterPanel(groupKey) {
     expandBtn.textContent = 'Expand';
     expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(expandBtn);
+    // Select the cluster node so vis-network applies the amber highlight color
+    if (network) network.selectNodes([groupKey]);
     c.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
       if (!entry) return;
@@ -1138,6 +1140,7 @@ function _refreshClusterPanel(groupKey) {
     collapseBtn.textContent = 'Collapse';
     collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(collapseBtn);
+    if (network) network.selectNodes([]);
     group.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
       if (!entry) return;
