@@ -300,6 +300,42 @@ _HTML_TEMPLATE = """\
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #insights-panel-body > * { direction: ltr; }
+    /* ---- Containers panel ---- */
+    #containers-panel {
+      position: fixed; top: 0; left: 0;
+      width: 360px; height: 100%;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 1000;
+      border-radius: 0 8px 8px 0;
+    }
+    #containers-panel.open { transform: translateX(0); }
+    #containers-panel-drag-handle {
+      position: absolute; top: 0; right: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize; z-index: 10; user-select: none;
+    }
+    #containers-panel-drag-handle:hover, #containers-panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
+    #containers-panel-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #containers-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #containers-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #containers-panel-body > * { direction: ltr; }
+    .container-row { display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 4px; padding: 5px 8px; }
+    .container-row:hover { background: rgba(148,163,184,0.12); }
+    .container-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+    .container-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.25); }
+    .container-label { font-size: 12px; color: var(--text); }
     .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
       border-bottom: 1px solid var(--border); margin-bottom: 4px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
@@ -364,6 +400,7 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
+      {% if containers_for_panel %}<button class="ctrl-btn" id="containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
       {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
       {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
@@ -404,6 +441,23 @@ _HTML_TEMPLATE = """\
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
       {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% if containers_for_panel %}
+  <div id="containers-panel">
+    <div id="containers-panel-drag-handle"></div>
+    <div id="containers-panel-header">
+      <span id="containers-panel-title">Containers ({{ containers_for_panel | length }})</span>
+      <button class="panel-close" onclick="closeContainersPanel()">&times;</button>
+    </div>
+    <div id="containers-panel-body">
+      {% for c in containers_for_panel %}
+      <div class="container-row" onclick="focusContainer({{ loop.index0 }}, this)">
+        {% if c.fill_color %}<span class="container-swatch" style="background:{{ c.fill_color }};"></span>{% endif %}
+        <span class="container-label">{{ c.label }}</span>
+      </div>
       {% endfor %}
     </div>
   </div>
@@ -521,18 +575,23 @@ var _insightsPanelActiveRole = null;
 function _syncPanelBtnState() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
     var ib = document.getElementById('insights-btn');
     var sb = document.getElementById('summary-btn');
+    var cb = document.getElementById('containers-btn');
     if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
     if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
+    if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
 }
 
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
     if (!ip) return;
     if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); _syncPanelBtnState(); return; }
     if (sp) sp.classList.remove('open');
+    if (cp) cp.classList.remove('open');
     _insightsPanelActiveRole = null;
     // Reset filter — show all rows
     var titleEl = document.getElementById('insights-panel-title');
@@ -546,6 +605,7 @@ function openInsightsPanel() {
 function openInsightsPanelFiltered(role) {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
     if (!ip) return;
     if (ip.classList.contains('open') && _insightsPanelActiveRole === role) {
         ip.classList.remove('open');
@@ -554,6 +614,7 @@ function openInsightsPanelFiltered(role) {
         return;
     }
     if (sp) sp.classList.remove('open');
+    if (cp) cp.classList.remove('open');
     _insightsPanelActiveRole = role;
     // Filter rows to matching role
     var titleEl = document.getElementById('insights-panel-title');
@@ -574,9 +635,11 @@ function closeInsightsPanel() {
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
+    var cp = document.getElementById('containers-panel');
     if (!sp) return;
     if (sp.classList.contains('open')) { sp.classList.remove('open'); _syncPanelBtnState(); return; }
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    if (cp) cp.classList.remove('open');
     sp.classList.add('open');
     _syncPanelBtnState();
 }
@@ -584,6 +647,54 @@ function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
     _syncPanelBtnState();
+}
+function openContainersPanel() {
+    var cp = document.getElementById('containers-panel');
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    if (!cp) return;
+    if (cp.classList.contains('open')) { cp.classList.remove('open'); _syncPanelBtnState(); return; }
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    if (sp) sp.classList.remove('open');
+    cp.classList.add('open');
+    _syncPanelBtnState();
+}
+function closeContainersPanel() {
+    var cp = document.getElementById('containers-panel');
+    if (cp) cp.classList.remove('open');
+    _syncPanelBtnState();
+}
+var _containerFocusEl = null;
+function focusContainer(containerIdx, clickedEl) {
+    if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
+    if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
+    if (!network) return;
+    // Compute top-left of the container box in vis-network canvas coords.
+    // Mirrors the beforeDrawing calculation: minX - CONT_PAD_X, minY - CONT_PAD_Y.
+    var membership = computeContainerMembership();
+    var memberIds = [];
+    Object.keys(membership).forEach(function(nid) {
+        if (membership[parseInt(nid)] === containerIdx) {
+            var rep = resolveNode(parseInt(nid));
+            if (rep !== null && memberIds.indexOf(rep) === -1) memberIds.push(rep);
+        }
+    });
+    var topLeft;
+    if (memberIds.length > 0) {
+        var positions = network.getPositions(memberIds);
+        var minX = Infinity, minY = Infinity;
+        memberIds.forEach(function(id) {
+            var pos = positions[id];
+            if (pos) { minX = Math.min(minX, pos.x); minY = Math.min(minY, pos.y); }
+        });
+        if (isFinite(minX)) topLeft = {x: minX - CONT_PAD_X, y: minY - CONT_PAD_Y};
+    }
+    if (!topLeft) {
+        var c = CONTAINERS_DATA[containerIdx];
+        if (c) topLeft = {x: c.x - CONT_PAD_X, y: c.y - CONT_PAD_Y};
+    }
+    if (!topLeft) return;
+    network.moveTo({position: topLeft, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
 }
 
 // ── At a Glance panel drag-resize ────────────────────────────────────────
@@ -644,6 +755,33 @@ function closeSummaryPanel() {
 (function() {
   var panel = document.getElementById('summary-panel');
   var handle = document.getElementById('summary-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+// ── Containers panel drag-resize ──────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('containers-panel');
+  var handle = document.getElementById('containers-panel-drag-handle');
   if (!handle || !panel) return;
   var startX, startW;
   handle.addEventListener('mousedown', function(e) {
@@ -731,6 +869,11 @@ class SingleGraphRenderer:
         data_node_count = sum(
             1 for n in doc.nodes if "ToolContainer" not in n.tool_type
         )
+        containers_for_panel = [
+            {"label": c["label"], "fill_color": c.get("fillColor")}
+            for c in containers_list
+        ] or None
+
         return template.render(
             title=title,
             node_count=data_node_count,
@@ -741,6 +884,7 @@ class SingleGraphRenderer:
             step_detail_js=STEP_DETAIL_JS,
             workflow_steps=steps_dicts,
             key_insights=insights_dicts,
+            containers_for_panel=containers_for_panel,
         )
 
     def _build_graph_data(
