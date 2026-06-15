@@ -88,15 +88,14 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-  overflow-y: auto;
-  direction: rtl;
+  display: flex; flex-direction: column;
+  overflow: hidden;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1002;
   border-radius: 0 8px 8px 0;
 }
 #insights-panel.open { transform: translateX(0); }
-#insights-panel > * { direction: ltr; }
 #insights-panel-drag-handle {
   position: absolute; top: 0; right: 0;
   width: 6px; height: 100%;
@@ -109,10 +108,11 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  flex-shrink: 0;
 }
 #insights-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-#insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+#insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+#insights-panel-body > * { direction: ltr; }
 #insights-panel .panel-close {
   cursor: pointer; color: var(--text-muted);
   font-size: 18px; line-height: 1; background: none; border: none;
@@ -270,14 +270,13 @@ html.light .tool-row:hover { background: #f1f5f9; }
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-  overflow-y: auto;
-  direction: rtl;
+  display: flex; flex-direction: column;
+  overflow: hidden;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1001;
   border-radius: 0 8px 8px 0;
 }
-#summary-panel > * { direction: ltr; }
 #summary-panel.open { transform: translateX(0); }
 #summary-panel-drag-handle {
   position: absolute; top: 0; right: 0;
@@ -291,10 +290,11 @@ html.light .tool-row:hover { background: #f1f5f9; }
   padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  flex-shrink: 0;
 }
 #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-#summary-panel-body { padding: 10px 12px; }
+#summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+#summary-panel-body > * { direction: ltr; }
 #summary-panel-body .change-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
 #summary-panel .panel-close {
   float: none; cursor: pointer; color: var(--text-muted);

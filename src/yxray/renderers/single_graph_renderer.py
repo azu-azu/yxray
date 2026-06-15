@@ -147,13 +147,15 @@ _HTML_TEMPLATE = """\
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -2px 0 12px rgba(0,0,0,0.2);
-      overflow-y: auto;
+      display: flex; flex-direction: column;
+      overflow: hidden;
       transform: translateX(100%);
       transition: transform 0.2s ease;
       z-index: 1000;
-      padding: 20px;
       border-radius: 8px 0 0 8px;
     }
+    #config-panel .panel-title { padding: 20px 20px 10px; margin-bottom: 0; flex-shrink: 0; }
+    #panel-body { flex: 1; overflow-y: auto; padding: 14px 20px 20px; min-height: 0; }
     #config-panel.open { transform: translateX(0); }
     #panel-drag-handle {
       position: absolute;
@@ -268,15 +270,14 @@ _HTML_TEMPLATE = """\
       background: var(--surface);
       border-right: 1px solid var(--border);
       box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-      overflow-y: auto;
-      direction: rtl;
+      display: flex; flex-direction: column;
+      overflow: hidden;
       transform: translateX(-100%);
       transition: transform 0.2s ease;
       z-index: 1000;
       border-radius: 0 8px 8px 0;
     }
     #summary-panel.open, #insights-panel.open { transform: translateX(0); }
-    #summary-panel > *, #insights-panel > * { direction: ltr; }
     #summary-panel-drag-handle, #insights-panel-drag-handle {
       position: absolute;
       top: 0; right: 0;
@@ -295,8 +296,10 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-    #summary-panel-body { padding: 10px 12px; }
-    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #summary-panel-body > * { direction: ltr; }
+    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #insights-panel-body > * { direction: ltr; }
     .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
       border-bottom: 1px solid var(--border); margin-bottom: 4px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
