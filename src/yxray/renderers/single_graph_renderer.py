@@ -334,7 +334,8 @@ _HTML_TEMPLATE = """\
     .container-row { display: flex; align-items: center; gap: 8px; cursor: grab; border-radius: 4px; padding: 5px 8px; }
     .container-row:hover { background: rgba(148,163,184,0.12); }
     .container-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
-    .container-row.drag-over { border-top: 2px solid #f59e0b; }
+    .container-row.drag-over-top { border-top: 2px solid #f59e0b; }
+    .container-row.drag-over-bottom { border-bottom: 2px solid #f59e0b; }
     .container-row.dragging { opacity: 0.4; }
     .container-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.25); }
     .container-label { font-size: 12px; color: var(--text); }
@@ -671,8 +672,8 @@ function focusContainer(containerIdx, clickedEl) {
     if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
     // Update graph highlight and redraw.
     _focusedContainerIdx = containerIdx;
-    if (network) network.redraw();
     if (!network) return;
+    network.redraw();
     // Compute bounding box of container members in vis-network canvas coords.
     var membership = computeContainerMembership();
     var memberIds = [];
