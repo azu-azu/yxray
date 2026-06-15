@@ -115,6 +115,7 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
+    .ctrl-btn-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
     .search-wrap { position: relative; display: flex; align-items: center; }
     .search-input {
       width: 200px; padding: 5px 28px 5px 10px;
@@ -146,13 +147,15 @@ _HTML_TEMPLATE = """\
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -2px 0 12px rgba(0,0,0,0.2);
-      overflow-y: auto;
+      display: flex; flex-direction: column;
+      overflow: hidden;
       transform: translateX(100%);
       transition: transform 0.2s ease;
       z-index: 1000;
-      padding: 20px;
       border-radius: 8px 0 0 8px;
     }
+    #config-panel .panel-title { padding: 20px 20px 10px; margin-bottom: 0; flex-shrink: 0; }
+    #panel-body { flex: 1; overflow-y: auto; padding: 14px 20px 20px; min-height: 0; }
     #config-panel.open { transform: translateX(0); }
     #panel-drag-handle {
       position: absolute;
@@ -185,6 +188,8 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
+    #panel-title-text { cursor: pointer; }
+    #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
     .config-row { margin: 8px 0; }
     .config-key {
       font-size: 11px; font-weight: 600;
@@ -265,7 +270,8 @@ _HTML_TEMPLATE = """\
       background: var(--surface);
       border-right: 1px solid var(--border);
       box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-      overflow-y: auto;
+      display: flex; flex-direction: column;
+      overflow: hidden;
       transform: translateX(-100%);
       transition: transform 0.2s ease;
       z-index: 1000;
@@ -290,8 +296,10 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-    #summary-panel-body { padding: 10px 12px; }
-    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #summary-panel-body > * { direction: ltr; }
+    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #insights-panel-body > * { direction: ltr; }
     .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
       border-bottom: 1px solid var(--border); margin-bottom: 4px; }
     .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
@@ -311,7 +319,7 @@ _HTML_TEMPLATE = """\
     .ki-badge-formula  { background: #cffafe; color: #155e75; border: 1px solid #67e8f9; }
     .ki-badge-reshape  { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
     .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 11px; color: var(--text); word-break: break-all; }
+      font-size: 11px; color: var(--text); white-space: nowrap; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
     .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
     .summary-step:hover { filter: brightness(1.08); }
@@ -509,11 +517,21 @@ function focusNode(toolId, clickedEl) {
 }
 
 var _insightsPanelActiveRole = null;
+
+function _syncPanelBtnState() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var ib = document.getElementById('insights-btn');
+    var sb = document.getElementById('summary-btn');
+    if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
+    if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
+}
+
 function openInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
     if (!ip) return;
-    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); return; }
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); _syncPanelBtnState(); return; }
     if (sp) sp.classList.remove('open');
     _insightsPanelActiveRole = null;
     // Reset filter — show all rows
@@ -523,6 +541,7 @@ function openInsightsPanel() {
     var summary = ip.querySelector('.ki-summary');
     if (summary) summary.style.display = '';
     ip.classList.add('open');
+    _syncPanelBtnState();
 }
 function openInsightsPanelFiltered(role) {
     var ip = document.getElementById('insights-panel');
@@ -531,6 +550,7 @@ function openInsightsPanelFiltered(role) {
     if (ip.classList.contains('open') && _insightsPanelActiveRole === role) {
         ip.classList.remove('open');
         _insightsPanelActiveRole = null;
+        _syncPanelBtnState();
         return;
     }
     if (sp) sp.classList.remove('open');
@@ -544,23 +564,54 @@ function openInsightsPanelFiltered(role) {
     var summary = ip.querySelector('.ki-summary');
     if (summary) summary.style.display = 'none';
     ip.classList.add('open');
+    _syncPanelBtnState();
 }
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    _syncPanelBtnState();
 }
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
     if (!sp) return;
-    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); _syncPanelBtnState(); return; }
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
     sp.classList.add('open');
+    _syncPanelBtnState();
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _syncPanelBtnState();
 }
+
+// ── At a Glance panel drag-resize ────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('config-panel');
+  var handle = document.getElementById('panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW - dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Insights panel drag-resize ────────────────────────────────────────────
 (function() {

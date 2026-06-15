@@ -88,7 +88,8 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-  overflow-y: auto;
+  display: flex; flex-direction: column;
+  overflow: hidden;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1002;
@@ -107,10 +108,11 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  flex-shrink: 0;
 }
 #insights-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-#insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+#insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+#insights-panel-body > * { direction: ltr; }
 #insights-panel .panel-close {
   cursor: pointer; color: var(--text-muted);
   font-size: 18px; line-height: 1; background: none; border: none;
@@ -123,7 +125,7 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 .ki-badge-input  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
 .ki-badge-output { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
 .ki-badge-join   { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
-.ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); word-break: break-all; }
+.ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 /* ---- Section headers ---- */
 .section-wrap { margin-bottom: 24px; }
@@ -268,7 +270,8 @@ html.light .tool-row:hover { background: #f1f5f9; }
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 12px rgba(0,0,0,0.2);
-  overflow-y: auto;
+  display: flex; flex-direction: column;
+  overflow: hidden;
   transform: translateX(-100%);
   transition: transform 0.2s ease;
   z-index: 1001;
@@ -287,10 +290,11 @@ html.light .tool-row:hover { background: #f1f5f9; }
   padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  flex-shrink: 0;
 }
 #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-#summary-panel-body { padding: 10px 12px; }
+#summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+#summary-panel-body > * { direction: ltr; }
 #summary-panel-body .change-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
 #summary-panel .panel-close {
   float: none; cursor: pointer; color: var(--text-muted);

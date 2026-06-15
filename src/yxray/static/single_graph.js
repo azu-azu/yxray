@@ -38,7 +38,7 @@ function contrastColor(hex) {
 var CLUSTER_STYLE = {
   type: {
     normal: {background:'#4c1d95', border:'#7c3aed',
-             highlight:{background:'#5b21b6', border:'#7c3aed'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#5b21b6', border:'#7c3aed'}},
     dim:    {background:'#2e1065', border:'#4c1d95'},
     matchBg: '#5b21b6',
@@ -46,7 +46,7 @@ var CLUSTER_STYLE = {
   },
   container: {
     normal: {background:'#7f1d1d', border:'#ef4444',
-             highlight:{background:'#991b1b', border:'#ef4444'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#991b1b', border:'#ef4444'}},
     dim:    {background:'#450a0a', border:'#7f1d1d'},
     matchBg: '#991b1b',
@@ -209,13 +209,13 @@ function buildClusters(skipSet) {
     nodesDataset.add({
       id: c.cid,
       label: c.toolType + ' ×' + c.chain.length,
-      title: c.toolType + ' cluster — Double-click to expand',
+      title: c.toolType + ' cluster — Click to expand/collapse',
       shape: 'box',
       borderDashes: [5, 3],
       x: cPos.x, y: cPos.y,
       color: {
         background: '#4c1d95', border: '#7c3aed',
-        highlight: {background: '#5b21b6', border: '#7c3aed'},
+        highlight: {background: '#92400e', border: '#f59e0b'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
       font: {color: contrastColor('#4c1d95'), size: 13}
@@ -327,7 +327,7 @@ function _containerNodeStyle(fillHex) {
   return {
     color: {
       background: fillHex,  border: dark,
-      highlight: {background: _darkenHex(fillHex, 8), border: dark},
+      highlight: {background: '#92400e', border: '#f59e0b'},
       hover:     {background: _darkenHex(fillHex, 8), border: dark}
     },
     fontColor: contrastColor(fillHex)
@@ -383,7 +383,7 @@ function buildContainerClusters(membership) {
     var ns = _containerNodeStyle(c.fillColor);
     nodesDataset.add({
       id: c.cid, label: c.label,
-      title: c.caption + ' — Double-click to expand',
+      title: c.caption + ' — Click to expand/collapse',
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
       color: ns.color,
@@ -462,8 +462,8 @@ function recollapseGroup(groupKey) {
   // Re-add cluster node with appropriate colors
   var isContainer = group.isContainer || false;
   var clusterTitle = isContainer
-    ? group.toolType + ' \u2014 Double-click to expand'
-    : group.toolType + ' cluster \u2014 Double-click to expand';
+    ? group.toolType + ' \u2014 Click to expand/collapse'
+    : group.toolType + ' cluster \u2014 Click to expand/collapse';
   var cPos = centroid(group.memberIds);
   var ns = isContainer
     ? _containerNodeStyle(group.fillColorHex || null)
@@ -550,7 +550,7 @@ function expandCluster(cid) {
       id: orig.id, label: orig.label, title: orig.title, shape: 'box',
       x: orig.x, y: orig.y,
       color: {background: col.bg, border: col.bd,
-              highlight: {background: col.sel, border: col.bd},
+              highlight: {background: '#92400e', border: '#f59e0b'},
               hover: {background: col.hover, border: col.bd}},
       font: {color: contrastColor(col.bg)}
     });
@@ -748,8 +748,6 @@ function exitConnectMode() {
 }
 
 // ── Network init ──────────────────────────────────────────────────────────
-var _clusterClickTimer = null;
-
 function initNetwork() {
   if (network) return;
   var canvas = document.getElementById('graph-canvas');
@@ -867,22 +865,9 @@ function initNetwork() {
       return;
     }
     if (params.nodes.length === 0) { closePanel(); return; }
-    var nodeId = params.nodes[0];
-    // Delay panel open for any node that is double-clickable (cluster or
-    // expanded member) so the overlay does not block the second tap.
-    if (AppState.clusterMap[nodeId] || AppState.expandedGroups[nodeId]) {
-      clearTimeout(_clusterClickTimer);
-      _clusterClickTimer = setTimeout(function() {
-        _clusterClickTimer = null;
-        openPanel(nodeId);
-      }, 280);
-    } else {
-      openPanel(nodeId);
-    }
+    openPanel(params.nodes[0]);
   });
   network.on('doubleClick', function(params) {
-    clearTimeout(_clusterClickTimer);
-    _clusterClickTimer = null;
     // Empty canvas double-click → create memo at that canvas position
     if (params.nodes.length === 0) {
       var cp = params.pointer.canvas;
@@ -893,12 +878,13 @@ function initNetwork() {
     // Memo node double-click → edit
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
-      return;
     }
+    // Cluster expand/collapse via double-click (shortcut — panel stays open)
     if (AppState.clusterMap[nodeId]) {
-      expandCluster(nodeId);
+      expandCluster(nodeId); _refreshClusterPanel(nodeId);
     } else if (AppState.expandedGroups[nodeId]) {
-      recollapseGroup(AppState.expandedGroups[nodeId]);
+      var _gk = AppState.expandedGroups[nodeId];
+      recollapseGroup(_gk); _refreshClusterPanel(_gk);
     }
   });
   // Persist memo positions after drag
@@ -1114,6 +1100,60 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
+// Shared render helper: builds Expand/Collapse button + member list for a cluster.
+// Called from openPanel() and from within the buttons themselves so the panel
+// stays open and its content flips between "Expand" and "Collapse" states.
+function _refreshClusterPanel(groupKey) {
+  _panelNodeId = groupKey;
+  var body = document.getElementById('panel-body');
+  body.innerHTML = '';
+  if (AppState.clusterMap[groupKey]) {
+    // Collapsed state → show Expand button
+    var c = AppState.clusterMap[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'ctrl-btn';
+    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
+    expandBtn.textContent = 'Expand';
+    expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(expandBtn);
+    // Select the cluster node so vis-network applies the amber highlight color
+    if (network) network.selectNodes([groupKey]);
+    c.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  } else if (AppState.groupMembers[groupKey]) {
+    // Expanded state → show Collapse button
+    var group = AppState.groupMembers[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      group.toolType + ' \xd7' + group.memberIds.length + ' nodes';
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse';
+    collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(collapseBtn);
+    if (network) network.selectNodes([]);
+    group.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  }
+  document.getElementById('config-panel').classList.add('open');
+}
+
 function renderConfigRows(entry, container) {
   var keys = Object.keys(entry.config);
   if (keys.length === 0) {
@@ -1139,7 +1179,10 @@ function renderConfigRows(entry, container) {
   });
 }
 
+var _panelNodeId = null;
+
 function openPanel(nodeId) {
+  _panelNodeId = nodeId;
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -1179,24 +1222,26 @@ function openPanel(nodeId) {
     return;
   }
 
-  // Cluster node — show member list
+  // Cluster node (collapsed) — delegate to shared refresh helper
   if (AppState.clusterMap[nodeId]) {
-    var c = AppState.clusterMap[nodeId];
+    _refreshClusterPanel(nodeId);
+    return;
+  }
+
+  // Expanded cluster member — show config + collapse button
+  var _groupKey = AppState.expandedGroups[nodeId];
+  if (_groupKey) {
+    var _group = AppState.groupMembers[_groupKey];
+    var _entry = CONFIG_MAP[String(nodeId)];
     document.getElementById('panel-title-text').textContent =
-      c.toolType + ' ×' + c.memberIds.length + ' nodes';
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
-    hint.textContent = 'Double-click the node to expand.';
-    body.appendChild(hint);
-    c.memberIds.forEach(function(mid) {
-      var entry = CONFIG_MAP[String(mid)];
-      if (!entry) return;
-      var hdr = document.createElement('div');
-      hdr.className = 'cluster-member-header';
-      hdr.textContent = entry.label;
-      body.appendChild(hdr);
-      renderConfigRows(entry, body);
-    });
+      _entry ? _entry.label : 'Node ' + nodeId;
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
+    collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
+    body.appendChild(collapseBtn);
+    if (_entry) renderConfigRows(_entry, body);
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -1210,8 +1255,12 @@ function openPanel(nodeId) {
 
 function closePanel() {
   document.getElementById('config-panel').classList.remove('open');
+  _panelNodeId = null;
 }
 
+document.getElementById('panel-title-text').addEventListener('click', function() {
+  if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
+});
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
@@ -1279,7 +1328,6 @@ function nodeColors() {
     bg:    s.getPropertyValue('--node-bg').trim(),
     bd:    s.getPropertyValue('--node-border').trim(),
     hover: s.getPropertyValue('--node-hover').trim(),
-    sel:   s.getPropertyValue('--node-select').trim(),
   };
 }
 
@@ -1300,7 +1348,7 @@ function baseNodeColorUpdate(n, col) {
   }
   return {id: n.id, color: {
     background: col.bg, border: col.bd,
-    highlight: {background: col.sel, border: col.bd},
+    highlight: {background: '#92400e', border: '#f59e0b'},
     hover: {background: col.hover, border: col.bd}
   }, font: {color: contrastColor(col.bg)}};
 }
@@ -1425,7 +1473,7 @@ function doSearch(query, skipFocus) {
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: '#f59e0b',
-          highlight: {background: col.sel, border: '#f59e0b'},
+          highlight: {background: '#92400e', border: '#f59e0b'},
           hover: {background: col.hover, border: '#f59e0b'}
         }, font: {color: contrastColor(col.bg)}});
       }
@@ -1506,7 +1554,6 @@ function applyTheme(theme) {
   var nodeBg    = s.getPropertyValue('--node-bg').trim();
   var nodeBd    = s.getPropertyValue('--node-border').trim();
   var nodeHover = s.getPropertyValue('--node-hover').trim();
-  var nodeSel   = s.getPropertyValue('--node-select').trim();
   // Iterate only nodes/edges currently in the DataSet.
   // Using NODES_DATA.map() here would re-create clustered-away nodes because
   // DataSet.update() inserts missing IDs as new (label-less) items.
@@ -1515,7 +1562,7 @@ function applyTheme(theme) {
     if (AppState.clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
-      highlight: {background: nodeSel, border: nodeBd},
+      highlight: {background: '#92400e', border: '#f59e0b'},
       hover: {background: nodeHover, border: nodeBd}}, font: {color: contrastColor(nodeBg)}});
   });
   nodesDataset.update(nodeUpdates);
