@@ -983,8 +983,9 @@ function initNetwork() {
     var dy = e.movementY / scale;
     var cur = _containerDragState.curPositions;
     nodesDataset.update(_containerDragState.reps.map(function(id) {
-      cur[id] = {x: cur[id].x + dx, y: cur[id].y + dy};
-      return {id: id, x: cur[id].x, y: cur[id].y};
+      var key = String(id);
+      cur[key] = {x: cur[key].x + dx, y: cur[key].y + dy};
+      return {id: id, x: cur[key].x, y: cur[key].y}; // original typed id
     }));
   }
 
@@ -995,26 +996,39 @@ function initNetwork() {
     _cvs.style.cursor = '';
   }
 
-  _cvs.addEventListener('mousedown', function(e) {
+  // Attach to the frame div (parent of canvas) so stopPropagation fires
+  // BEFORE vis-network's canvas-level handlers in the capture phase.
+  var _frame = network.canvas.frame;
+  var _canvasRect = null;
+  _frame.addEventListener('mousedown', function(e) {
     if (e.button !== 0 || _containerDragState) return;
-    var cp = network.DOMtoCanvas({x: e.offsetX, y: e.offsetY});
+    _canvasRect = _cvs.getBoundingClientRect();
+    var domX = e.clientX - _canvasRect.left;
+    var domY = e.clientY - _canvasRect.top;
+    var cp = network.DOMtoCanvas({x: domX, y: domY});
     var cidx = _findLabelAt(cp);
     if (cidx < 0) return;
-    e.stopPropagation();
+    e.stopPropagation(); // prevents canvas from receiving event
     e.preventDefault();
     var membership = computeContainerMembership();
-    var repsSet = {};
+    // Collect reps preserving original ID types (numeric for regular nodes).
+    var repsArr = [], repsKeySet = {};
     Object.keys(membership).forEach(function(k) {
       if (membership[parseInt(k)] === cidx) {
         var rep = resolveNode(parseInt(k));
-        if (rep !== null) repsSet[String(rep)] = true;
+        if (rep !== null) {
+          var key = String(rep);
+          if (!repsKeySet[key]) { repsKeySet[key] = true; repsArr.push(rep); }
+        }
       }
     });
-    var reps = Object.keys(repsSet);
-    var positions = network.getPositions(reps);
+    var positions = network.getPositions(repsArr);
     var curPositions = {};
-    reps.forEach(function(id) { curPositions[id] = {x: positions[id].x, y: positions[id].y}; });
-    _containerDragState = {cidx: cidx, reps: reps, curPositions: curPositions};
+    repsArr.forEach(function(id) {
+      var p = positions[id];
+      curPositions[String(id)] = p ? {x: p.x, y: p.y} : {x: 0, y: 0};
+    });
+    _containerDragState = {cidx: cidx, reps: repsArr, curPositions: curPositions};
     _cvs.style.cursor = 'grabbing';
     document.addEventListener('mousemove', _onContainerDragMove);
     document.addEventListener('mouseup', _onContainerDragEnd);
