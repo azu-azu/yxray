@@ -1499,6 +1499,25 @@ function firstClusterMemberMatch(clusterId, testStr, nodeDataLookup, visited) {
   return null;
 }
 
+function allClusterMemberMatches(clusterId, testStr, nodeDataLookup, visited, results) {
+  var cm = AppState.clusterMap[clusterId];
+  if (!cm) return results;
+  visited = visited || {};
+  results = results || [];
+  if (visited[clusterId]) return results;
+  visited[clusterId] = true;
+  var memberIds = cm.memberIds || [];
+  for (var mi = 0; mi < memberIds.length; mi++) {
+    var mid = memberIds[mi];
+    if (AppState.clusterMap[mid]) {
+      allClusterMemberMatches(mid, testStr, nodeDataLookup, visited, results);
+    } else if (nodeMatchesSearch(mid, testStr, nodeDataLookup)) {
+      results.push(mid);
+    }
+  }
+  return results;
+}
+
 function makeSearchTester(query) {
   var re;
   try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
@@ -1621,7 +1640,16 @@ function doSearch(query, skipFocus) {
           highlight: {background: matchBg, border: '#f59e0b'},
           hover:     {background: matchBg, border: '#f59e0b'}
         }, font: {color: contrastColor(matchBg)}});
-        matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), label: n.label || cm.toolType || ''});
+        var memberMatches = allClusterMemberMatches(n.id, testStr, nodeDataLookup, {}, []);
+        if (memberMatches.length > 0) {
+          memberMatches.forEach(function(mid) {
+            var mnd = nodeDataLookup[mid];
+            var mst = mnd ? (mnd.title || '').split('.').pop() : '';
+            matchedEntries.push({id: mid, shortType: mst, role: _toolTypeToBadgeRole(mst), label: mnd ? (mnd.label || '') : ''});
+          });
+        } else {
+          matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), label: n.label || cm.toolType || ''});
+        }
       } else {
         updates.push({id: n.id, color: {
           background: '#92400e', border: '#f59e0b',
