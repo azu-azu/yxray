@@ -377,6 +377,7 @@ _HTML_TEMPLATE = """\
     .step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
     .step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
     .step-expand-arrow { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; transition: transform 0.15s ease; }
+    .search-mark { background: rgba(245,158,11,0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
     .step-expand-arrow.open { transform: rotate(90deg); }
     .step-detail { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
     .step-detail-inner { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
