@@ -586,6 +586,7 @@ function focusNode(toolId, clickedEl) {
 
 var _insightsPanelActiveRole = null;
 var _searchPrevPanel = null;
+var _searchResultsFocusEl = null;
 
 function _syncPanelBtnState() {
     var ip = document.getElementById('insights-panel');
@@ -621,7 +622,17 @@ function openSearchResultsPanel(entries) {
     entries.forEach(function(entry) {
         var row = document.createElement('div');
         row.className = 'ki-row';
-        row.onclick = (function(id) { return function() { focusSearchMatch(id, 400); }; })(entry.id);
+        row.onclick = (function(id, rowEl) {
+            return function() {
+                if (_searchResultsFocusEl) _searchResultsFocusEl.classList.remove('focused');
+                rowEl.classList.add('focused');
+                _searchResultsFocusEl = rowEl;
+                if (typeof network !== 'undefined' && network) {
+                    network.selectNodes([id]);
+                    network.focus(id, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                }
+            };
+        })(entry.id, row);
         var badge = document.createElement('span');
         badge.className = 'ki-badge ki-badge-' + entry.role;
         badge.textContent = entry.shortType;
@@ -639,6 +650,7 @@ function openSearchResultsPanel(entries) {
 function closeSearchResultsPanel() {
     var srp = document.getElementById('search-results-panel');
     if (srp) srp.classList.remove('open');
+    _searchResultsFocusEl = null;
     if (_searchPrevPanel === 'insights') {
         var ip = document.getElementById('insights-panel');
         if (ip) ip.classList.add('open');
