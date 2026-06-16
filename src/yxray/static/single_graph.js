@@ -531,7 +531,7 @@ function recollapseGroup(groupKey) {
   // Re-apply search so the newly restored cluster node is highlighted/dimmed correctly.
   if (searchActive) {
     var q = document.getElementById('search-input').value;
-    if (q) doSearch(q);
+    if (q) doSearch(q, true, true);
   }
 }
 
@@ -615,7 +615,7 @@ function expandCluster(cid) {
   if (searchActive) {
     var q = document.getElementById('search-input').value;
     if (q) {
-      doSearch(q, true);
+      doSearch(q, true, true);
       if (focusFirstVisibleSearchMatch(q, expandedMemberIds)) return;
     }
   }
@@ -1591,7 +1591,7 @@ function _highlightPanelText(query) {
   }
 }
 
-function doSearch(query, skipFocus) {
+function doSearch(query, skipFocus, skipPanel) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
@@ -1694,7 +1694,7 @@ function doSearch(query, skipFocus) {
     focusSearchMatch(firstMatch, 400);
   }
   _highlightPanelText(query);
-  if (typeof openSearchResultsPanel === 'function') openSearchResultsPanel(matchedEntries);
+  if (!skipPanel && typeof openSearchResultsPanel === 'function') openSearchResultsPanel(matchedEntries);
 }
 
 function clearSearch() {
