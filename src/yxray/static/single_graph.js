@@ -1458,7 +1458,7 @@ function baseNodeColorUpdate(n, col) {
     background: col.bg, border: col.bd,
     highlight: {background: '#92400e', border: '#f59e0b'},
     hover: {background: col.hover, border: col.bd}
-  }, font: {color: contrastColor(col.bg)}};
+  }, font: {color: contrastColor(col.bg)}, shadow: false};
 }
 
 function buildNodeDataLookup() {
@@ -1580,10 +1580,11 @@ function doSearch(query, skipFocus) {
         }, font: {color: contrastColor(matchBg)}});
       } else {
         updates.push({id: n.id, color: {
-          background: col.bg, border: '#f59e0b',
-          highlight: {background: '#92400e', border: '#f59e0b'},
-          hover: {background: col.hover, border: '#f59e0b'}
-        }, font: {color: contrastColor(col.bg)}});
+          background: '#92400e', border: '#f59e0b',
+          highlight: {background: '#78350f', border: '#fbbf24'},
+          hover: {background: '#78350f', border: '#fbbf24'}
+        }, font: {color: '#ffffff'},
+           shadow: {enabled: true, color: 'rgba(245,158,11,0.45)', size: 10, x: 0, y: 0}});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
