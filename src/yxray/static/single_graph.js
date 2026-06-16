@@ -929,7 +929,12 @@ function initNetwork() {
       var w = maxX - minX + CONT_PAD_X * 2;
       var h = maxY - minY + CONT_PAD_Y * 2;
       var r = CONT_R;
-      _containerBounds[idx] = {x1: x, y1: y - 28, x2: x + w, y2: y + h, reps: reps};
+      // Cache label hit area for container drag. Label is drawn at (x+10, y-6).
+      if (c.label) {
+        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+        var tw = ctx.measureText(c.label).width;
+        _containerBounds[idx] = {x1: x + 4, y1: y - 26, x2: x + 14 + tw, y2: y};
+      }
 
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -959,10 +964,10 @@ function initNetwork() {
     ctx.restore();
   });
 
-  // ── Container drag: grab empty space inside a container to move all members ──
+  // ── Container label drag: grab the label text to move all members ──────────
   var _cvs = network.canvas.frame.canvas;
 
-  function _findContainerAt(cp) {
+  function _findLabelAt(cp) {
     for (var i = _containerBounds.length - 1; i >= 0; i--) {
       var b = _containerBounds[i];
       if (!b) continue;
@@ -992,10 +997,8 @@ function initNetwork() {
 
   _cvs.addEventListener('mousedown', function(e) {
     if (e.button !== 0 || _containerDragState) return;
-    var domPos = {x: e.offsetX, y: e.offsetY};
-    if (network.getNodeAt(domPos) !== undefined) return;
-    var cp = network.DOMtoCanvas(domPos);
-    var cidx = _findContainerAt(cp);
+    var cp = network.DOMtoCanvas({x: e.offsetX, y: e.offsetY});
+    var cidx = _findLabelAt(cp);
     if (cidx < 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -1019,10 +1022,8 @@ function initNetwork() {
 
   _cvs.addEventListener('mousemove', function(e) {
     if (_containerDragState) return;
-    var domPos = {x: e.offsetX, y: e.offsetY};
-    if (network.getNodeAt(domPos) !== undefined) { _cvs.style.cursor = ''; return; }
-    var cp = network.DOMtoCanvas(domPos);
-    _cvs.style.cursor = _findContainerAt(cp) >= 0 ? 'grab' : '';
+    var cp = network.DOMtoCanvas({x: e.offsetX, y: e.offsetY});
+    _cvs.style.cursor = _findLabelAt(cp) >= 0 ? 'grab' : '';
   });
 
   network.on('click', function(params) {
