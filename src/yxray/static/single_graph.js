@@ -1530,6 +1530,19 @@ function focusFirstVisibleSearchMatch(query, candidateIds) {
   return false;
 }
 
+function _toolTypeToBadgeRole(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t === 'filter') return 'filter';
+  if (t === 'formula' || t === 'multirowformula' || t === 'multifieldbinner') return 'formula';
+  if (t.indexOf('join') !== -1 || t === 'findreplace' || t === 'spatialmatch') return 'join';
+  if (t === 'union') return 'union';
+  if (t === 'summarize' || t === 'sample' || t === 'tile') return 'aggregate';
+  if (t === 'crosstab' || t === 'transpose' || t === 'regex') return 'reshape';
+  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput') return 'input';
+  return 'union';
+}
+
 function _escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -1571,6 +1584,7 @@ function doSearch(query, skipFocus) {
   var allNodes = nodesDataset.get();
   var updates = [];
   var firstMatch = null;
+  var matchedEntries = [];
 
   // Build a lookup from original node data (pre-clustering) for member searches.
   var nodeDataLookup = buildNodeDataLookup();
@@ -1607,6 +1621,7 @@ function doSearch(query, skipFocus) {
           highlight: {background: matchBg, border: '#f59e0b'},
           hover:     {background: matchBg, border: '#f59e0b'}
         }, font: {color: contrastColor(matchBg)}});
+        matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), label: n.label || cm.toolType || ''});
       } else {
         updates.push({id: n.id, color: {
           background: '#92400e', border: '#f59e0b',
@@ -1614,6 +1629,9 @@ function doSearch(query, skipFocus) {
           hover: {background: '#78350f', border: '#fbbf24'}
         }, font: {color: '#ffffff'},
            shadow: {enabled: true, color: 'rgba(245,158,11,0.45)', size: 10, x: 0, y: 0}});
+        var nd = nodeDataLookup[n.id];
+        var st = nd ? (nd.title || '').split('.').pop() : (n.label || '');
+        matchedEntries.push({id: n.id, shortType: st, role: _toolTypeToBadgeRole(st), label: nd ? (nd.label || n.label || '') : (n.label || '')});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
@@ -1648,10 +1666,12 @@ function doSearch(query, skipFocus) {
     focusSearchMatch(firstMatch, 400);
   }
   _highlightPanelText(query);
+  if (typeof openSearchResultsPanel === 'function') openSearchResultsPanel(matchedEntries);
 }
 
 function clearSearch() {
   _clearPanelHighlights();
+  if (typeof closeSearchResultsPanel === 'function') closeSearchResultsPanel();
   searchActive = false;
   document.getElementById('search-input').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
