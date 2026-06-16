@@ -1530,6 +1530,35 @@ function focusFirstVisibleSearchMatch(query, candidateIds) {
   return false;
 }
 
+function _escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function _highlightEl(el, re) {
+  if (!el.dataset.origText) el.dataset.origText = el.textContent;
+  el.innerHTML = _escapeHtml(el.dataset.origText).replace(re, '<mark class="search-mark">$1</mark>');
+}
+function _clearPanelHighlights() {
+  document.querySelectorAll('[data-orig-text]').forEach(function(el) {
+    el.textContent = el.dataset.origText;
+    delete el.dataset.origText;
+  });
+}
+function _highlightPanelText(query) {
+  _clearPanelHighlights();
+  if (!query) return;
+  var q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var re;
+  try { re = new RegExp('(' + q + ')', 'gi'); } catch(e) { return; }
+  var insightsBody = document.getElementById('insights-panel-body');
+  if (insightsBody) {
+    insightsBody.querySelectorAll('.ki-badge, .ki-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+  var summaryBody = document.getElementById('summary-panel-body');
+  if (summaryBody) {
+    summaryBody.querySelectorAll('.step-badge, .step-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+}
+
 function doSearch(query, skipFocus) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
@@ -1618,9 +1647,11 @@ function doSearch(query, skipFocus) {
   if (!skipFocus && firstMatch !== null) {
     focusSearchMatch(firstMatch, 400);
   }
+  _highlightPanelText(query);
 }
 
 function clearSearch() {
+  _clearPanelHighlights();
   searchActive = false;
   document.getElementById('search-input').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
