@@ -23,6 +23,8 @@ var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
 var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
+var _containerBounds       = [];   // [{x1,y1,x2,y2}] updated each beforeDrawing frame
+var _containerDragState    = null; // active container drag, or null
 // Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
 function contrastColor(hex) {
   if (!hex || hex.length < 7) return '#ffffff';
@@ -884,6 +886,7 @@ function initNetwork() {
   //    initial canvas position fell inside the container's XML bounds)
   network.on('beforeDrawing', function(ctx) {
     if (CONTAINERS_DATA.length === 0) return;
+    _containerBounds = new Array(CONTAINERS_DATA.length);
     ctx.save();
 
     CONTAINERS_DATA.forEach(function(c, idx) {
@@ -926,6 +929,7 @@ function initNetwork() {
       var w = maxX - minX + CONT_PAD_X * 2;
       var h = maxY - minY + CONT_PAD_Y * 2;
       var r = CONT_R;
+      _containerBounds[idx] = {x1: x, y1: y - 28, x2: x + w, y2: y + h, reps: reps};
 
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -953,6 +957,72 @@ function initNetwork() {
       }
     });
     ctx.restore();
+  });
+
+  // ── Container drag: grab empty space inside a container to move all members ──
+  var _cvs = network.canvas.frame.canvas;
+
+  function _findContainerAt(cp) {
+    for (var i = _containerBounds.length - 1; i >= 0; i--) {
+      var b = _containerBounds[i];
+      if (!b) continue;
+      if (cp.x >= b.x1 && cp.x <= b.x2 && cp.y >= b.y1 && cp.y <= b.y2) return i;
+    }
+    return -1;
+  }
+
+  function _onContainerDragMove(e) {
+    if (!_containerDragState) return;
+    var rect = _cvs.getBoundingClientRect();
+    var cp = network.DOMtoCanvas({x: e.clientX - rect.left, y: e.clientY - rect.top});
+    var dx = cp.x - _containerDragState.startCanvasPos.x;
+    var dy = cp.y - _containerDragState.startCanvasPos.y;
+    nodesDataset.update(_containerDragState.reps.map(function(id) {
+      var sp = _containerDragState.startPositions[id];
+      return {id: id, x: sp.x + dx, y: sp.y + dy};
+    }));
+  }
+
+  function _onContainerDragEnd() {
+    _containerDragState = null;
+    document.removeEventListener('mousemove', _onContainerDragMove);
+    document.removeEventListener('mouseup', _onContainerDragEnd);
+    _cvs.style.cursor = '';
+  }
+
+  _cvs.addEventListener('mousedown', function(e) {
+    if (e.button !== 0 || _containerDragState) return;
+    var domPos = {x: e.offsetX, y: e.offsetY};
+    if (network.getNodeAt(domPos) !== undefined) return;
+    var cp = network.DOMtoCanvas(domPos);
+    var cidx = _findContainerAt(cp);
+    if (cidx < 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    var membership = computeContainerMembership();
+    var repsSet = {};
+    Object.keys(membership).forEach(function(k) {
+      if (membership[parseInt(k)] === cidx) {
+        var rep = resolveNode(parseInt(k));
+        if (rep !== null) repsSet[String(rep)] = true;
+      }
+    });
+    var reps = Object.keys(repsSet);
+    var positions = network.getPositions(reps);
+    var startPositions = {};
+    reps.forEach(function(id) { startPositions[id] = {x: positions[id].x, y: positions[id].y}; });
+    _containerDragState = {cidx: cidx, reps: reps, startCanvasPos: cp, startPositions: startPositions};
+    _cvs.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', _onContainerDragMove);
+    document.addEventListener('mouseup', _onContainerDragEnd);
+  }, true);
+
+  _cvs.addEventListener('mousemove', function(e) {
+    if (_containerDragState) return;
+    var domPos = {x: e.offsetX, y: e.offsetY};
+    if (network.getNodeAt(domPos) !== undefined) { _cvs.style.cursor = ''; return; }
+    var cp = network.DOMtoCanvas(domPos);
+    _cvs.style.cursor = _findContainerAt(cp) >= 0 ? 'grab' : '';
   });
 
   network.on('click', function(params) {
