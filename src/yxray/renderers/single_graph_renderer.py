@@ -628,8 +628,11 @@ function openSearchResultsPanel(entries) {
                 rowEl.classList.add('focused');
                 _searchResultsFocusEl = rowEl;
                 if (typeof network !== 'undefined' && network) {
-                    network.selectNodes([id]);
-                    network.focus(id, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                    var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
+                    if (visId !== null) {
+                        network.selectNodes([visId]);
+                        network.focus(visId, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                    }
                 }
             };
         })(entry.id, row);
