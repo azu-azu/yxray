@@ -624,6 +624,7 @@ function openSearchResultsPanel(entries) {
     entries.forEach(function(entry, idx) {
         var li = document.createElement('li');
         li.className = 'summary-step summary-step-' + (entry.category || 'unknown');
+        li.onclick = function() { if (typeof toggleStepDetail === 'function') toggleStepDetail(this); };
         var row = document.createElement('div');
         row.className = 'step-row';
         var num = document.createElement('span');
@@ -650,10 +651,22 @@ function openSearchResultsPanel(entries) {
         var desc = document.createElement('span');
         desc.className = 'step-desc';
         desc.textContent = entry.label;
+        var arrow = document.createElement('span');
+        arrow.className = 'step-expand-arrow';
+        arrow.textContent = '▶';
         row.appendChild(num);
         row.appendChild(badge);
         row.appendChild(desc);
+        row.appendChild(arrow);
+        var detail = document.createElement('div');
+        detail.className = 'step-detail';
+        var configData = (typeof CONFIG_MAP !== 'undefined' && CONFIG_MAP) ? (CONFIG_MAP[String(entry.id)] || {}) : {};
+        detail.dataset.config = JSON.stringify(configData);
+        var inner = document.createElement('div');
+        inner.className = 'step-detail-inner';
+        detail.appendChild(inner);
         li.appendChild(row);
+        li.appendChild(detail);
         ol.appendChild(li);
     });
     body.appendChild(ol);
