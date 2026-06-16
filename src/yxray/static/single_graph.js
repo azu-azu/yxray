@@ -1562,6 +1562,14 @@ function _toolTypeToBadgeRole(toolType) {
   return 'union';
 }
 
+function _toolTypeToStepCategory(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput' || t === 'recordid') return 'input';
+  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t !== '') return 'transform';
+  return 'unknown';
+}
+
 function _escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -1645,10 +1653,10 @@ function doSearch(query, skipFocus, skipPanel) {
           memberMatches.forEach(function(mid) {
             var mnd = nodeDataLookup[mid];
             var mst = mnd ? (mnd.title || '').split('.').pop() : '';
-            matchedEntries.push({id: mid, shortType: mst, role: _toolTypeToBadgeRole(mst), label: mnd ? (mnd.label || '') : ''});
+            matchedEntries.push({id: mid, shortType: mst, role: _toolTypeToBadgeRole(mst), category: _toolTypeToStepCategory(mst), label: mnd ? (mnd.label || '') : ''});
           });
         } else {
-          matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), label: n.label || cm.toolType || ''});
+          matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), category: _toolTypeToStepCategory(cm.toolType), label: n.label || cm.toolType || ''});
         }
       } else {
         updates.push({id: n.id, color: {
@@ -1659,7 +1667,7 @@ function doSearch(query, skipFocus, skipPanel) {
            shadow: {enabled: true, color: 'rgba(245,158,11,0.45)', size: 10, x: 0, y: 0}});
         var nd = nodeDataLookup[n.id];
         var st = nd ? (nd.title || '').split('.').pop() : (n.label || '');
-        matchedEntries.push({id: n.id, shortType: st, role: _toolTypeToBadgeRole(st), label: nd ? (nd.label || n.label || '') : (n.label || '')});
+        matchedEntries.push({id: n.id, shortType: st, role: _toolTypeToBadgeRole(st), category: _toolTypeToStepCategory(st), label: nd ? (nd.label || n.label || '') : (n.label || '')});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
