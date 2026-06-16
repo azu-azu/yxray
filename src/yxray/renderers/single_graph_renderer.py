@@ -301,7 +301,7 @@ _HTML_TEMPLATE = """\
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #insights-panel-body > * { direction: ltr; }
-    #search-results-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #search-results-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #search-results-panel-body > * { direction: ltr; }
     /* ---- Containers panel ---- */
     #containers-panel {
@@ -619,14 +619,25 @@ function openSearchResultsPanel(entries) {
     body.innerHTML = '';
     var title = document.getElementById('search-results-panel-title');
     if (title) title.textContent = 'Results (' + entries.length + ')';
-    entries.forEach(function(entry) {
+    var ol = document.createElement('ol');
+    ol.className = 'summary-steps';
+    entries.forEach(function(entry, idx) {
+        var li = document.createElement('li');
+        li.className = 'summary-step summary-step-' + (entry.category || 'unknown');
         var row = document.createElement('div');
-        row.className = 'ki-row';
-        row.onclick = (function(id, rowEl) {
-            return function() {
+        row.className = 'step-row';
+        var num = document.createElement('span');
+        num.className = 'step-num';
+        num.textContent = (idx + 1) + '.';
+        var badge = document.createElement('span');
+        badge.className = 'step-badge step-badge-' + (entry.category || 'unknown');
+        badge.textContent = entry.shortType;
+        badge.onclick = (function(id, badgeEl) {
+            return function(e) {
+                e.stopPropagation();
                 if (_searchResultsFocusEl) _searchResultsFocusEl.classList.remove('focused');
-                rowEl.classList.add('focused');
-                _searchResultsFocusEl = rowEl;
+                badgeEl.classList.add('focused');
+                _searchResultsFocusEl = badgeEl;
                 if (typeof network !== 'undefined' && network) {
                     var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
                     if (visId !== null) {
@@ -635,17 +646,17 @@ function openSearchResultsPanel(entries) {
                     }
                 }
             };
-        })(entry.id, row);
-        var badge = document.createElement('span');
-        badge.className = 'ki-badge ki-badge-' + entry.role;
-        badge.textContent = entry.shortType;
+        })(entry.id, badge);
         var desc = document.createElement('span');
-        desc.className = 'ki-desc';
+        desc.className = 'step-desc';
         desc.textContent = entry.label;
+        row.appendChild(num);
         row.appendChild(badge);
         row.appendChild(desc);
-        body.appendChild(row);
+        li.appendChild(row);
+        ol.appendChild(li);
     });
+    body.appendChild(ol);
     srp.classList.add('open');
     _syncPanelBtnState();
 }
