@@ -977,14 +977,14 @@ function initNetwork() {
   }
 
   function _onContainerDragMove(e) {
-    if (!_containerDragState) return;
-    var rect = _cvs.getBoundingClientRect();
-    var cp = network.DOMtoCanvas({x: e.clientX - rect.left, y: e.clientY - rect.top});
-    var dx = cp.x - _containerDragState.startCanvasPos.x;
-    var dy = cp.y - _containerDragState.startCanvasPos.y;
+    if (!_containerDragState || (!e.movementX && !e.movementY)) return;
+    var scale = network.getScale();
+    var dx = e.movementX / scale;
+    var dy = e.movementY / scale;
+    var cur = _containerDragState.curPositions;
     nodesDataset.update(_containerDragState.reps.map(function(id) {
-      var sp = _containerDragState.startPositions[id];
-      return {id: id, x: sp.x + dx, y: sp.y + dy};
+      cur[id] = {x: cur[id].x + dx, y: cur[id].y + dy};
+      return {id: id, x: cur[id].x, y: cur[id].y};
     }));
   }
 
@@ -1012,9 +1012,9 @@ function initNetwork() {
     });
     var reps = Object.keys(repsSet);
     var positions = network.getPositions(reps);
-    var startPositions = {};
-    reps.forEach(function(id) { startPositions[id] = {x: positions[id].x, y: positions[id].y}; });
-    _containerDragState = {cidx: cidx, reps: reps, startCanvasPos: cp, startPositions: startPositions};
+    var curPositions = {};
+    reps.forEach(function(id) { curPositions[id] = {x: positions[id].x, y: positions[id].y}; });
+    _containerDragState = {cidx: cidx, reps: reps, curPositions: curPositions};
     _cvs.style.cursor = 'grabbing';
     document.addEventListener('mousemove', _onContainerDragMove);
     document.addEventListener('mouseup', _onContainerDragEnd);
