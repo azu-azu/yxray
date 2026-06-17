@@ -493,6 +493,9 @@ html.light .tool-row:hover { background: #f1f5f9; }
   </div>
 </div>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
+{% if key_insights %}
+<script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
+{% endif %}
 {% if metadata %}
 <details id="governance">
   <summary>Governance Metadata (ALCOA+)</summary>
@@ -981,7 +984,6 @@ function focusNode(toolId, clickedEl) {
 </div>
 {{ graph_html | safe }}
 {% if key_insights %}
-<script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
 <div id="insights-panel">
   <div id="insights-panel-drag-handle"></div>
   <div id="insights-panel-header">
