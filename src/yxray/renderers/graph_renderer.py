@@ -38,7 +38,13 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 <div id="split-view" class="split-view">
   <div id="split-changes-col" class="split-changes-col">
     <div class="split-changes-drag-handle"></div>
-    <div class="split-changes-header">Diff Details</div>
+    <div class="split-changes-header">
+      Diff Details
+      <div class="split-changes-actions">
+        <button class="split-action-btn" onclick="expandAllChanges()">All ▼</button>
+        <button class="split-action-btn" onclick="collapseAllChanges()">All ▲</button>
+      </div>
+    </div>
     <div id="split-change-rows" class="split-change-rows"></div>
   </div>
   <div class="split-graphs-col">
@@ -210,7 +216,17 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.split-changes-actions { display: flex; gap: 4px; }
+.split-action-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer;
+  font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+.split-action-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .split-change-rows {
   flex: 1;
@@ -1047,6 +1063,20 @@ function focusNode(toolId) {
       if (networkRight) { networkRight.moveTo(moveOpts); if (nR) networkRight.selectNodes([toolId]); }
     }
   }
+}
+
+function expandAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && !chevron.classList.contains('open')) header.click();
+  });
+}
+
+function collapseAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && chevron.classList.contains('open')) header.click();
+  });
 }
 
 var _focusChangeRowEl = null;

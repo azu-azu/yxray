@@ -25,7 +25,14 @@ _TEMPLATE = """<!DOCTYPE html>
 .theme-toggle svg { display: block; }
 /* ---- Summary stat cards ---- */
 #summary { max-width: 960px; margin: 0 auto; padding: 16px 32px 0; }
-.stat-cards { display: flex; gap: 12px; margin-bottom: 0; }
+.stat-cards { display: flex; gap: 12px; margin-bottom: 0; align-items: stretch; }
+.stat-card-group {
+  display: flex; gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
 .stat-card {
   flex: 1; border-radius: 8px; padding: 16px; cursor: pointer;
   border: 1px solid; transition: opacity 0.15s ease; text-decoration: none;
@@ -239,18 +246,22 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
       </div>
       <div class="stat-count">{{ summary.removed }}</div>
     </div>
-    {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
-      <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.inputs }}</div>
-    </button>{% endif %}
-    {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
-      <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.outputs }}</div>
-    </button>{% endif %}
-    {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
-      <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.joins }}</div>
-    </button>{% endif %}
+    {% if summary.inputs or summary.outputs or summary.joins %}
+    <div class="stat-card-group">
+      {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
+        <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.inputs }}</div>
+      </button>{% endif %}
+      {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
+        <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.outputs }}</div>
+      </button>{% endif %}
+      {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
+        <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.joins }}</div>
+      </button>{% endif %}
+    </div>
+    {% endif %}
   </div>
 </section>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
