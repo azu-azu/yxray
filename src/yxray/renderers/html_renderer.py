@@ -228,6 +228,8 @@ html.light .tool-row:hover { background: #f1f5f9; }
 .diff-line-ins .diff-gutter { color: var(--accent-added); }
 .diff-text { flex: 1; white-space: pre-wrap; word-break: break-all; padding: 0 6px; color: var(--text); }
 .diff-line-ctx .diff-text { color: var(--text-muted); }
+.diff-line-skip { justify-content: center; padding: 2px 0; }
+.diff-skip-text { color: var(--text-muted); font-style: italic; font-size: 11px; }
 .empty { color: var(--text-muted); font-style: italic; }
 /* ---- Governance footer ---- */
 #governance {
@@ -659,6 +661,71 @@ function toggleTool(toolId, section) {
     if (typeof window.graphFocusNode === 'function') window.graphFocusNode(toolId);
 }
 
+function flattenConfig(obj, prefix) {
+    if (prefix === undefined) prefix = '';
+    if (obj === null || obj === undefined) return [prefix + ': null'];
+    if (typeof obj !== 'object') return [prefix + ': ' + obj];
+    if (Array.isArray(obj)) {
+        var out = [];
+        obj.forEach(function(item, i) {
+            var k = prefix ? prefix + '[' + i + ']' : '[' + i + ']';
+            flattenConfig(item, k).forEach(function(l) { out.push(l); });
+        });
+        return out;
+    }
+    var out = [];
+    Object.keys(obj).forEach(function(k) {
+        var sub = prefix ? prefix + '.' + k : k;
+        flattenConfig(obj[k], sub).forEach(function(l) { out.push(l); });
+    });
+    return out;
+}
+
+function buildConfigDiff(oldCfg, newCfg) {
+    var CONTEXT = 2;
+    var oldLines = flattenConfig(oldCfg, '');
+    var newLines = flattenConfig(newCfg, '');
+    var ops = lcsOps(oldLines, newLines);
+    var near = new Array(ops.length).fill(false);
+    for (var i = 0; i < ops.length; i++) {
+        if (ops[i].type !== 'equal') {
+            for (var j = Math.max(0, i - CONTEXT); j <= Math.min(ops.length - 1, i + CONTEXT); j++) near[j] = true;
+        }
+    }
+    var wrap = document.createElement('div');
+    wrap.className = 'diff-unified';
+    var skip = 0;
+    function flushSkip() {
+        if (!skip) return;
+        var skipEl = document.createElement('div');
+        skipEl.className = 'diff-line diff-line-skip';
+        var t = document.createElement('span');
+        t.className = 'diff-skip-text';
+        t.textContent = '⋯ ' + skip + ' unchanged line' + (skip === 1 ? '' : 's') + ' ⋯';
+        skipEl.appendChild(t);
+        wrap.appendChild(skipEl);
+        skip = 0;
+    }
+    ops.forEach(function(op, idx) {
+        if (op.type === 'equal' && !near[idx]) { skip++; return; }
+        flushSkip();
+        var lineEl = document.createElement('div');
+        var cls = op.type === 'equal' ? 'ctx' : op.type === 'delete' ? 'del' : 'ins';
+        lineEl.className = 'diff-line diff-line-' + cls;
+        var gutter = document.createElement('span');
+        gutter.className = 'diff-gutter';
+        gutter.textContent = op.type === 'equal' ? ' ' : op.type === 'delete' ? '-' : '+';
+        var text = document.createElement('span');
+        text.className = 'diff-text';
+        text.textContent = op.val;
+        lineEl.appendChild(gutter);
+        lineEl.appendChild(text);
+        wrap.appendChild(lineEl);
+    });
+    flushSkip();
+    return wrap;
+}
+
 function buildDetail(toolId, section, container) {
     var sectionData = DIFF_DATA[section];
     var tool = null;
@@ -668,48 +735,7 @@ function buildDetail(toolId, section, container) {
     if (!tool) return;
     var frag = document.createDocumentFragment();
     if (section === 'modified') {
-        tool.field_diffs.forEach(function(fd) {
-            var row = document.createElement('div');
-            row.className = 'field-row';
-            var nameEl = document.createElement('div');
-            nameEl.className = 'field-name';
-            nameEl.textContent = fd.field;
-            var aStr = formatVal(fd.before), bStr = formatVal(fd.after);
-            row.appendChild(nameEl);
-            if (aStr.includes('\\n') || bStr.includes('\\n')) {
-                row.appendChild(buildUnifiedDiff(aStr, bStr));
-            } else {
-                var beforeRow = document.createElement('div');
-                beforeRow.className = 'before-row';
-                var beforeLabel = document.createElement('span');
-                beforeLabel.className = 'before-label';
-                beforeLabel.textContent = 'Before: ';
-                var beforeVal = document.createElement('span');
-                beforeVal.className = 'value-block';
-                beforeRow.appendChild(beforeLabel);
-                beforeRow.appendChild(beforeVal);
-                var afterRow = document.createElement('div');
-                afterRow.className = 'after-row';
-                var afterLabel = document.createElement('span');
-                afterLabel.className = 'after-label';
-                afterLabel.textContent = 'After: ';
-                var afterVal = document.createElement('span');
-                afterVal.className = 'value-block';
-                var runs = diffChars(aStr, bStr);
-                if (runs) {
-                    fillDiffSpans(beforeVal, runs, 'delete');
-                    fillDiffSpans(afterVal, runs, 'insert');
-                } else {
-                    beforeVal.textContent = aStr;
-                    afterVal.textContent = bStr;
-                }
-                afterRow.appendChild(afterLabel);
-                afterRow.appendChild(afterVal);
-                row.appendChild(beforeRow);
-                row.appendChild(afterRow);
-            }
-            frag.appendChild(row);
-        });
+        frag.appendChild(buildConfigDiff(tool.old_config, tool.new_config));
     } else if (section === 'added' || section === 'removed') {
         var config = tool.config;
         Object.keys(config).forEach(function(k) {
@@ -1143,6 +1169,8 @@ class HTMLRenderer:
                 {"field": k, "before": v[0], "after": v[1]}
                 for k, v in nd.field_diffs.items()
             ],
+            "old_config": dict(nd.old_node.config),
+            "new_config": dict(nd.new_node.config),
         }
 
     def _edge_to_dict(self, e: EdgeDiff, index: int) -> dict[str, Any]:

@@ -312,20 +312,25 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   letter-spacing: 1px;
 }
 
-.panel-before {
-  background: var(--accent-removed-bg);
-  border-left: 3px solid var(--accent-removed);
-  padding: 6px 10px;
-  margin: 4px 0;
+.diff-unified {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
+  border: 1px solid var(--border);
 }
-.panel-after {
-  background: var(--accent-added-bg);
-  border-left: 3px solid var(--accent-added);
-  padding: 6px 10px;
-  margin: 4px 0;
+.diff-line { display: flex; line-height: 1.5; }
+.diff-line-del { background: var(--accent-removed-bg); }
+.diff-line-ins { background: var(--accent-added-bg); }
+.diff-line-ctx { }
+.diff-line-skip { justify-content: center; padding: 2px 0; }
+.diff-gutter {
+  width: 18px; flex-shrink: 0; text-align: center; font-weight: 700; padding: 0 2px;
+  user-select: none;
 }
-.panel-before-label { font-weight: 600; color: var(--accent-removed); }
-.panel-after-label { font-weight: 600; color: var(--accent-added); }
+.diff-line-del .diff-gutter { color: var(--accent-removed); }
+.diff-line-ins .diff-gutter { color: var(--accent-added); }
+.diff-text { flex: 1; white-space: pre-wrap; word-break: break-all; padding: 0 6px; color: var(--text); }
+.diff-line-ctx .diff-text { color: var(--text-muted); }
+.diff-skip-text { color: var(--text-muted); font-style: italic; font-size: 11px; }
 .value-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -602,37 +607,7 @@ function buildPanelContent(panel, entry) {
   titleEl.textContent = entry.data.tool_type + ' (ID: ' + entry.data.tool_id + ') \u2014 ' + entry.category;
   panel.appendChild(titleEl);
   if (entry.category === 'modified') {
-    entry.data.field_diffs.forEach(function(fd) {
-      var row = document.createElement('div');
-      row.className = 'panel-field-row';
-      var nameEl = document.createElement('div');
-      nameEl.className = 'panel-field-name';
-      nameEl.textContent = fd.field;
-      var beforeRow = document.createElement('div');
-      beforeRow.className = 'panel-before';
-      var beforeLabel = document.createElement('span');
-      beforeLabel.className = 'panel-before-label';
-      beforeLabel.textContent = 'Before: ';
-      var beforeVal = document.createElement('span');
-      beforeVal.className = 'value-mono';
-      beforeVal.textContent = formatVal(fd.before);
-      beforeRow.appendChild(beforeLabel);
-      beforeRow.appendChild(beforeVal);
-      var afterRow = document.createElement('div');
-      afterRow.className = 'panel-after';
-      var afterLabel = document.createElement('span');
-      afterLabel.className = 'panel-after-label';
-      afterLabel.textContent = 'After: ';
-      var afterVal = document.createElement('span');
-      afterVal.className = 'value-mono';
-      afterVal.textContent = formatVal(fd.after);
-      afterRow.appendChild(afterLabel);
-      afterRow.appendChild(afterVal);
-      row.appendChild(nameEl);
-      row.appendChild(beforeRow);
-      row.appendChild(afterRow);
-      panel.appendChild(row);
-    });
+    panel.appendChild(buildConfigDiff(entry.data.old_config, entry.data.new_config));
   } else {
     var config = entry.data.config || {};
     Object.keys(config).forEach(function(k) {
@@ -655,6 +630,95 @@ function formatVal(v) {
   if (v === null || v === undefined) return 'null';
   if (typeof v === 'object') return JSON.stringify(v, null, 2);
   return String(v);
+}
+
+function lcsOps(arr, brr) {
+  var m = arr.length, n = brr.length, i, j;
+  var dp = new Array(m + 1);
+  for (i = 0; i <= m; i++) { dp[i] = new Array(n + 1).fill(0); }
+  for (i = 1; i <= m; i++) {
+    for (j = 1; j <= n; j++) {
+      dp[i][j] = arr[i-1] === brr[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  var ops = [];
+  i = m; j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && arr[i-1] === brr[j-1]) {
+      ops.push({type: 'equal', val: arr[i-1]}); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.push({type: 'insert', val: brr[j-1]}); j--;
+    } else {
+      ops.push({type: 'delete', val: arr[i-1]}); i--;
+    }
+  }
+  ops.reverse();
+  return ops;
+}
+
+function flattenConfig(obj, prefix) {
+  if (prefix === undefined) prefix = '';
+  if (obj === null || obj === undefined) return [prefix + ': null'];
+  if (typeof obj !== 'object') return [prefix + ': ' + obj];
+  if (Array.isArray(obj)) {
+    var out = [];
+    obj.forEach(function(item, i) {
+      var k = prefix ? prefix + '[' + i + ']' : '[' + i + ']';
+      flattenConfig(item, k).forEach(function(l) { out.push(l); });
+    });
+    return out;
+  }
+  var out = [];
+  Object.keys(obj).forEach(function(k) {
+    var sub = prefix ? prefix + '.' + k : k;
+    flattenConfig(obj[k], sub).forEach(function(l) { out.push(l); });
+  });
+  return out;
+}
+
+function buildConfigDiff(oldCfg, newCfg) {
+  var CONTEXT = 2;
+  var oldLines = flattenConfig(oldCfg, '');
+  var newLines = flattenConfig(newCfg, '');
+  var ops = lcsOps(oldLines, newLines);
+  var near = new Array(ops.length).fill(false);
+  for (var i = 0; i < ops.length; i++) {
+    if (ops[i].type !== 'equal') {
+      for (var j = Math.max(0, i - CONTEXT); j <= Math.min(ops.length - 1, i + CONTEXT); j++) near[j] = true;
+    }
+  }
+  var wrap = document.createElement('div');
+  wrap.className = 'diff-unified';
+  var skip = 0;
+  function flushSkip() {
+    if (!skip) return;
+    var skipEl = document.createElement('div');
+    skipEl.className = 'diff-line diff-line-skip';
+    var t = document.createElement('span');
+    t.className = 'diff-skip-text';
+    t.textContent = '⋯ ' + skip + ' unchanged line' + (skip === 1 ? '' : 's') + ' ⋯';
+    skipEl.appendChild(t);
+    wrap.appendChild(skipEl);
+    skip = 0;
+  }
+  ops.forEach(function(op, idx) {
+    if (op.type === 'equal' && !near[idx]) { skip++; return; }
+    flushSkip();
+    var lineEl = document.createElement('div');
+    var cls = op.type === 'equal' ? 'ctx' : op.type === 'delete' ? 'del' : 'ins';
+    lineEl.className = 'diff-line diff-line-' + cls;
+    var gutter = document.createElement('span');
+    gutter.className = 'diff-gutter';
+    gutter.textContent = op.type === 'equal' ? ' ' : op.type === 'delete' ? '-' : '+';
+    var text = document.createElement('span');
+    text.className = 'diff-text';
+    text.textContent = op.val;
+    lineEl.appendChild(gutter);
+    lineEl.appendChild(text);
+    wrap.appendChild(lineEl);
+  });
+  flushSkip();
+  return wrap;
 }
 
 // Escape key and overlay click
