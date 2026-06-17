@@ -47,7 +47,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
     </div>
   </div>
   <div class="split-changes-col">
-    <div class="split-changes-header">Changes</div>
+    <div class="split-changes-header">Diff Details</div>
     <div id="split-change-rows" class="split-change-rows"></div>
   </div>
 </div>
@@ -340,17 +340,32 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 }
 
 .split-change-row {
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text);
+}
+.change-row-header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  font-size: 12px;
-  color: var(--text);
 }
-.split-change-row:hover { background: var(--surface-2); }
-.split-change-row.focused { background: rgba(245,158,11,0.15); outline: 1px solid #f59e0b; }
+.change-row-header:hover { background: var(--surface-2); }
+.change-row-header.focused { background: rgba(245,158,11,0.15); outline: 1px solid #f59e0b; }
+.change-chevron {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  user-select: none;
+}
+.change-chevron.open { transform: rotate(90deg); }
+.change-detail {
+  display: none;
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
 
 .split-change-badge {
   display: inline-block;
@@ -1014,9 +1029,14 @@ function buildCenterPanel() {
   entries.forEach(function(e) {
     var item = e.item;
     var cat = e.cat;
-    var row = document.createElement('div');
-    row.className = 'split-change-row';
-    row.setAttribute('data-tool-id', item.tool_id);
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'split-change-row';
+    wrapper.setAttribute('data-tool-id', item.tool_id);
+
+    // Header row
+    var header = document.createElement('div');
+    header.className = 'change-row-header';
 
     var badge = document.createElement('span');
     badge.className = 'split-change-badge';
@@ -1032,16 +1052,48 @@ function buildCenterPanel() {
     catTag.style.color = '#64748b';
     catTag.textContent = cat;
 
-    row.appendChild(badge);
-    row.appendChild(label);
-    row.appendChild(catTag);
-    row.addEventListener('click', function() {
+    var chevron = document.createElement('span');
+    chevron.className = 'change-chevron';
+    chevron.textContent = '▶';
+
+    header.appendChild(badge);
+    header.appendChild(label);
+    header.appendChild(catTag);
+    header.appendChild(chevron);
+
+    // Detail area (built lazily on first open)
+    var detail = document.createElement('div');
+    detail.className = 'change-detail';
+
+    header.addEventListener('click', function() {
       if (_focusChangeRowEl) _focusChangeRowEl.classList.remove('focused');
-      row.classList.add('focused');
-      _focusChangeRowEl = row;
+      header.classList.add('focused');
+      _focusChangeRowEl = header;
       focusNode(item.tool_id);
+
+      var isOpen = chevron.classList.contains('open');
+      if (!isOpen) {
+        if (!detail.dataset.built) {
+          detail.dataset.built = 'true';
+          if (cat === 'modified') {
+            detail.appendChild(buildConfigDiff(item.old_config, item.new_config));
+          } else if (cat === 'added') {
+            detail.appendChild(buildConfigDiff({}, item.config));
+          } else {
+            detail.appendChild(buildConfigDiff(item.config, {}));
+          }
+        }
+        detail.style.display = 'block';
+        chevron.classList.add('open');
+      } else {
+        detail.style.display = 'none';
+        chevron.classList.remove('open');
+      }
     });
-    container.appendChild(row);
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(detail);
+    container.appendChild(wrapper);
   });
 }
 
