@@ -369,55 +369,6 @@ function closeInsightsPanel() {
   var panel = document.getElementById('insights-panel');
   if (panel) { panel.classList.remove('open'); _insightsPanelRole = null; }
 }
-// ── Insights panel drag-resize ────────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('insights-panel');
-  var handle = document.getElementById('insights-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault(); e.stopPropagation();
-    startX = e.clientX; startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
-
-// ── Summary panel drag-resize ─────────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('summary-panel');
-  var handle = document.getElementById('summary-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault(); e.stopPropagation();
-    startX = e.clientX; startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
 
 var _focusPanelEl = null;
 function focusNode(toolId, clickedEl) {
@@ -469,6 +420,55 @@ function focusNode(toolId, clickedEl) {
   </div>
 </div>
 {% endif %}
+<script>
+// ── Panel drag-resize (runs after panels are in the DOM) ──────────────────
+(function() {
+  var panel = document.getElementById('insights-panel');
+  var handle = document.getElementById('insights-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    startX = e.clientX; startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMoveIP);
+    document.addEventListener('mouseup', onUpIP);
+  });
+  function onMoveIP(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUpIP() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMoveIP);
+    document.removeEventListener('mouseup', onUpIP);
+  }
+})();
+(function() {
+  var panel = document.getElementById('summary-panel');
+  var handle = document.getElementById('summary-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    startX = e.clientX; startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMoveSP);
+    document.addEventListener('mouseup', onUpSP);
+  });
+  function onMoveSP(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUpSP() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMoveSP);
+    document.removeEventListener('mouseup', onUpSP);
+  }
+})();
+</script>
 </body>
 </html>
 """
