@@ -1702,7 +1702,8 @@ function doSearch(query, skipFocus, skipPanel) {
   var nodeDataLookup = buildNodeDataLookup();
 
   allNodes.forEach(function(n) {
-    // Memo nodes: match on label text only
+    // Memo nodes: match label text for firstMatch, but skip amber/dim color changes.
+    // Memo nodes are user overlays and should remain visually neutral during search.
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
       var mMatch = testStr(n.label || '');
       updates.push({id: n.id, font: {color: '#000000'}});

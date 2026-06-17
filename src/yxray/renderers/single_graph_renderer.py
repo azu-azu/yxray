@@ -62,6 +62,14 @@ _HTML_TEMPLATE = """\
       --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534;
       --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
       --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
+      --badge-input-bg: #052e16;  --badge-input-text: #6ee7b7;  --badge-input-border: #166534;
+      --badge-output-bg: #0c1a3a; --badge-output-text: #93c5fd; --badge-output-border: #1e3a5f;
+      --badge-join-bg: #2e1065;   --badge-join-text: #c4b5fd;   --badge-join-border: #4c1d95;
+      --badge-union-bg: #1e293b;  --badge-union-text: #94a3b8;  --badge-union-border: #334155;
+      --badge-aggregate-bg: #1c1506; --badge-aggregate-text: #fcd34d; --badge-aggregate-border: #78350f;
+      --badge-filter-bg: #450a0a;  --badge-filter-text: #fca5a5;  --badge-filter-border: #7f1d1d;
+      --badge-formula-bg: #0c2938; --badge-formula-text: #67e8f9; --badge-formula-border: #164e63;
+      --badge-reshape-bg: #1e1b4b; --badge-reshape-text: #a5b4fc; --badge-reshape-border: #3730a3;
     }
     html.light {
       --bg: #f8fafc;
@@ -81,6 +89,14 @@ _HTML_TEMPLATE = """\
       --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0;
       --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
       --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
+      --badge-input-bg: #d1fae5;  --badge-input-text: #065f46;  --badge-input-border: #6ee7b7;
+      --badge-output-bg: #dbeafe; --badge-output-text: #1e40af; --badge-output-border: #93c5fd;
+      --badge-join-bg: #ede9fe;   --badge-join-text: #5b21b6;   --badge-join-border: #c4b5fd;
+      --badge-union-bg: #f1f5f9;  --badge-union-text: #475569;  --badge-union-border: #cbd5e1;
+      --badge-aggregate-bg: #fef3c7; --badge-aggregate-text: #92400e; --badge-aggregate-border: #fcd34d;
+      --badge-filter-bg: #fee2e2;  --badge-filter-text: #991b1b;  --badge-filter-border: #fca5a5;
+      --badge-formula-bg: #cffafe; --badge-formula-text: #155e75; --badge-formula-border: #67e8f9;
+      --badge-reshape-bg: #e0e7ff; --badge-reshape-text: #3730a3; --badge-reshape-border: #a5b4fc;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -258,9 +274,9 @@ _HTML_TEMPLATE = """\
       transition: opacity 0.15s; font: inherit;
     }
     .io-stat-btn:hover { opacity: 0.75; }
-    .io-stat-input  { color: #065f46; border-color: #6ee7b7; background: #d1fae5; }
-    .io-stat-output { color: #1e40af; border-color: #93c5fd; background: #dbeafe; }
-    .io-stat-join   { color: #5b21b6; border-color: #c4b5fd; background: #ede9fe; }
+    .io-stat-input  { color: var(--badge-input-text);     border-color: var(--badge-input-border);     background: var(--badge-input-bg); }
+    .io-stat-output { color: var(--badge-output-text);    border-color: var(--badge-output-border);    background: var(--badge-output-bg); }
+    .io-stat-join   { color: var(--badge-join-text);      border-color: var(--badge-join-border);      background: var(--badge-join-bg); }
     .io-stat-count  { font-size: 12px; font-weight: 700; }
     /* ---- Left panels (summary + insights + search-results) ---- */
     #summary-panel, #insights-panel, #search-results-panel {
@@ -352,14 +368,14 @@ _HTML_TEMPLATE = """\
     .step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
     .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
       padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
-    .ki-badge-input    { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-    .ki-badge-output   { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
-    .ki-badge-join     { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
-    .ki-badge-union    { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-    .ki-badge-aggregate{ background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-    .ki-badge-filter   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-    .ki-badge-formula  { background: #cffafe; color: #155e75; border: 1px solid #67e8f9; }
-    .ki-badge-reshape  { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+    .ki-badge-input    { background: var(--badge-input-bg);     color: var(--badge-input-text);     border: 1px solid var(--badge-input-border); }
+    .ki-badge-output   { background: var(--badge-output-bg);    color: var(--badge-output-text);    border: 1px solid var(--badge-output-border); }
+    .ki-badge-join     { background: var(--badge-join-bg);      color: var(--badge-join-text);      border: 1px solid var(--badge-join-border); }
+    .ki-badge-union    { background: var(--badge-union-bg);     color: var(--badge-union-text);     border: 1px solid var(--badge-union-border); }
+    .ki-badge-aggregate{ background: var(--badge-aggregate-bg); color: var(--badge-aggregate-text); border: 1px solid var(--badge-aggregate-border); }
+    .ki-badge-filter   { background: var(--badge-filter-bg);    color: var(--badge-filter-text);    border: 1px solid var(--badge-filter-border); }
+    .ki-badge-formula  { background: var(--badge-formula-bg);   color: var(--badge-formula-text);   border: 1px solid var(--badge-formula-border); }
+    .ki-badge-reshape  { background: var(--badge-reshape-bg);   color: var(--badge-reshape-text);   border: 1px solid var(--badge-reshape-border); }
     .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 11px; color: var(--text); white-space: nowrap; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -765,11 +781,6 @@ function openContainersPanel() {
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
     if (sp) sp.classList.remove('open');
     cp.classList.add('open');
-    _syncPanelBtnState();
-}
-function closeContainersPanel() {
-    var cp = document.getElementById('containers-panel');
-    if (cp) cp.classList.remove('open');
     _syncPanelBtnState();
 }
 var _containerFocusEl = null;
