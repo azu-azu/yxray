@@ -164,6 +164,7 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 }
 .tool-row:hover { background: #273449; }
 html.light .tool-row:hover { background: #f1f5f9; }
+.tool-row.focused { background: rgba(245,158,11,0.15) !important; outline: 1px solid #f59e0b; }
 .chevron {
   display: inline-block; transition: transform 0.15s ease;
   margin-right: 8px; font-style: normal; flex-shrink: 0;
@@ -636,6 +637,11 @@ function toggleTool(toolId, section) {
         detailEl.hidden = false;
         rowEl.classList.add('expanded');
     }
+    // Apply amber focus to the clicked row and highlight in graph.
+    if (_focusPanelEl) { _focusPanelEl.classList.remove('focused'); _focusPanelEl = null; }
+    rowEl.classList.add('focused');
+    _focusPanelEl = rowEl;
+    if (typeof window.graphFocusNode === 'function') window.graphFocusNode(toolId);
 }
 
 function buildDetail(toolId, section, container) {
