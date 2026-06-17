@@ -788,9 +788,9 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
-  networkLeft.on('dragEnd', syncLeftToRight);
+  networkLeft.on('dragging', syncLeftToRight);
   networkLeft.on('zoom', syncLeftToRight);
-  networkRight.on('dragEnd', syncRightToLeft);
+  networkRight.on('dragging', syncRightToLeft);
   networkRight.on('zoom', syncRightToLeft);
 
   function onSplitNodeClick(params) {
