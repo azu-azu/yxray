@@ -70,6 +70,7 @@ _HTML_TEMPLATE = """\
       --badge-filter-bg: #450a0a;  --badge-filter-text: #fca5a5;  --badge-filter-border: #7f1d1d;
       --badge-formula-bg: #0c2938; --badge-formula-text: #67e8f9; --badge-formula-border: #164e63;
       --badge-reshape-bg: #1e1b4b; --badge-reshape-text: #a5b4fc; --badge-reshape-border: #3730a3;
+      --connect-hint-bg: #92400e; --connect-hint-text: #fef3c7;
     }
     html.light {
       --bg: #f8fafc;
@@ -97,6 +98,7 @@ _HTML_TEMPLATE = """\
       --badge-filter-bg: #fee2e2;  --badge-filter-text: #991b1b;  --badge-filter-border: #fca5a5;
       --badge-formula-bg: #cffafe; --badge-formula-text: #155e75; --badge-formula-border: #67e8f9;
       --badge-reshape-bg: #e0e7ff; --badge-reshape-text: #3730a3; --badge-reshape-border: #a5b4fc;
+      --connect-hint-bg: #ca8a04; --connect-hint-text: #fff;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -257,7 +259,7 @@ _HTML_TEMPLATE = """\
     #connect-mode-hint {
       display: none; position: fixed; top: 65px; left: 50%;
       transform: translateX(-50%); z-index: 1500; pointer-events: none;
-      background: #ca8a04; color: #fff; padding: 6px 18px;
+      background: var(--connect-hint-bg); color: var(--connect-hint-text); padding: 6px 18px;
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
@@ -827,10 +829,12 @@ function focusContainer(containerIdx, clickedEl) {
     network.moveTo({position: center, scale: scale, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
 }
 
-// ── At a Glance panel drag-resize ────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('config-panel');
-  var handle = document.getElementById('panel-drag-handle');
+// ── Panel drag-resize (shared helper) ────────────────────────────────────
+// direction: +1 = handle on right edge (drag right to widen),
+//            -1 = handle on left edge  (drag left to widen, e.g. config-panel)
+function makeDragResize(panelId, handleId, direction) {
+  var panel  = document.getElementById(panelId);
+  var handle = document.getElementById(handleId);
   if (!handle || !panel) return;
   var startX, startW;
   handle.addEventListener('mousedown', function(e) {
@@ -843,34 +847,7 @@ function focusContainer(containerIdx, clickedEl) {
     document.addEventListener('mouseup', onUp);
   });
   function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW - dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
-
-// ── Insights panel drag-resize ────────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('insights-panel');
-  var handle = document.getElementById('insights-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    startX = e.clientX;
-    startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
+    var dx  = (e.clientX - startX) * direction;
     var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
     panel.style.width = newW + 'px';
   }
@@ -879,88 +856,12 @@ function focusContainer(containerIdx, clickedEl) {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
   }
-})();
-
-// ── Summary panel drag-resize ─────────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('summary-panel');
-  var handle = document.getElementById('summary-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    startX = e.clientX;
-    startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
-
-// ── Containers panel drag-resize ──────────────────────────────────────────
-(function() {
-  var panel = document.getElementById('containers-panel');
-  var handle = document.getElementById('containers-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    startX = e.clientX;
-    startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
-
-// ── Search results panel drag-resize ─────────────────────────────────────
-(function() {
-  var panel = document.getElementById('search-results-panel');
-  var handle = document.getElementById('search-results-panel-drag-handle');
-  if (!handle || !panel) return;
-  var startX, startW;
-  handle.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    startX = e.clientX;
-    startW = panel.offsetWidth;
-    handle.classList.add('dragging');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-  function onMove(e) {
-    var dx = e.clientX - startX;
-    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
-    panel.style.width = newW + 'px';
-  }
-  function onUp() {
-    handle.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  }
-})();
+}
+makeDragResize('config-panel',          'panel-drag-handle',                -1);
+makeDragResize('insights-panel',        'insights-panel-drag-handle',       +1);
+makeDragResize('summary-panel',         'summary-panel-drag-handle',        +1);
+makeDragResize('containers-panel',      'containers-panel-drag-handle',     +1);
+makeDragResize('search-results-panel',  'search-results-panel-drag-handle', +1);
   </script>
 </body>
 </html>

@@ -15,6 +15,9 @@ REPORT_BASE_CSS = """
   --accent-modified-border: #78350f;
   --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a;
   --accent-conn-border: #1e3a5f;
+  --badge-input-bg: #052e16;  --badge-input-text: #6ee7b7;  --badge-input-border: #166534;
+  --badge-output-bg: #0c1a3a; --badge-output-text: #93c5fd; --badge-output-border: #1e3a5f;
+  --badge-join-bg: #2e1065;   --badge-join-text: #c4b5fd;   --badge-join-border: #4c1d95;
 }
 html.light {
   --bg: #ffffff; --surface: #f8f9fb; --surface-2: #f1f5f9;
@@ -28,6 +31,9 @@ html.light {
   --accent-modified-border: #fde68a;
   --accent-conn: #2563eb; --accent-conn-bg: #eff6ff;
   --accent-conn-border: #bfdbfe;
+  --badge-input-bg: #d1fae5;  --badge-input-text: #065f46;  --badge-input-border: #6ee7b7;
+  --badge-output-bg: #dbeafe; --badge-output-text: #1e40af; --badge-output-border: #93c5fd;
+  --badge-join-bg: #ede9fe;   --badge-join-text: #5b21b6;   --badge-join-border: #c4b5fd;
 }
 *, *::before, *::after { box-sizing: border-box; }
 body {
