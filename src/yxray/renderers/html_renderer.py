@@ -37,7 +37,8 @@ _TEMPLATE = """<!DOCTYPE html>
 #diff-details-wrap { overflow: hidden; transition: max-height 0.25s ease; }
 #diff-details-wrap.collapsed { max-height: 0 !important; }
 /* ---- Summary stat cards ---- */
-.stat-cards { display: flex; gap: 12px; margin-bottom: 24px; }
+#summary { max-width: 960px; margin: 0 auto; padding: 16px 32px 0; }
+.stat-cards { display: flex; gap: 12px; margin-bottom: 0; }
 .stat-card {
   flex: 1; border-radius: 8px; padding: 16px; cursor: pointer;
   border: 1px solid; transition: opacity 0.15s ease; text-decoration: none;
@@ -343,12 +344,6 @@ html.light .tool-row:hover { background: #f1f5f9; }
     </div>
   </div>
 </header>
-<div id="diff-details-toggle" onclick="toggleDiffDetails()">
-  <span class="diff-chevron" id="diff-chevron">&#9660;</span>
-  Diff Details
-</div>
-<div id="diff-details-wrap">
-<div class="container">
 <section id="summary">
   <div class="stat-cards">
     <a href="#heading-added" onclick="expandSection('added'); return true;" class="stat-card stat-card-added">
@@ -397,6 +392,12 @@ html.light .tool-row:hover { background: #f1f5f9; }
     </button>{% endif %}
   </div>
 </section>
+<div id="diff-details-toggle" onclick="toggleDiffDetails()">
+  <span class="diff-chevron closed" id="diff-chevron">&#9660;</span>
+  Diff Details
+</div>
+<div id="diff-details-wrap" class="collapsed" style="max-height:0">
+<div class="container">
 <div class="section-wrap">
   <div class="section-header section-header-added" id="heading-added">
     <span class="section-title">Added Tools</span>
@@ -614,6 +615,17 @@ function doReportSearch(q) {
 var DIFF_DATA = JSON.parse(document.getElementById('diff-data').textContent);
 
 function expandSection(sectionId) {
+    var wrap = document.getElementById('diff-details-wrap');
+    var chevron = document.getElementById('diff-chevron');
+    if (wrap && wrap.classList.contains('collapsed')) {
+        wrap.classList.remove('collapsed');
+        wrap.style.maxHeight = wrap.scrollHeight + 'px';
+        wrap.addEventListener('transitionend', function onEnd() {
+            wrap.style.maxHeight = '';
+            wrap.removeEventListener('transitionend', onEnd);
+        });
+        if (chevron) chevron.classList.remove('closed');
+    }
     var container = document.getElementById('section-' + sectionId);
     if (!container) return;
     var heading = document.getElementById('heading-' + sectionId);
