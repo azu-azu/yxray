@@ -36,6 +36,11 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 </div>
 
 <div id="split-view" class="split-view">
+  <div id="split-changes-col" class="split-changes-col">
+    <div class="split-changes-drag-handle"></div>
+    <div class="split-changes-header">Diff Details</div>
+    <div id="split-change-rows" class="split-change-rows"></div>
+  </div>
   <div class="split-graphs-col">
     <div class="split-pane">
       <div class="split-header">Before</div>
@@ -45,11 +50,6 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
       <div class="split-header">After</div>
       <div id="split-view-right" class="split-graph-canvas"></div>
     </div>
-  </div>
-  <div id="split-changes-col" class="split-changes-col">
-    <div class="split-changes-drag-handle"></div>
-    <div class="split-changes-header">Diff Details</div>
-    <div id="split-change-rows" class="split-change-rows"></div>
   </div>
 </div>
 
@@ -182,12 +182,12 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   position: relative;
 }
 .split-changes-drag-handle {
   position: absolute;
-  top: 0; left: 0;
+  top: 0; right: 0;
   width: 6px; height: 100%;
   cursor: col-resize;
   z-index: 10;
@@ -414,7 +414,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 @media (max-width: 800px) {
   .split-view { flex-direction: column; height: auto; }
   .split-pane { min-height: 400px; }
-  .split-changes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+  .split-changes-col { width: 100%; border-right: none; border-top: 1px solid var(--border); }
 }
 .graph-search-wrap { position: relative; display: flex; align-items: center; }
 .graph-search-input { width: 150px; padding: 5px 24px 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg); color: var(--text); outline: none; transition: width 0.2s; }
@@ -619,7 +619,7 @@ function closeSidePanel() {
     document.addEventListener('mouseup', onUpCol);
   });
   function onMoveCol(e) {
-    var dx = startX - e.clientX;
+    var dx = e.clientX - startX;
     var newW = Math.max(160, Math.min(Math.floor(window.innerWidth * 0.5), startW + dx));
     col.style.width = newW + 'px';
   }
