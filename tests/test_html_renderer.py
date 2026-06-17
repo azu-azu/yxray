@@ -67,7 +67,6 @@ def test_render_summary_counts_added() -> None:
     assert "Added" in html
     assert "Removed" in html
     assert "Modified" in html
-    assert "Connections" in html
 
 
 def test_render_summary_counts_modified() -> None:

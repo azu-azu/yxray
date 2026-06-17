@@ -239,13 +239,6 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
       </div>
       <div class="stat-count">{{ summary.removed }}</div>
     </div>
-    <div class="stat-card stat-card-conn">
-      <div class="stat-card-top">
-        <span class="stat-label">Connections</span>
-        <span class="stat-dot"></span>
-      </div>
-      <div class="stat-count">{{ summary.connections }}</div>
-    </div>
     {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
       <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
       <div class="stat-count">{{ summary.inputs }}</div>
