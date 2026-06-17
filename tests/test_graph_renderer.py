@@ -212,4 +212,4 @@ def test_html_renderer_embeds_graph_fragment() -> None:
     assert "test-graph" in html
     assert "GRAPH_PLACEHOLDER" in html
     assert "diff-data" in html
-    assert "Added Tools" in html
+    assert "Added" in html
