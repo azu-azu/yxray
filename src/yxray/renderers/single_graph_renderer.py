@@ -262,8 +262,8 @@ _HTML_TEMPLATE = """\
     .io-stat-output { color: #1e40af; border-color: #93c5fd; background: #dbeafe; }
     .io-stat-join   { color: #5b21b6; border-color: #c4b5fd; background: #ede9fe; }
     .io-stat-count  { font-size: 12px; font-weight: 700; }
-    /* ---- Left panels (summary + insights) ---- */
-    #summary-panel, #insights-panel {
+    /* ---- Left panels (summary + insights + search-results) ---- */
+    #summary-panel, #insights-panel, #search-results-panel {
       position: fixed;
       top: 0; left: 0;
       width: 640px; height: 100%;
@@ -277,8 +277,8 @@ _HTML_TEMPLATE = """\
       z-index: 1000;
       border-radius: 0 8px 8px 0;
     }
-    #summary-panel.open, #insights-panel.open { transform: translateX(0); }
-    #summary-panel-drag-handle, #insights-panel-drag-handle {
+    #summary-panel.open, #insights-panel.open, #search-results-panel.open { transform: translateX(0); }
+    #summary-panel-drag-handle, #insights-panel-drag-handle, #search-results-panel-drag-handle {
       position: absolute;
       top: 0; right: 0;
       width: 6px; height: 100%;
@@ -287,19 +287,22 @@ _HTML_TEMPLATE = """\
       user-select: none;
     }
     #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging,
-    #insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging {
+    #insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging,
+    #search-results-panel-drag-handle:hover, #search-results-panel-drag-handle.dragging {
       background: rgba(148,163,184,0.18);
     }
-    #summary-panel-header, #insights-panel-header {
+    #summary-panel-header, #insights-panel-header, #search-results-panel-header {
       padding: 12px 16px 10px;
       border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
     }
-    #insights-panel-header span, #summary-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
     #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #insights-panel-body > * { direction: ltr; }
+    #search-results-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #search-results-panel-body > * { direction: ltr; }
     /* ---- Containers panel ---- */
     #containers-panel {
       position: fixed; top: 0; left: 0;
@@ -377,6 +380,7 @@ _HTML_TEMPLATE = """\
     .step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
     .step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
     .step-expand-arrow { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; transition: transform 0.15s ease; }
+    .search-mark { background: rgba(245,158,11,0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
     .step-expand-arrow.open { transform: rotate(90deg); }
     .step-detail { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
     .step-detail-inner { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
@@ -491,6 +495,14 @@ _HTML_TEMPLATE = """\
     </div>
   </div>
   {% endif %}
+  <div id="search-results-panel">
+    <div id="search-results-panel-drag-handle"></div>
+    <div id="search-results-panel-header">
+      <span id="search-results-panel-title">Results</span>
+      <button class="panel-close" onclick="closeSearchResultsPanel()">&times;</button>
+    </div>
+    <div id="search-results-panel-body"></div>
+  </div>
   <div id="config-panel">
     <div id="panel-drag-handle"></div>
     <div class="panel-title">
@@ -573,6 +585,8 @@ function focusNode(toolId, clickedEl) {
 }
 
 var _insightsPanelActiveRole = null;
+var _searchPrevPanel = null;
+var _searchResultsFocusEl = null;
 
 function _syncPanelBtnState() {
     var ip = document.getElementById('insights-panel');
@@ -584,6 +598,98 @@ function _syncPanelBtnState() {
     if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
     if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
     if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
+}
+
+function openSearchResultsPanel(entries) {
+    var srp = document.getElementById('search-results-panel');
+    if (!srp) return;
+    if (!srp.classList.contains('open')) {
+        var ip = document.getElementById('insights-panel');
+        var sp = document.getElementById('summary-panel');
+        var cp = document.getElementById('containers-panel');
+        if (ip && ip.classList.contains('open')) _searchPrevPanel = 'insights';
+        else if (sp && sp.classList.contains('open')) _searchPrevPanel = 'summary';
+        else if (cp && cp.classList.contains('open')) _searchPrevPanel = 'containers';
+        else _searchPrevPanel = null;
+        if (ip) ip.classList.remove('open');
+        if (sp) sp.classList.remove('open');
+        if (cp) cp.classList.remove('open');
+    }
+    var body = document.getElementById('search-results-panel-body');
+    body.innerHTML = '';
+    var title = document.getElementById('search-results-panel-title');
+    if (title) title.textContent = 'Results (' + entries.length + ')';
+    var ol = document.createElement('ol');
+    ol.className = 'summary-steps';
+    entries.forEach(function(entry, idx) {
+        var li = document.createElement('li');
+        li.className = 'summary-step summary-step-' + (entry.category || 'unknown');
+        li.onclick = function() { if (typeof toggleStepDetail === 'function') toggleStepDetail(this); };
+        var row = document.createElement('div');
+        row.className = 'step-row';
+        var num = document.createElement('span');
+        num.className = 'step-num';
+        num.textContent = (idx + 1) + '.';
+        var badge = document.createElement('span');
+        badge.className = 'step-badge step-badge-' + (entry.category || 'unknown');
+        badge.textContent = entry.shortType;
+        badge.onclick = (function(id, badgeEl) {
+            return function(e) {
+                e.stopPropagation();
+                if (_searchResultsFocusEl) _searchResultsFocusEl.classList.remove('focused');
+                badgeEl.classList.add('focused');
+                _searchResultsFocusEl = badgeEl;
+                if (typeof network !== 'undefined' && network) {
+                    var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
+                    if (visId !== null) {
+                        network.selectNodes([visId]);
+                        network.focus(visId, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                    }
+                }
+            };
+        })(entry.id, badge);
+        var desc = document.createElement('span');
+        desc.className = 'step-desc';
+        desc.textContent = entry.label;
+        var arrow = document.createElement('span');
+        arrow.className = 'step-expand-arrow';
+        arrow.textContent = '▶';
+        row.appendChild(num);
+        row.appendChild(badge);
+        row.appendChild(desc);
+        row.appendChild(arrow);
+        var detail = document.createElement('div');
+        detail.className = 'step-detail';
+        var configData = (typeof CONFIG_MAP !== 'undefined' && CONFIG_MAP) ? (CONFIG_MAP[String(entry.id)] || {}) : {};
+        detail.dataset.config = JSON.stringify(configData);
+        var inner = document.createElement('div');
+        inner.className = 'step-detail-inner';
+        detail.appendChild(inner);
+        li.appendChild(row);
+        li.appendChild(detail);
+        ol.appendChild(li);
+    });
+    body.appendChild(ol);
+    srp.classList.add('open');
+    _syncPanelBtnState();
+}
+
+function closeSearchResultsPanel() {
+    var srp = document.getElementById('search-results-panel');
+    if (srp) srp.classList.remove('open');
+    _searchResultsFocusEl = null;
+    if (_searchPrevPanel === 'insights') {
+        var ip = document.getElementById('insights-panel');
+        if (ip) ip.classList.add('open');
+    } else if (_searchPrevPanel === 'summary') {
+        var sp = document.getElementById('summary-panel');
+        if (sp) sp.classList.add('open');
+    } else if (_searchPrevPanel === 'containers') {
+        var cp = document.getElementById('containers-panel');
+        if (cp) cp.classList.add('open');
+    }
+    _searchPrevPanel = null;
+    _syncPanelBtnState();
 }
 
 function openInsightsPanel() {
@@ -795,6 +901,33 @@ function focusContainer(containerIdx, clickedEl) {
 (function() {
   var panel = document.getElementById('containers-panel');
   var handle = document.getElementById('containers-panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+// ── Search results panel drag-resize ─────────────────────────────────────
+(function() {
+  var panel = document.getElementById('search-results-panel');
+  var handle = document.getElementById('search-results-panel-drag-handle');
   if (!handle || !panel) return;
   var startX, startW;
   handle.addEventListener('mousedown', function(e) {

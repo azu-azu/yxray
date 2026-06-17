@@ -26,8 +26,8 @@ def test_render_self_contained() -> None:
     # Inline CSS and JS must be present
     assert "<style>" in html
     assert "<script>" in html
-    # DIFF_DATA must be embedded
-    assert "DIFF_DATA" in html
+    # diff-data JSON element must be embedded
+    assert "diff-data" in html
 
 
 def test_report_graph_button_scrolls_to_section() -> None:
@@ -55,30 +55,45 @@ def test_render_header() -> None:
 def test_render_summary_counts_added() -> None:
     """Summary panel shows correct added count (REPT-01)."""
     html = HTMLRenderer().render(SINGLE_ADDED)
-    assert "Added: 1" in html
-    assert "Removed: 0" in html
-    assert "Modified: 0" in html
-    assert "Connections: 0" in html
+    # Verify counts via the embedded diff-data JSON (sr-only spans were removed)
+    start = html.index('id="diff-data">') + len('id="diff-data">')
+    end = html.index("</script>", start)
+    diff_data = json.loads(html[start:end])
+    assert len(diff_data["added"]) == 1
+    assert len(diff_data["removed"]) == 0
+    assert len(diff_data["modified"]) == 0
+    assert len(diff_data["connections"]) == 0
+    # Stat card labels are still present
+    assert "Added" in html
+    assert "Removed" in html
+    assert "Modified" in html
 
 
 def test_render_summary_counts_modified() -> None:
     """Summary panel shows correct modified and connection counts (REPT-01)."""
     html = HTMLRenderer().render(SINGLE_MODIFIED)
-    assert "Added: 0" in html
-    assert "Modified: 1" in html
+    start = html.index('id="diff-data">') + len('id="diff-data">')
+    end = html.index("</script>", start)
+    diff_data = json.loads(html[start:end])
+    assert len(diff_data["added"]) == 0
+    assert len(diff_data["modified"]) == 1
     html2 = HTMLRenderer().render(WITH_CONNECTION)
-    assert "Connections: 1" in html2
+    start2 = html2.index('id="diff-data">') + len('id="diff-data">')
+    end2 = html2.index("</script>", start2)
+    diff_data2 = json.loads(html2[start2:end2])
+    assert len(diff_data2["connections"]) == 1
 
 
 def test_render_modified_tool_skeleton() -> None:
-    """Modified tool row collapsed in initial HTML; detail built lazily (REPT-02)."""
+    """Modified tool data is present in diff-data JSON for lazy rendering (REPT-02)."""
     html = HTMLRenderer().render(SINGLE_MODIFIED)
-    # Tool ID 703 row must be present
-    assert "ID: 703" in html
-    # The empty detail container must exist
-    assert "detail-modified-703" in html
-    # Skeleton div must be hidden (detail not pre-rendered at template time)
-    assert 'id="detail-modified-703" hidden' in html or "detail-modified-703" in html
+    # Tool ID 703 data must be present in the embedded diff-data JSON
+    start = html.index('id="diff-data">') + len('id="diff-data">')
+    end = html.index("</script>", start)
+    diff_data = json.loads(html[start:end])
+    modified = diff_data["modified"]
+    assert len(modified) == 1
+    assert modified[0]["tool_id"] == 703
 
 
 def test_render_added_tool_in_diff_data() -> None:
