@@ -345,6 +345,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   color: var(--text);
 }
 .split-change-row:hover { background: var(--surface-2); }
+.split-change-row.focused { background: rgba(245,158,11,0.15); outline: 1px solid #f59e0b; }
 
 .split-change-badge {
   display: inline-block;
@@ -928,6 +929,8 @@ function focusNode(toolId) {
   }
 }
 
+var _focusChangeRowEl = null;
+
 function buildCenterPanel() {
   var container = document.getElementById('split-change-rows');
   var BADGE_COLORS = {added: '#6ee7b7', removed: '#fca5a5', modified: '#fcd34d'};
@@ -968,7 +971,12 @@ function buildCenterPanel() {
     row.appendChild(badge);
     row.appendChild(label);
     row.appendChild(catTag);
-    row.addEventListener('click', function() { focusNode(item.tool_id); });
+    row.addEventListener('click', function() {
+      if (_focusChangeRowEl) _focusChangeRowEl.classList.remove('focused');
+      row.classList.add('focused');
+      _focusChangeRowEl = row;
+      focusNode(item.tool_id);
+    });
     container.appendChild(row);
   });
 }
