@@ -46,7 +46,8 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
       <div id="split-view-right" class="split-graph-canvas"></div>
     </div>
   </div>
-  <div class="split-changes-col">
+  <div id="split-changes-col" class="split-changes-col">
+    <div class="split-changes-drag-handle"></div>
     <div class="split-changes-header">Diff Details</div>
     <div id="split-change-rows" class="split-change-rows"></div>
   </div>
@@ -178,9 +179,23 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 
 .split-changes-col {
   width: 280px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
+  position: relative;
+}
+.split-changes-drag-handle {
+  position: absolute;
+  top: 0; left: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.split-changes-drag-handle:hover,
+.split-changes-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
 }
 
 .split-changes-header {
@@ -588,6 +603,32 @@ function openSidePanel(nodeId, entry) {
 function closeSidePanel() {
   document.getElementById('diff-panel').classList.remove('open');
 }
+
+// Split changes column drag-resize
+(function() {
+  var col = document.getElementById('split-changes-col');
+  var handle = col ? col.querySelector('.split-changes-drag-handle') : null;
+  if (!handle || !col) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = col.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMoveCol);
+    document.addEventListener('mouseup', onUpCol);
+  });
+  function onMoveCol(e) {
+    var dx = startX - e.clientX;
+    var newW = Math.max(160, Math.min(Math.floor(window.innerWidth * 0.5), startW + dx));
+    col.style.width = newW + 'px';
+  }
+  function onUpCol() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMoveCol);
+    document.removeEventListener('mouseup', onUpCol);
+  }
+})();
 
 // Diff panel drag-resize
 (function() {
