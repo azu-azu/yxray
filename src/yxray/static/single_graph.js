@@ -1088,73 +1088,64 @@ function initNetwork() {
     if (hasMemo) saveMemos();
   });
 
-  // Draw a rounded-rect border around each expanded cluster's member nodes.
-  // Runs on every canvas redraw so it automatically follows zoom / pan / drag.
+  // Single afterDrawing handler: cluster boxes, memo handles, file subtitles.
+  // Consolidated from three separate listeners to reduce per-frame overhead.
   network.on('afterDrawing', function(ctx) {
+    // 1. Draw rounded-rect border around each expanded cluster's member nodes.
     var groupKeys = Object.keys(AppState.groupMembers);
-    if (groupKeys.length === 0) return;
+    if (groupKeys.length > 0) {
+      ctx.save();
+      groupKeys.forEach(function(groupKey) {
+        var group = AppState.groupMembers[groupKey];
+        var positions = network.getPositions(group.memberIds);
 
-    ctx.save();
-    groupKeys.forEach(function(groupKey) {
-      var group = AppState.groupMembers[groupKey];
-      var positions = network.getPositions(group.memberIds);
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        var hasNode = false;
+        group.memberIds.forEach(function(mid) {
+          var pos = positions[mid];
+          if (!pos) return;
+          hasNode = true;
+          minX = Math.min(minX, pos.x);
+          minY = Math.min(minY, pos.y);
+          maxX = Math.max(maxX, pos.x);
+          maxY = Math.max(maxY, pos.y);
+        });
+        if (!hasNode) return;
 
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      var hasNode = false;
-      group.memberIds.forEach(function(mid) {
-        var pos = positions[mid];
-        if (!pos) return;
-        hasNode = true;
-        minX = Math.min(minX, pos.x);
-        minY = Math.min(minY, pos.y);
-        maxX = Math.max(maxX, pos.x);
-        maxY = Math.max(maxY, pos.y);
+        var x = minX - BOX_PAD_X, y = minY - BOX_PAD_Y;
+        var w = maxX - minX + BOX_PAD_X * 2;
+        var h = maxY - minY + BOX_PAD_Y * 2;
+        var r = BOX_RADIUS;
+
+        var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y,     x + w, y + r,     r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x,     y + h, x,     y + h - r, r);
+        ctx.lineTo(x,     y + r);
+        ctx.arcTo(x,     y,     x + r, y,          r);
+        ctx.closePath();
+
+        ctx.fillStyle = bs.fill;
+        ctx.fill();
+        ctx.strokeStyle = bs.stroke;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = bs.label;
+        ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+        ctx.fillText(group.toolType, x + 8, y - 5);
       });
-      if (!hasNode) return;
+      ctx.restore();
+    }
 
-      var x = minX - BOX_PAD_X, y = minY - BOX_PAD_Y;
-      var w = maxX - minX + BOX_PAD_X * 2;
-      var h = maxY - minY + BOX_PAD_Y * 2;
-      var r = BOX_RADIUS;
-
-      var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-      var strokeColor = bs.stroke;
-      var fillColor   = bs.fill;
-      var labelColor  = bs.label;
-
-      // Rounded rectangle path
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.arcTo(x + w, y,     x + w, y + r,     r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-      ctx.lineTo(x + r, y + h);
-      ctx.arcTo(x,     y + h, x,     y + h - r, r);
-      ctx.lineTo(x,     y + r);
-      ctx.arcTo(x,     y,     x + r, y,          r);
-      ctx.closePath();
-
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([7, 4]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Group label in the top-left corner of the box
-      ctx.fillStyle = labelColor;
-      ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
-      ctx.fillText(group.toolType, x + 8, y - 5);
-    });
-    ctx.restore();
-  });
-
-  // Draw resize handles (small orange squares at bottom-right corner) for all memo nodes.
-  // Also refreshes AppState.memoHandles used for hit-testing in the mousedown listener.
-  network.on('afterDrawing', function(ctx) {
+    // 2. Memo resize handles + refresh AppState.memoHandles for hit-testing.
     AppState.memoHandles = {};
     Object.keys(AppState.memoData).forEach(function(memoId) {
       if (!nodesDataset.get(memoId)) return;
@@ -1171,17 +1162,13 @@ function initNetwork() {
       ctx.stroke();
       ctx.restore();
     });
-  });
 
-  // Draw file path subtitles below input/output nodes (those with a subtitle field).
-  // Shown only when the node is currently in the DataSet (not clustered away).
-  network.on('afterDrawing', function(ctx) {
+    // 3. File path subtitles below input/output nodes (not shown when clustered).
     NODES_DATA.forEach(function(nd) {
       if (!nd.subtitle) return;
-      if (!nodesDataset.get(nd.id)) return;  // clustered: skip
+      if (!nodesDataset.get(nd.id)) return;
       var bb = network.getBoundingBox(nd.id);
       if (!bb) return;
-      // Extract filename from path — handles both / and \ separators
       var bsIdx = nd.subtitle.lastIndexOf(String.fromCharCode(92));
       var fsIdx = nd.subtitle.lastIndexOf('/');
       var sepIdx = Math.max(bsIdx, fsIdx);

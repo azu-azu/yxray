@@ -259,11 +259,11 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   border-radius: 50%;
   margin: 0 3px;
 }
-.legend-dot-added { background: #6ee7b7; border: 1px solid #059669; }
-.legend-dot-removed { background: #fca5a5; border: 1px solid #dc2626; }
-.legend-dot-modified { background: #fcd34d; border: 1px solid #b45309; }
-.legend-dot-connection { background: #93c5fd; border: 1px solid #1d4ed8; }
-.legend-dot-unchanged { background: #e2e8f0; border: 1px solid #94a3b8; }
+.legend-dot-added      { background: var(--accent-added-border);    border: 1px solid var(--accent-added); }
+.legend-dot-removed    { background: var(--accent-removed-border);  border: 1px solid var(--accent-removed); }
+.legend-dot-modified   { background: var(--accent-modified-border); border: 1px solid var(--accent-modified); }
+.legend-dot-connection { background: var(--accent-conn-border);     border: 1px solid var(--accent-conn); }
+.legend-dot-unchanged  { background: var(--border);                 border: 1px solid var(--text-muted); }
 
 .diff-panel {
   position: fixed;
@@ -519,6 +519,7 @@ function isDark() {
   return !document.documentElement.classList.contains('light');
 }
 
+// NOTE: identical copy also lives in static/single_graph.js — keep in sync.
 function contrastColor(hex) {
   if (!hex || hex.length < 7) return '#ffffff';
   var r = parseInt(hex.slice(1,3), 16) / 255;

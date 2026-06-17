@@ -117,9 +117,9 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 .ki-row:hover { background: rgba(148,163,184,0.12); }
 .ki-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
 .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid; }
-.ki-badge-input  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
-.ki-badge-output { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
-.ki-badge-join   { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.ki-badge-input  { background: var(--badge-input-bg);  color: var(--badge-input-text);  border-color: var(--badge-input-border); }
+.ki-badge-output { background: var(--badge-output-bg); color: var(--badge-output-text); border-color: var(--badge-output-border); }
+.ki-badge-join   { background: var(--badge-join-bg);   color: var(--badge-join-text);   border-color: var(--badge-join-border); }
 .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .ctrl-btn {
