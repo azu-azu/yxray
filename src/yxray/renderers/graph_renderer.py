@@ -36,6 +36,17 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 </div>
 
 <div id="split-view" class="split-view">
+  <div id="split-changes-col" class="split-changes-col">
+    <div class="split-changes-drag-handle"></div>
+    <div class="split-changes-header">
+      Diff Details
+      <div class="split-changes-actions">
+        <button class="split-action-btn" onclick="expandAllChanges()">All ▼</button>
+        <button class="split-action-btn" onclick="collapseAllChanges()">All ▲</button>
+      </div>
+    </div>
+    <div id="split-change-rows" class="split-change-rows"></div>
+  </div>
   <div class="split-graphs-col">
     <div class="split-pane">
       <div class="split-header">Before</div>
@@ -45,10 +56,6 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
       <div class="split-header">After</div>
       <div id="split-view-right" class="split-graph-canvas"></div>
     </div>
-  </div>
-  <div class="split-changes-col">
-    <div class="split-changes-header">Changes</div>
-    <div id="split-change-rows" class="split-change-rows"></div>
   </div>
 </div>
 
@@ -178,9 +185,23 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 
 .split-changes-col {
   width: 280px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.split-changes-drag-handle {
+  position: absolute;
+  top: 0; right: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.split-changes-drag-handle:hover,
+.split-changes-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
 }
 
 .split-changes-header {
@@ -195,7 +216,17 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.split-changes-actions { display: flex; gap: 4px; }
+.split-action-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer;
+  font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+.split-action-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .split-change-rows {
   flex: 1;
@@ -312,20 +343,25 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   letter-spacing: 1px;
 }
 
-.panel-before {
-  background: var(--accent-removed-bg);
-  border-left: 3px solid var(--accent-removed);
-  padding: 6px 10px;
-  margin: 4px 0;
+.diff-unified {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
+  border: 1px solid var(--border);
 }
-.panel-after {
-  background: var(--accent-added-bg);
-  border-left: 3px solid var(--accent-added);
-  padding: 6px 10px;
-  margin: 4px 0;
+.diff-line { display: flex; line-height: 1.5; }
+.diff-line-del { background: var(--accent-removed-bg); }
+.diff-line-ins { background: var(--accent-added-bg); }
+.diff-line-ctx { }
+.diff-line-skip { justify-content: center; padding: 2px 0; }
+.diff-gutter {
+  width: 18px; flex-shrink: 0; text-align: center; font-weight: 700; padding: 0 2px;
+  user-select: none;
 }
-.panel-before-label { font-weight: 600; color: var(--accent-removed); }
-.panel-after-label { font-weight: 600; color: var(--accent-added); }
+.diff-line-del .diff-gutter { color: var(--accent-removed); }
+.diff-line-ins .diff-gutter { color: var(--accent-added); }
+.diff-text { flex: 1; white-space: pre-wrap; word-break: break-all; padding: 0 6px; color: var(--text); }
+.diff-line-ctx .diff-text { color: var(--text-muted); }
+.diff-skip-text { color: var(--text-muted); font-style: italic; font-size: 11px; }
 .value-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -335,16 +371,32 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 }
 
 .split-change-row {
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text);
+}
+.change-row-header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  font-size: 12px;
-  color: var(--text);
 }
-.split-change-row:hover { background: var(--surface-2); }
+.change-row-header:hover { background: var(--surface-2); }
+.change-row-header.focused { background: rgba(245,158,11,0.15); outline: 1px solid #f59e0b; }
+.change-chevron {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  user-select: none;
+}
+.change-chevron.open { transform: rotate(90deg); }
+.change-detail {
+  display: none;
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
 
 .split-change-badge {
   display: inline-block;
@@ -378,7 +430,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 @media (max-width: 800px) {
   .split-view { flex-direction: column; height: auto; }
   .split-pane { min-height: 400px; }
-  .split-changes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+  .split-changes-col { width: 100%; border-right: none; border-top: 1px solid var(--border); }
 }
 .graph-search-wrap { position: relative; display: flex; align-items: center; }
 .graph-search-input { width: 150px; padding: 5px 24px 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg); color: var(--text); outline: none; transition: width 0.2s; }
@@ -568,6 +620,32 @@ function closeSidePanel() {
   document.getElementById('diff-panel').classList.remove('open');
 }
 
+// Split changes column drag-resize
+(function() {
+  var col = document.getElementById('split-changes-col');
+  var handle = col ? col.querySelector('.split-changes-drag-handle') : null;
+  if (!handle || !col) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = col.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMoveCol);
+    document.addEventListener('mouseup', onUpCol);
+  });
+  function onMoveCol(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(160, Math.min(Math.floor(window.innerWidth * 0.5), startW + dx));
+    col.style.width = newW + 'px';
+  }
+  function onUpCol() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMoveCol);
+    document.removeEventListener('mouseup', onUpCol);
+  }
+})();
+
 // Diff panel drag-resize
 (function() {
   var panel = document.getElementById('diff-panel');
@@ -601,37 +679,7 @@ function buildPanelContent(panel, entry) {
   titleEl.textContent = entry.data.tool_type + ' (ID: ' + entry.data.tool_id + ') \u2014 ' + entry.category;
   panel.appendChild(titleEl);
   if (entry.category === 'modified') {
-    entry.data.field_diffs.forEach(function(fd) {
-      var row = document.createElement('div');
-      row.className = 'panel-field-row';
-      var nameEl = document.createElement('div');
-      nameEl.className = 'panel-field-name';
-      nameEl.textContent = fd.field;
-      var beforeRow = document.createElement('div');
-      beforeRow.className = 'panel-before';
-      var beforeLabel = document.createElement('span');
-      beforeLabel.className = 'panel-before-label';
-      beforeLabel.textContent = 'Before: ';
-      var beforeVal = document.createElement('span');
-      beforeVal.className = 'value-mono';
-      beforeVal.textContent = formatVal(fd.before);
-      beforeRow.appendChild(beforeLabel);
-      beforeRow.appendChild(beforeVal);
-      var afterRow = document.createElement('div');
-      afterRow.className = 'panel-after';
-      var afterLabel = document.createElement('span');
-      afterLabel.className = 'panel-after-label';
-      afterLabel.textContent = 'After: ';
-      var afterVal = document.createElement('span');
-      afterVal.className = 'value-mono';
-      afterVal.textContent = formatVal(fd.after);
-      afterRow.appendChild(afterLabel);
-      afterRow.appendChild(afterVal);
-      row.appendChild(nameEl);
-      row.appendChild(beforeRow);
-      row.appendChild(afterRow);
-      panel.appendChild(row);
-    });
+    panel.appendChild(buildConfigDiff(entry.data.old_config, entry.data.new_config));
   } else {
     var config = entry.data.config || {};
     Object.keys(config).forEach(function(k) {
@@ -654,6 +702,95 @@ function formatVal(v) {
   if (v === null || v === undefined) return 'null';
   if (typeof v === 'object') return JSON.stringify(v, null, 2);
   return String(v);
+}
+
+function lcsOps(arr, brr) {
+  var m = arr.length, n = brr.length, i, j;
+  var dp = new Array(m + 1);
+  for (i = 0; i <= m; i++) { dp[i] = new Array(n + 1).fill(0); }
+  for (i = 1; i <= m; i++) {
+    for (j = 1; j <= n; j++) {
+      dp[i][j] = arr[i-1] === brr[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  var ops = [];
+  i = m; j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && arr[i-1] === brr[j-1]) {
+      ops.push({type: 'equal', val: arr[i-1]}); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.push({type: 'insert', val: brr[j-1]}); j--;
+    } else {
+      ops.push({type: 'delete', val: arr[i-1]}); i--;
+    }
+  }
+  ops.reverse();
+  return ops;
+}
+
+function flattenConfig(obj, prefix) {
+  if (prefix === undefined) prefix = '';
+  if (obj === null || obj === undefined) return [prefix + ': null'];
+  if (typeof obj !== 'object') return [prefix + ': ' + obj];
+  if (Array.isArray(obj)) {
+    var out = [];
+    obj.forEach(function(item, i) {
+      var k = prefix ? prefix + '[' + i + ']' : '[' + i + ']';
+      flattenConfig(item, k).forEach(function(l) { out.push(l); });
+    });
+    return out;
+  }
+  var out = [];
+  Object.keys(obj).forEach(function(k) {
+    var sub = prefix ? prefix + '.' + k : k;
+    flattenConfig(obj[k], sub).forEach(function(l) { out.push(l); });
+  });
+  return out;
+}
+
+function buildConfigDiff(oldCfg, newCfg) {
+  var CONTEXT = 2;
+  var oldLines = flattenConfig(oldCfg, '');
+  var newLines = flattenConfig(newCfg, '');
+  var ops = lcsOps(oldLines, newLines);
+  var near = new Array(ops.length).fill(false);
+  for (var i = 0; i < ops.length; i++) {
+    if (ops[i].type !== 'equal') {
+      for (var j = Math.max(0, i - CONTEXT); j <= Math.min(ops.length - 1, i + CONTEXT); j++) near[j] = true;
+    }
+  }
+  var wrap = document.createElement('div');
+  wrap.className = 'diff-unified';
+  var skip = 0;
+  function flushSkip() {
+    if (!skip) return;
+    var skipEl = document.createElement('div');
+    skipEl.className = 'diff-line diff-line-skip';
+    var t = document.createElement('span');
+    t.className = 'diff-skip-text';
+    t.textContent = '⋯ ' + skip + ' unchanged line' + (skip === 1 ? '' : 's') + ' ⋯';
+    skipEl.appendChild(t);
+    wrap.appendChild(skipEl);
+    skip = 0;
+  }
+  ops.forEach(function(op, idx) {
+    if (op.type === 'equal' && !near[idx]) { skip++; return; }
+    flushSkip();
+    var lineEl = document.createElement('div');
+    var cls = op.type === 'equal' ? 'ctx' : op.type === 'delete' ? 'del' : 'ins';
+    lineEl.className = 'diff-line diff-line-' + cls;
+    var gutter = document.createElement('span');
+    gutter.className = 'diff-gutter';
+    gutter.textContent = op.type === 'equal' ? ' ' : op.type === 'delete' ? '-' : '+';
+    var text = document.createElement('span');
+    text.className = 'diff-text';
+    text.textContent = op.val;
+    lineEl.appendChild(gutter);
+    lineEl.appendChild(text);
+    wrap.appendChild(lineEl);
+  });
+  flushSkip();
+  return wrap;
 }
 
 // Escape key and overlay click
@@ -774,8 +911,8 @@ function initSplitNetworks() {
   var leftNodeIds = new Set(NODES_OLD.filter(function(n) { return n.status !== 'ghost_added'; }).map(function(n) { return n.id; }));
   var rightNodeIds = new Set(NODES_NEW.filter(function(n) { return n.status !== 'ghost_removed'; }).map(function(n) { return n.id; }));
 
-  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to); });
-  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to); });
+  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to) && e.status !== 'added'; });
+  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to) && e.status !== 'removed'; });
 
   nodesDatasetLeft = new vis.DataSet(NODES_OLD);
   edgesDatasetLeft = new vis.DataSet(leftEdges);
@@ -787,9 +924,9 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
-  networkLeft.on('dragEnd', syncLeftToRight);
+  networkLeft.on('dragging', syncLeftToRight);
   networkLeft.on('zoom', syncLeftToRight);
-  networkRight.on('dragEnd', syncRightToLeft);
+  networkRight.on('dragging', syncRightToLeft);
   networkRight.on('zoom', syncRightToLeft);
 
   function onSplitNodeClick(params) {
@@ -928,6 +1065,22 @@ function focusNode(toolId) {
   }
 }
 
+function expandAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && !chevron.classList.contains('open')) header.click();
+  });
+}
+
+function collapseAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && chevron.classList.contains('open')) header.click();
+  });
+}
+
+var _focusChangeRowEl = null;
+
 function buildCenterPanel() {
   var container = document.getElementById('split-change-rows');
   var BADGE_COLORS = {added: '#6ee7b7', removed: '#fca5a5', modified: '#fcd34d'};
@@ -947,9 +1100,14 @@ function buildCenterPanel() {
   entries.forEach(function(e) {
     var item = e.item;
     var cat = e.cat;
-    var row = document.createElement('div');
-    row.className = 'split-change-row';
-    row.setAttribute('data-tool-id', item.tool_id);
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'split-change-row';
+    wrapper.setAttribute('data-tool-id', item.tool_id);
+
+    // Header row
+    var header = document.createElement('div');
+    header.className = 'change-row-header';
 
     var badge = document.createElement('span');
     badge.className = 'split-change-badge';
@@ -965,11 +1123,48 @@ function buildCenterPanel() {
     catTag.style.color = '#64748b';
     catTag.textContent = cat;
 
-    row.appendChild(badge);
-    row.appendChild(label);
-    row.appendChild(catTag);
-    row.addEventListener('click', function() { focusNode(item.tool_id); });
-    container.appendChild(row);
+    var chevron = document.createElement('span');
+    chevron.className = 'change-chevron';
+    chevron.textContent = '▶';
+
+    header.appendChild(badge);
+    header.appendChild(label);
+    header.appendChild(catTag);
+    header.appendChild(chevron);
+
+    // Detail area (built lazily on first open)
+    var detail = document.createElement('div');
+    detail.className = 'change-detail';
+
+    header.addEventListener('click', function() {
+      if (_focusChangeRowEl) _focusChangeRowEl.classList.remove('focused');
+      header.classList.add('focused');
+      _focusChangeRowEl = header;
+      focusNode(item.tool_id);
+
+      var isOpen = chevron.classList.contains('open');
+      if (!isOpen) {
+        if (!detail.dataset.built) {
+          detail.dataset.built = 'true';
+          if (cat === 'modified') {
+            detail.appendChild(buildConfigDiff(item.old_config, item.new_config));
+          } else if (cat === 'added') {
+            detail.appendChild(buildConfigDiff({}, item.config));
+          } else {
+            detail.appendChild(buildConfigDiff(item.config, {}));
+          }
+        }
+        detail.style.display = 'block';
+        chevron.classList.add('open');
+      } else {
+        detail.style.display = 'none';
+        chevron.classList.remove('open');
+      }
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(detail);
+    container.appendChild(wrapper);
   });
 }
 
@@ -1231,10 +1426,31 @@ class GraphRenderer:
                     f"{entry['label']} | modified | {count} field(s) changed"
                 )
 
-        # Build edges list
-        edges_json: list[dict[str, Any]] = [
-            {"id": f"{src}-{dst}", "from": src, "to": dst} for src, dst in G.edges()
-        ]
+        # Build edges list — color connection-diff edges (removed=red, added=green)
+        edge_removed_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "removed"
+        }
+        edge_added_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "added"
+        }
+        edges_json: list[dict[str, Any]] = []
+        for src, dst in G.edges():
+            edge: dict[str, Any] = {"id": f"{src}-{dst}", "from": src, "to": dst}
+            if (src, dst) in edge_removed_set:
+                edge["color"] = {"color": "#fca5a5", "highlight": "#dc2626", "hover": "#dc2626"}
+                edge["width"] = 2.5
+                edge["status"] = "removed"
+            elif (src, dst) in edge_added_set:
+                edge["color"] = {"color": "#6ee7b7", "highlight": "#059669", "hover": "#059669"}
+                edge["width"] = 2.5
+                edge["status"] = "added"
+            else:
+                edge["status"] = "unchanged"
+            edges_json.append(edge)
 
         # Build split view node lists
         old_vis_nodes, new_vis_nodes = build_split_node_list(

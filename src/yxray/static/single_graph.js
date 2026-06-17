@@ -23,6 +23,8 @@ var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
 var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
+var _containerBounds       = [];   // [{x1,y1,x2,y2}] updated each beforeDrawing frame
+var _containerDragState    = null; // active container drag, or null
 // Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
 function contrastColor(hex) {
   if (!hex || hex.length < 7) return '#ffffff';
@@ -531,7 +533,7 @@ function recollapseGroup(groupKey) {
   // Re-apply search so the newly restored cluster node is highlighted/dimmed correctly.
   if (searchActive) {
     var q = document.getElementById('search-input').value;
-    if (q) doSearch(q);
+    if (q) doSearch(q, true, true);
   }
 }
 
@@ -615,7 +617,7 @@ function expandCluster(cid) {
   if (searchActive) {
     var q = document.getElementById('search-input').value;
     if (q) {
-      doSearch(q, true);
+      doSearch(q, true, true);
       if (focusFirstVisibleSearchMatch(q, expandedMemberIds)) return;
     }
   }
@@ -884,6 +886,7 @@ function initNetwork() {
   //    initial canvas position fell inside the container's XML bounds)
   network.on('beforeDrawing', function(ctx) {
     if (CONTAINERS_DATA.length === 0) return;
+    _containerBounds = new Array(CONTAINERS_DATA.length);
     ctx.save();
 
     CONTAINERS_DATA.forEach(function(c, idx) {
@@ -926,6 +929,12 @@ function initNetwork() {
       var w = maxX - minX + CONT_PAD_X * 2;
       var h = maxY - minY + CONT_PAD_Y * 2;
       var r = CONT_R;
+      // Cache label hit area for container drag. Label is drawn at (x+10, y-6).
+      if (c.label) {
+        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+        var tw = ctx.measureText(c.label).width;
+        _containerBounds[idx] = {x1: x + 4, y1: y - 26, x2: x + 14 + tw, y2: y};
+      }
 
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -953,6 +962,82 @@ function initNetwork() {
       }
     });
     ctx.restore();
+  });
+
+  // ── Container label drag: grab the label text to move all members ──────────
+  var _cvs = network.canvas.frame.canvas;
+
+  function _findLabelAt(cp) {
+    for (var i = _containerBounds.length - 1; i >= 0; i--) {
+      var b = _containerBounds[i];
+      if (!b) continue;
+      if (cp.x >= b.x1 && cp.x <= b.x2 && cp.y >= b.y1 && cp.y <= b.y2) return i;
+    }
+    return -1;
+  }
+
+  function _onContainerDragMove(e) {
+    if (!_containerDragState || (!e.movementX && !e.movementY)) return;
+    var scale = network.getScale();
+    var dx = e.movementX / scale;
+    var dy = e.movementY / scale;
+    var cur = _containerDragState.curPositions;
+    nodesDataset.update(_containerDragState.reps.map(function(id) {
+      var key = String(id);
+      cur[key] = {x: cur[key].x + dx, y: cur[key].y + dy};
+      return {id: id, x: cur[key].x, y: cur[key].y}; // original typed id
+    }));
+  }
+
+  function _onContainerDragEnd() {
+    _containerDragState = null;
+    document.removeEventListener('mousemove', _onContainerDragMove);
+    document.removeEventListener('mouseup', _onContainerDragEnd);
+    _cvs.style.cursor = '';
+  }
+
+  // Attach to the frame div (parent of canvas) so stopPropagation fires
+  // BEFORE vis-network's canvas-level handlers in the capture phase.
+  var _frame = network.canvas.frame;
+  var _canvasRect = null;
+  _frame.addEventListener('mousedown', function(e) {
+    if (e.button !== 0 || _containerDragState) return;
+    _canvasRect = _cvs.getBoundingClientRect();
+    var domX = e.clientX - _canvasRect.left;
+    var domY = e.clientY - _canvasRect.top;
+    var cp = network.DOMtoCanvas({x: domX, y: domY});
+    var cidx = _findLabelAt(cp);
+    if (cidx < 0) return;
+    e.stopPropagation(); // prevents canvas from receiving event
+    e.preventDefault();
+    var membership = computeContainerMembership();
+    // Collect reps preserving original ID types (numeric for regular nodes).
+    var repsArr = [], repsKeySet = {};
+    Object.keys(membership).forEach(function(k) {
+      if (membership[parseInt(k)] === cidx) {
+        var rep = resolveNode(parseInt(k));
+        if (rep !== null) {
+          var key = String(rep);
+          if (!repsKeySet[key]) { repsKeySet[key] = true; repsArr.push(rep); }
+        }
+      }
+    });
+    var positions = network.getPositions(repsArr);
+    var curPositions = {};
+    repsArr.forEach(function(id) {
+      var p = positions[id];
+      curPositions[String(id)] = p ? {x: p.x, y: p.y} : {x: 0, y: 0};
+    });
+    _containerDragState = {cidx: cidx, reps: repsArr, curPositions: curPositions};
+    _cvs.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', _onContainerDragMove);
+    document.addEventListener('mouseup', _onContainerDragEnd);
+  }, true);
+
+  _cvs.addEventListener('mousemove', function(e) {
+    if (_containerDragState) return;
+    var cp = network.DOMtoCanvas({x: e.offsetX, y: e.offsetY});
+    _cvs.style.cursor = _findLabelAt(cp) >= 0 ? 'grab' : '';
   });
 
   network.on('click', function(params) {
@@ -1458,7 +1543,7 @@ function baseNodeColorUpdate(n, col) {
     background: col.bg, border: col.bd,
     highlight: {background: '#92400e', border: '#f59e0b'},
     hover: {background: col.hover, border: col.bd}
-  }, font: {color: contrastColor(col.bg)}};
+  }, font: {color: contrastColor(col.bg)}, shadow: false};
 }
 
 function buildNodeDataLookup() {
@@ -1499,6 +1584,25 @@ function firstClusterMemberMatch(clusterId, testStr, nodeDataLookup, visited) {
   return null;
 }
 
+function allClusterMemberMatches(clusterId, testStr, nodeDataLookup, visited, results) {
+  var cm = AppState.clusterMap[clusterId];
+  if (!cm) return results;
+  visited = visited || {};
+  results = results || [];
+  if (visited[clusterId]) return results;
+  visited[clusterId] = true;
+  var memberIds = cm.memberIds || [];
+  for (var mi = 0; mi < memberIds.length; mi++) {
+    var mid = memberIds[mi];
+    if (AppState.clusterMap[mid]) {
+      allClusterMemberMatches(mid, testStr, nodeDataLookup, visited, results);
+    } else if (nodeMatchesSearch(mid, testStr, nodeDataLookup)) {
+      results.push(mid);
+    }
+  }
+  return results;
+}
+
 function makeSearchTester(query) {
   var re;
   try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
@@ -1530,7 +1634,57 @@ function focusFirstVisibleSearchMatch(query, candidateIds) {
   return false;
 }
 
-function doSearch(query, skipFocus) {
+function _toolTypeToBadgeRole(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t === 'filter') return 'filter';
+  if (t === 'formula' || t === 'multirowformula' || t === 'multifieldbinner') return 'formula';
+  if (t.indexOf('join') !== -1 || t === 'findreplace' || t === 'spatialmatch') return 'join';
+  if (t === 'union') return 'union';
+  if (t === 'summarize' || t === 'sample' || t === 'tile') return 'aggregate';
+  if (t === 'crosstab' || t === 'transpose' || t === 'regex') return 'reshape';
+  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput') return 'input';
+  return 'union';
+}
+
+function _toolTypeToStepCategory(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput' || t === 'recordid') return 'input';
+  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t !== '') return 'transform';
+  return 'unknown';
+}
+
+function _escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function _highlightEl(el, re) {
+  if (!el.dataset.origText) el.dataset.origText = el.textContent;
+  el.innerHTML = _escapeHtml(el.dataset.origText).replace(re, '<mark class="search-mark">$1</mark>');
+}
+function _clearPanelHighlights() {
+  document.querySelectorAll('[data-orig-text]').forEach(function(el) {
+    el.textContent = el.dataset.origText;
+    delete el.dataset.origText;
+  });
+}
+function _highlightPanelText(query) {
+  _clearPanelHighlights();
+  if (!query) return;
+  var q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var re;
+  try { re = new RegExp('(' + q + ')', 'gi'); } catch(e) { return; }
+  var insightsBody = document.getElementById('insights-panel-body');
+  if (insightsBody) {
+    insightsBody.querySelectorAll('.ki-badge, .ki-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+  var summaryBody = document.getElementById('summary-panel-body');
+  if (summaryBody) {
+    summaryBody.querySelectorAll('.step-badge, .step-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+}
+
+function doSearch(query, skipFocus, skipPanel) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
@@ -1542,6 +1696,7 @@ function doSearch(query, skipFocus) {
   var allNodes = nodesDataset.get();
   var updates = [];
   var firstMatch = null;
+  var matchedEntries = [];
 
   // Build a lookup from original node data (pre-clustering) for member searches.
   var nodeDataLookup = buildNodeDataLookup();
@@ -1578,12 +1733,26 @@ function doSearch(query, skipFocus) {
           highlight: {background: matchBg, border: '#f59e0b'},
           hover:     {background: matchBg, border: '#f59e0b'}
         }, font: {color: contrastColor(matchBg)}});
+        var memberMatches = allClusterMemberMatches(n.id, testStr, nodeDataLookup, {}, []);
+        if (memberMatches.length > 0) {
+          memberMatches.forEach(function(mid) {
+            var mnd = nodeDataLookup[mid];
+            var mst = mnd ? (mnd.title || '').split('.').pop() : '';
+            matchedEntries.push({id: mid, shortType: mst, role: _toolTypeToBadgeRole(mst), category: _toolTypeToStepCategory(mst), label: mnd ? (mnd.label || '') : ''});
+          });
+        } else {
+          matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), category: _toolTypeToStepCategory(cm.toolType), label: n.label || cm.toolType || ''});
+        }
       } else {
         updates.push({id: n.id, color: {
-          background: col.bg, border: '#f59e0b',
-          highlight: {background: '#92400e', border: '#f59e0b'},
-          hover: {background: col.hover, border: '#f59e0b'}
-        }, font: {color: contrastColor(col.bg)}});
+          background: '#92400e', border: '#f59e0b',
+          highlight: {background: '#78350f', border: '#fbbf24'},
+          hover: {background: '#78350f', border: '#fbbf24'}
+        }, font: {color: '#ffffff'},
+           shadow: {enabled: true, color: 'rgba(245,158,11,0.45)', size: 10, x: 0, y: 0}});
+        var nd = nodeDataLookup[n.id];
+        var st = nd ? (nd.title || '').split('.').pop() : (n.label || '');
+        matchedEntries.push({id: n.id, shortType: st, role: _toolTypeToBadgeRole(st), category: _toolTypeToStepCategory(st), label: nd ? (nd.label || n.label || '') : (n.label || '')});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
@@ -1617,9 +1786,13 @@ function doSearch(query, skipFocus) {
   if (!skipFocus && firstMatch !== null) {
     focusSearchMatch(firstMatch, 400);
   }
+  _highlightPanelText(query);
+  if (!skipPanel && typeof openSearchResultsPanel === 'function') openSearchResultsPanel(matchedEntries);
 }
 
 function clearSearch() {
+  _clearPanelHighlights();
+  if (typeof closeSearchResultsPanel === 'function') closeSearchResultsPanel();
   searchActive = false;
   document.getElementById('search-input').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
