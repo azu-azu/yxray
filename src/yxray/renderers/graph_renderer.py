@@ -895,8 +895,8 @@ function initSplitNetworks() {
   var leftNodeIds = new Set(NODES_OLD.filter(function(n) { return n.status !== 'ghost_added'; }).map(function(n) { return n.id; }));
   var rightNodeIds = new Set(NODES_NEW.filter(function(n) { return n.status !== 'ghost_removed'; }).map(function(n) { return n.id; }));
 
-  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to); });
-  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to); });
+  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to) && e.status !== 'added'; });
+  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to) && e.status !== 'removed'; });
 
   nodesDatasetLeft = new vis.DataSet(NODES_OLD);
   edgesDatasetLeft = new vis.DataSet(leftEdges);
@@ -1396,10 +1396,31 @@ class GraphRenderer:
                     f"{entry['label']} | modified | {count} field(s) changed"
                 )
 
-        # Build edges list
-        edges_json: list[dict[str, Any]] = [
-            {"id": f"{src}-{dst}", "from": src, "to": dst} for src, dst in G.edges()
-        ]
+        # Build edges list — color connection-diff edges (removed=red, added=green)
+        edge_removed_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "removed"
+        }
+        edge_added_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "added"
+        }
+        edges_json: list[dict[str, Any]] = []
+        for src, dst in G.edges():
+            edge: dict[str, Any] = {"id": f"{src}-{dst}", "from": src, "to": dst}
+            if (src, dst) in edge_removed_set:
+                edge["color"] = {"color": "#fca5a5", "highlight": "#dc2626", "hover": "#dc2626"}
+                edge["width"] = 2.5
+                edge["status"] = "removed"
+            elif (src, dst) in edge_added_set:
+                edge["color"] = {"color": "#6ee7b7", "highlight": "#059669", "hover": "#059669"}
+                edge["width"] = 2.5
+                edge["status"] = "added"
+            else:
+                edge["status"] = "unchanged"
+            edges_json.append(edge)
 
         # Build split view node lists
         old_vis_nodes, new_vis_nodes = build_split_node_list(
