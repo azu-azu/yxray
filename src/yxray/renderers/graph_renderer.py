@@ -345,6 +345,20 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   letter-spacing: 1px;
 }
 
+.panel-before {
+  background: var(--accent-removed-bg);
+  border-left: 3px solid var(--accent-removed);
+  padding: 6px 10px;
+  margin-bottom: 3px;
+}
+.panel-after {
+  background: var(--accent-added-bg);
+  border-left: 3px solid var(--accent-added);
+  padding: 6px 10px;
+}
+.panel-before-label { font-weight: 600; color: var(--accent-removed); }
+.panel-after-label  { font-weight: 600; color: var(--accent-added); }
+
 .diff-unified {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
@@ -682,7 +696,37 @@ function buildPanelContent(panel, entry) {
   titleEl.textContent = entry.data.tool_type + ' (ID: ' + entry.data.tool_id + ') \u2014 ' + entry.category;
   panel.appendChild(titleEl);
   if (entry.category === 'modified') {
-    panel.appendChild(buildConfigDiff(entry.data.old_config, entry.data.new_config));
+    (entry.data.field_diffs || []).forEach(function(fd) {
+      var row = document.createElement('div');
+      row.className = 'panel-field-row';
+      var nameEl = document.createElement('div');
+      nameEl.className = 'panel-field-name';
+      nameEl.textContent = fd.field;
+      var beforeRow = document.createElement('div');
+      beforeRow.className = 'panel-before';
+      var beforeLabel = document.createElement('span');
+      beforeLabel.className = 'panel-before-label';
+      beforeLabel.textContent = 'Before: ';
+      var beforeVal = document.createElement('span');
+      beforeVal.className = 'value-mono';
+      beforeVal.textContent = formatVal(fd.before);
+      beforeRow.appendChild(beforeLabel);
+      beforeRow.appendChild(beforeVal);
+      var afterRow = document.createElement('div');
+      afterRow.className = 'panel-after';
+      var afterLabel = document.createElement('span');
+      afterLabel.className = 'panel-after-label';
+      afterLabel.textContent = 'After: ';
+      var afterVal = document.createElement('span');
+      afterVal.className = 'value-mono';
+      afterVal.textContent = formatVal(fd.after);
+      afterRow.appendChild(afterLabel);
+      afterRow.appendChild(afterVal);
+      row.appendChild(nameEl);
+      row.appendChild(beforeRow);
+      row.appendChild(afterRow);
+      panel.appendChild(row);
+    });
   } else {
     var config = entry.data.config || {};
     Object.keys(config).forEach(function(k) {
