@@ -931,9 +931,9 @@ function initNetwork() {
       var r = CONT_R;
       // Cache label hit area for container drag. Label is drawn at (x+10, y-6).
       if (c.label) {
-        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+        ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
         var tw = ctx.measureText(c.label).width;
-        _containerBounds[idx] = {x1: x + 4, y1: y - 26, x2: x + 14 + tw, y2: y};
+        _containerBounds[idx] = {x1: x + 4, y1: y - 34, x2: x + 14 + tw, y2: y};
       }
 
       ctx.beginPath();
@@ -956,7 +956,7 @@ function initNetwork() {
       ctx.stroke();
       ctx.setLineDash([]);
       if (c.label) {
-        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
+        ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
         ctx.fillStyle = focused ? '#f59e0b' : 'rgba(249,168,212,0.95)';
         ctx.fillText(c.label, x + 10, y - 6);
       }
