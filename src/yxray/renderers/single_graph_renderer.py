@@ -619,6 +619,10 @@ var _focusHighlightOrigColor = null;
 var _focusHighlightPanelEl = null;
 
 function focusNode(toolId, clickedEl) {
+    // Clear container focus state
+    _focusedContainerIdx = null;
+    if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
+
     // Restore previous node colour
     if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
         var restore = _focusHighlightOrigColor !== null
@@ -851,6 +855,17 @@ function openContainersPanel() {
 }
 var _containerFocusEl = null;
 function focusContainer(containerIdx, clickedEl) {
+    // Clear node focus state
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var _restoreColor = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(_restoreColor);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+    if (_focusHighlightPanelEl) { _focusHighlightPanelEl.classList.remove('focused'); _focusHighlightPanelEl = null; }
+
     if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
     if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
     // Update graph highlight and redraw.

@@ -905,81 +905,71 @@ function drawMinimap() {
     mCtx.stroke();
   });
 
-  // Cluster/container nodes that are currently visible in the graph.
+  // All nodes (data + cluster) — neutral/dim; focused node gets amber glow on top.
   var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
+  var dimColor = isDark ? 'rgba(148,163,184,0.45)' : 'rgba(100,116,139,0.45)';
+
+  // Cluster/container nodes visible in the graph.
   nodesDataset.getIds().forEach(function(id) {
     if (typeof id !== 'string') return;
     if (id.indexOf('memo:') === 0) return;
     var p = network.getPosition(id);
     if (!p) return;
     mCtx.beginPath();
-    mCtx.arc(gx(p.x), gy(p.y), 3.5, 0, Math.PI * 2);
-    mCtx.fillStyle = isDark ? '#7c3aed' : '#6d28d9';
+    mCtx.arc(gx(p.x), gy(p.y), 3, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
     mCtx.fill();
   });
 
-  // Data nodes — on top so they're always readable.
+  // Data nodes.
   NODES_DATA.forEach(function(nd) {
     var p = positions[nd.id] || {x: nd.x, y: nd.y};
-    var isFocused = nd.id === focusedId;
-    if (isFocused) {
-      // Outer glow ring
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+
+  // Focused node — amber glow on top of everything else.
+  if (focusedId !== null) {
+    var fp2 = positions[focusedId] || (function() {
+      var nd = NODES_DATA.find(function(n) { return n.id === focusedId; });
+      return nd ? {x: nd.x, y: nd.y} : null;
+    })();
+    if (fp2) {
       mCtx.beginPath();
-      mCtx.arc(gx(p.x), gy(p.y), 8, 0, Math.PI * 2);
-      mCtx.fillStyle = 'rgba(251,191,36,0.22)';
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 8, 0, Math.PI * 2);
+      mCtx.fillStyle = 'rgba(251,191,36,0.2)';
       mCtx.shadowColor = 'rgba(251,191,36,0.9)';
+      mCtx.shadowBlur = 12;
+      mCtx.fill();
+      mCtx.shadowBlur = 0;
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 5, 0, Math.PI * 2);
+      mCtx.fillStyle = '#fbbf24';
+      mCtx.shadowColor = 'rgba(251,191,36,1.0)';
       mCtx.shadowBlur = 10;
       mCtx.fill();
       mCtx.shadowBlur = 0;
-      // Inner dot
-      mCtx.beginPath();
-      mCtx.arc(gx(p.x), gy(p.y), 5, 0, Math.PI * 2);
-      mCtx.fillStyle = '#fbbf24';
-      mCtx.shadowColor = 'rgba(251,191,36,1.0)';
-      mCtx.shadowBlur = 8;
-      mCtx.fill();
-      // White ring
-      mCtx.shadowBlur = 0;
-      mCtx.strokeStyle = '#fff';
+      mCtx.strokeStyle = 'rgba(255,255,255,0.9)';
       mCtx.lineWidth = 1.5;
       mCtx.stroke();
-    } else {
-      mCtx.beginPath();
-      mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
-      mCtx.fillStyle = isDark ? '#3b82f6' : '#1d4ed8';
-      mCtx.fill();
     }
-    mCtx.shadowBlur = 0;
-  });
+  }
 
-  // Focused container bounding box overlay.
-  if (_focusedContainerIdx !== null) {
-    var membership = computeContainerMembership();
-    var cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-    Object.keys(membership).forEach(function(nid) {
-      if (membership[parseInt(nid)] !== _focusedContainerIdx) return;
-      var p = positions[parseInt(nid)] || (function() {
-        var nd = NODES_DATA.find(function(n) { return n.id === parseInt(nid); });
-        return nd ? {x: nd.x, y: nd.y} : null;
-      })();
-      if (!p) return;
-      cMinX = Math.min(cMinX, p.x); cMinY = Math.min(cMinY, p.y);
-      cMaxX = Math.max(cMaxX, p.x); cMaxY = Math.max(cMaxY, p.y);
-    });
-    if (isFinite(cMinX)) {
-      var cxPad = CONT_PAD_X, cyPad = CONT_PAD_Y;
-      var crX = gx(cMinX - cxPad), crY = gy(cMinY - cyPad);
-      var crW = (cMaxX - cMinX + cxPad * 2) * s;
-      var crH = (cMaxY - cMinY + cyPad * 2) * s;
-      mCtx.strokeStyle = '#f59e0b';
-      mCtx.lineWidth = 2;
-      mCtx.shadowColor = 'rgba(245,158,11,0.85)';
-      mCtx.shadowBlur = 8;
-      mCtx.setLineDash([4, 3]);
-      mCtx.strokeRect(crX, crY, crW, crH);
-      mCtx.setLineDash([]);
-      mCtx.shadowBlur = 0;
-    }
+  // Focused container — amber dashed rect using CONTAINERS_DATA bounds directly.
+  if (_focusedContainerIdx !== null && CONTAINERS_DATA[_focusedContainerIdx]) {
+    var cd = CONTAINERS_DATA[_focusedContainerIdx];
+    var crX = gx(cd.x), crY = gy(cd.y);
+    var crW = cd.w * s, crH = cd.h * s;
+    mCtx.strokeStyle = '#f59e0b';
+    mCtx.lineWidth = 2;
+    mCtx.shadowColor = 'rgba(245,158,11,0.9)';
+    mCtx.shadowBlur = 10;
+    mCtx.setLineDash([4, 3]);
+    mCtx.strokeRect(crX, crY, crW, crH);
+    mCtx.setLineDash([]);
+    mCtx.shadowBlur = 0;
   }
 
   // Viewport rectangle.
