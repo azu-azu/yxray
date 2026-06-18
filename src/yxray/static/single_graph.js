@@ -905,74 +905,7 @@ function drawMinimap() {
     mCtx.stroke();
   });
 
-  // All nodes (data + cluster) — neutral/dim; focused node gets amber glow on top.
-  var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
-  var dimColor = isDark ? 'rgba(148,163,184,0.45)' : 'rgba(100,116,139,0.45)';
-
-  // Cluster/container nodes visible in the graph.
-  nodesDataset.getIds().forEach(function(id) {
-    if (typeof id !== 'string') return;
-    if (id.indexOf('memo:') === 0) return;
-    var p = network.getPosition(id);
-    if (!p) return;
-    mCtx.beginPath();
-    mCtx.arc(gx(p.x), gy(p.y), 3, 0, Math.PI * 2);
-    mCtx.fillStyle = dimColor;
-    mCtx.fill();
-  });
-
-  // Data nodes.
-  NODES_DATA.forEach(function(nd) {
-    var p = positions[nd.id] || {x: nd.x, y: nd.y};
-    mCtx.beginPath();
-    mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
-    mCtx.fillStyle = dimColor;
-    mCtx.fill();
-  });
-
-  // Focused node — amber glow on top of everything else.
-  if (focusedId !== null) {
-    var fp2 = positions[focusedId] || (function() {
-      var nd = NODES_DATA.find(function(n) { return n.id === focusedId; });
-      return nd ? {x: nd.x, y: nd.y} : null;
-    })();
-    if (fp2) {
-      mCtx.beginPath();
-      mCtx.arc(gx(fp2.x), gy(fp2.y), 8, 0, Math.PI * 2);
-      mCtx.fillStyle = 'rgba(251,191,36,0.2)';
-      mCtx.shadowColor = 'rgba(251,191,36,0.9)';
-      mCtx.shadowBlur = 12;
-      mCtx.fill();
-      mCtx.shadowBlur = 0;
-      mCtx.beginPath();
-      mCtx.arc(gx(fp2.x), gy(fp2.y), 5, 0, Math.PI * 2);
-      mCtx.fillStyle = '#fbbf24';
-      mCtx.shadowColor = 'rgba(251,191,36,1.0)';
-      mCtx.shadowBlur = 10;
-      mCtx.fill();
-      mCtx.shadowBlur = 0;
-      mCtx.strokeStyle = 'rgba(255,255,255,0.9)';
-      mCtx.lineWidth = 1.5;
-      mCtx.stroke();
-    }
-  }
-
-  // Focused container — amber dashed rect using CONTAINERS_DATA bounds directly.
-  if (_focusedContainerIdx !== null && CONTAINERS_DATA[_focusedContainerIdx]) {
-    var cd = CONTAINERS_DATA[_focusedContainerIdx];
-    var crX = gx(cd.x), crY = gy(cd.y);
-    var crW = cd.w * s, crH = cd.h * s;
-    mCtx.strokeStyle = '#f59e0b';
-    mCtx.lineWidth = 2;
-    mCtx.shadowColor = 'rgba(245,158,11,0.9)';
-    mCtx.shadowBlur = 10;
-    mCtx.setLineDash([4, 3]);
-    mCtx.strokeRect(crX, crY, crW, crH);
-    mCtx.setLineDash([]);
-    mCtx.shadowBlur = 0;
-  }
-
-  // Viewport rectangle.
+  // ── Layer 1: Viewport rectangle (drawn first so focus glows render on top) ──
   var scale = network.getScale();
   var vp = network.getViewPosition();
   var mainC = network.canvas.frame.canvas;
@@ -987,6 +920,67 @@ function drawMinimap() {
   mCtx.strokeStyle = isDark ? 'rgba(148,163,184,0.7)' : 'rgba(71,85,105,0.65)';
   mCtx.lineWidth = 1.2;
   mCtx.strokeRect(rX, rY, rW, rH);
+
+  // ── Layer 2: All nodes — neutral/dim ─────────────────────────────────────
+  var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
+  var dimColor = isDark ? 'rgba(148,163,184,0.45)' : 'rgba(100,116,139,0.45)';
+
+  nodesDataset.getIds().forEach(function(id) {
+    if (typeof id !== 'string') return;
+    if (id.indexOf('memo:') === 0) return;
+    var p = network.getPosition(id);
+    if (!p) return;
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 3, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+
+  // ── Layer 3: Focused indicator (always on top) ───────────────────────────
+  if (focusedId !== null) {
+    var fp2 = positions[focusedId] || (function() {
+      var nd = NODES_DATA.find(function(n) { return n.id === focusedId; });
+      return nd ? {x: nd.x, y: nd.y} : null;
+    })();
+    if (fp2) {
+      mCtx.save();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 8, 0, Math.PI * 2);
+      mCtx.fillStyle = 'rgba(251,191,36,0.2)';
+      mCtx.shadowColor = 'rgba(251,191,36,0.9)';
+      mCtx.shadowBlur = 12;
+      mCtx.fill();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 5, 0, Math.PI * 2);
+      mCtx.fillStyle = '#fbbf24';
+      mCtx.shadowBlur = 10;
+      mCtx.fill();
+      mCtx.shadowBlur = 0;
+      mCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+      mCtx.lineWidth = 1.5;
+      mCtx.stroke();
+      mCtx.restore();
+    }
+  }
+
+  if (_focusedContainerIdx !== null && CONTAINERS_DATA[_focusedContainerIdx]) {
+    var cd = CONTAINERS_DATA[_focusedContainerIdx];
+    mCtx.save();
+    mCtx.strokeStyle = '#f59e0b';
+    mCtx.lineWidth = 2;
+    mCtx.shadowColor = 'rgba(245,158,11,0.9)';
+    mCtx.shadowBlur = 10;
+    mCtx.setLineDash([4, 3]);
+    mCtx.strokeRect(gx(cd.x), gy(cd.y), cd.w * s, cd.h * s);
+    mCtx.restore();
+  }
 }
 
 // ── Network init ──────────────────────────────────────────────────────────
@@ -1740,7 +1734,7 @@ function makeSearchTester(query) {
 function focusSearchMatch(nodeId, animationDuration) {
   if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
   network.focus(nodeId, {
-    scale: 1.2,
+    scale: 0.9,
     animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
   });
   return true;
