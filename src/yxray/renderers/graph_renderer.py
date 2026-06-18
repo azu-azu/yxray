@@ -1214,6 +1214,8 @@ function switchView(view) {
 
 window.switchView = switchView;
 window.graphFocusNode = focusNode;
+window.expandAllChanges = expandAllChanges;
+window.collapseAllChanges = collapseAllChanges;
 switchView(currentView);
 
 })();
