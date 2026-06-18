@@ -22,6 +22,13 @@ var CONT_PAD_Y          = 36; // vertical padding around container boundary box
 var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
+
+// ── Focus / zoom constants ────────────────────────────────────────────────
+var FOCUS_SCALE = 0.9; // unified zoom level for focusNode / search / container focus
+
+// ── Minimap constants ─────────────────────────────────────────────────────
+var MINIMAP_GRAPH_PAD = 80;   // padding added around graph bounding box in minimap
+var MINIMAP_FIT       = 0.92; // scale factor to leave a small margin inside minimap canvas
 var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
 var _containerBounds       = [];   // [{x1,y1,x2,y2}] updated each beforeDrawing frame
 var _containerDragState    = null; // active container drag, or null
@@ -856,6 +863,15 @@ function exitConnectMode() {
 }
 
 // ── Minimap ───────────────────────────────────────────────────────────────
+function closeMinimapPanel() {
+  document.getElementById('minimap-wrap').style.display = 'none';
+  document.getElementById('minimap-reopen').style.display = 'block';
+}
+function openMinimapPanel() {
+  document.getElementById('minimap-wrap').style.display = '';
+  document.getElementById('minimap-reopen').style.display = 'none';
+}
+
 function drawMinimap() {
   var mc = document.getElementById('minimap-canvas');
   if (!mc || !network || !nodesDataset) return;
@@ -874,14 +890,14 @@ function drawMinimap() {
   });
   if (!isFinite(minX)) return;
 
-  var PAD = 80;
-  minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+  minX -= MINIMAP_GRAPH_PAD; minY -= MINIMAP_GRAPH_PAD;
+  maxX += MINIMAP_GRAPH_PAD; maxY += MINIMAP_GRAPH_PAD;
   var graphW = maxX - minX;
   var graphH = maxY - minY;
   if (graphW <= 0 || graphH <= 0) return;
 
   // Fit the graph inside the minimap canvas while preserving aspect ratio.
-  var s = Math.min(mW / graphW, mH / graphH) * 0.92;
+  var s = Math.min(mW / graphW, mH / graphH) * MINIMAP_FIT;
   var offX = (mW - graphW * s) / 2;
   var offY = (mH - graphH * s) / 2;
   function gx(x) { return (x - minX) * s + offX; }
@@ -1734,7 +1750,7 @@ function makeSearchTester(query) {
 function focusSearchMatch(nodeId, animationDuration) {
   if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
   network.focus(nodeId, {
-    scale: 0.9,
+    scale: FOCUS_SCALE,
     animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
   });
   return true;
