@@ -922,19 +922,65 @@ function drawMinimap() {
   NODES_DATA.forEach(function(nd) {
     var p = positions[nd.id] || {x: nd.x, y: nd.y};
     var isFocused = nd.id === focusedId;
-    mCtx.beginPath();
-    mCtx.arc(gx(p.x), gy(p.y), isFocused ? 3.5 : 2.5, 0, Math.PI * 2);
     if (isFocused) {
-      mCtx.fillStyle = '#f59e0b';
-      mCtx.shadowColor = 'rgba(245,158,11,0.8)';
-      mCtx.shadowBlur = 6;
-    } else {
-      mCtx.fillStyle = isDark ? '#3b82f6' : '#1d4ed8';
+      // Outer glow ring
+      mCtx.beginPath();
+      mCtx.arc(gx(p.x), gy(p.y), 8, 0, Math.PI * 2);
+      mCtx.fillStyle = 'rgba(251,191,36,0.22)';
+      mCtx.shadowColor = 'rgba(251,191,36,0.9)';
+      mCtx.shadowBlur = 10;
+      mCtx.fill();
       mCtx.shadowBlur = 0;
+      // Inner dot
+      mCtx.beginPath();
+      mCtx.arc(gx(p.x), gy(p.y), 5, 0, Math.PI * 2);
+      mCtx.fillStyle = '#fbbf24';
+      mCtx.shadowColor = 'rgba(251,191,36,1.0)';
+      mCtx.shadowBlur = 8;
+      mCtx.fill();
+      // White ring
+      mCtx.shadowBlur = 0;
+      mCtx.strokeStyle = '#fff';
+      mCtx.lineWidth = 1.5;
+      mCtx.stroke();
+    } else {
+      mCtx.beginPath();
+      mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
+      mCtx.fillStyle = isDark ? '#3b82f6' : '#1d4ed8';
+      mCtx.fill();
     }
-    mCtx.fill();
     mCtx.shadowBlur = 0;
   });
+
+  // Focused container bounding box overlay.
+  if (_focusedContainerIdx !== null) {
+    var membership = computeContainerMembership();
+    var cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
+    Object.keys(membership).forEach(function(nid) {
+      if (membership[parseInt(nid)] !== _focusedContainerIdx) return;
+      var p = positions[parseInt(nid)] || (function() {
+        var nd = NODES_DATA.find(function(n) { return n.id === parseInt(nid); });
+        return nd ? {x: nd.x, y: nd.y} : null;
+      })();
+      if (!p) return;
+      cMinX = Math.min(cMinX, p.x); cMinY = Math.min(cMinY, p.y);
+      cMaxX = Math.max(cMaxX, p.x); cMaxY = Math.max(cMaxY, p.y);
+    });
+    if (isFinite(cMinX)) {
+      var cxPad = CONT_PAD_X, cyPad = CONT_PAD_Y;
+      var crX = gx(cMinX - cxPad), crY = gy(cMinY - cyPad);
+      var crW = (cMaxX - cMinX + cxPad * 2) * s;
+      var crH = (cMaxY - cMinY + cyPad * 2) * s;
+      mCtx.strokeStyle = '#f59e0b';
+      mCtx.lineWidth = 2;
+      mCtx.shadowColor = 'rgba(245,158,11,0.85)';
+      mCtx.shadowBlur = 8;
+      mCtx.setLineDash([4, 3]);
+      mCtx.strokeRect(crX, crY, crW, crH);
+      mCtx.setLineDash([]);
+      mCtx.shadowBlur = 0;
+    }
+  }
 
   // Viewport rectangle.
   var scale = network.getScale();

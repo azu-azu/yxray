@@ -888,7 +888,7 @@ function focusContainer(containerIdx, clickedEl) {
     var boxW = maxX - minX;
     var boxH = maxY - minY;
     var canvas = network.canvas.frame.canvas;
-    var scale = Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.85;
+    var scale = Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.6;
     var center = {x: (minX + maxX) / 2, y: (minY + maxY) / 2};
     network.moveTo({position: center, scale: scale, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
 }
