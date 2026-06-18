@@ -156,8 +156,66 @@ _HTML_TEMPLATE = """\
       flex: 1;
       background: var(--bg);
       overflow: hidden;
+      position: relative;
     }
     #graph-canvas { width: 100%; height: 100%; }
+    #minimap-wrap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 500;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+      background: var(--surface);
+      user-select: none;
+    }
+    #minimap-canvas { display: block; }
+    #minimap-resize-handle {
+      position: absolute;
+      top: 0; left: 0;
+      width: 16px; height: 16px;
+      cursor: nw-resize;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-resize-handle::before {
+      content: '';
+      position: absolute;
+      top: 4px; left: 4px;
+      width: 7px; height: 7px;
+      border-top: 2px solid var(--text-muted);
+      border-left: 2px solid var(--text-muted);
+      border-radius: 1px;
+    }
+    #minimap-wrap:hover #minimap-resize-handle { opacity: 1; }
+    #minimap-close {
+      position: absolute;
+      top: 3px; right: 4px;
+      background: none; border: none;
+      color: var(--text-muted); cursor: pointer;
+      font-size: 12px; line-height: 1; padding: 0 2px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-wrap:hover #minimap-close { opacity: 1; }
+    #minimap-close:hover { color: var(--text); }
+    #minimap-reopen {
+      position: absolute;
+      bottom: 16px; right: 16px;
+      z-index: 500;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      display: none;
+    }
+    #minimap-reopen:hover { background: var(--border); color: var(--text); }
     #config-panel {
       position: fixed;
       top: 0; right: 0;
@@ -448,7 +506,13 @@ _HTML_TEMPLATE = """\
   {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
+    <div id="minimap-wrap">
+      <div id="minimap-resize-handle"></div>
+      <canvas id="minimap-canvas" width="240" height="160"></canvas>
+      <button id="minimap-close" title="Hide minimap" onclick="document.getElementById('minimap-wrap').style.display='none';document.getElementById('minimap-reopen').style.display='block';">&times;</button>
+    </div>
   </div>
+  <button id="minimap-reopen" title="Show minimap" onclick="document.getElementById('minimap-wrap').style.display='';document.getElementById('minimap-reopen').style.display='none';">&#9638; Map</button>
   {% if key_insights %}
   <div id="insights-panel">
     <div id="insights-panel-drag-handle"></div>
@@ -555,6 +619,10 @@ var _focusHighlightOrigColor = null;
 var _focusHighlightPanelEl = null;
 
 function focusNode(toolId, clickedEl) {
+    // Clear container focus state
+    _focusedContainerIdx = null;
+    if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
+
     // Restore previous node colour
     if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
         var restore = _focusHighlightOrigColor !== null
@@ -592,7 +660,7 @@ function focusNode(toolId, clickedEl) {
         });
     }
 
-    network.focus(visibleId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.focus(visibleId, { scale: 0.9, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
     network.selectNodes([visibleId]);
 
     // Highlight the clicked panel element
@@ -661,7 +729,7 @@ function openSearchResultsPanel(entries) {
                     var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
                     if (visId !== null) {
                         network.selectNodes([visId]);
-                        network.focus(visId, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                        network.focus(visId, {scale: 0.9, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
                     }
                 }
             };
@@ -787,6 +855,17 @@ function openContainersPanel() {
 }
 var _containerFocusEl = null;
 function focusContainer(containerIdx, clickedEl) {
+    // Clear node focus state
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var _restoreColor = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(_restoreColor);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+    if (_focusHighlightPanelEl) { _focusHighlightPanelEl.classList.remove('focused'); _focusHighlightPanelEl = null; }
+
     if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
     if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
     // Update graph highlight and redraw.
@@ -824,7 +903,7 @@ function focusContainer(containerIdx, clickedEl) {
     var boxW = maxX - minX;
     var boxH = maxY - minY;
     var canvas = network.canvas.frame.canvas;
-    var scale = Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.85;
+    var scale = Math.min(Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.6, 0.9);
     var center = {x: (minX + maxX) / 2, y: (minY + maxY) / 2};
     network.moveTo({position: center, scale: scale, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
 }
@@ -904,6 +983,10 @@ class SingleGraphRenderer:
                 s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
                 for s in workflow_steps
             ]
+
+        # Sort containers by canvas position (x, y) to match the left-to-right visual flow.
+        if containers_list:
+            containers_list = sorted(containers_list, key=lambda c: (c["x"], c["y"]))
 
         insights_dicts: list[Any] | None = None
         if key_insights:
