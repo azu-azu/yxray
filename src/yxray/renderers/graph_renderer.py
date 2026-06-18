@@ -234,7 +234,9 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   padding: 4px 0;
   background: var(--surface);
   color: var(--text);
+  direction: rtl;
 }
+.split-change-rows > * { direction: ltr; }
 
 .split-controls {
   display: flex;
