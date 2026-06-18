@@ -156,8 +156,47 @@ _HTML_TEMPLATE = """\
       flex: 1;
       background: var(--bg);
       overflow: hidden;
+      position: relative;
     }
     #graph-canvas { width: 100%; height: 100%; }
+    #minimap-wrap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 500;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+      background: var(--surface);
+      user-select: none;
+    }
+    #minimap-canvas { display: block; }
+    #minimap-close {
+      position: absolute;
+      top: 3px; right: 4px;
+      background: none; border: none;
+      color: var(--text-muted); cursor: pointer;
+      font-size: 12px; line-height: 1; padding: 0 2px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-wrap:hover #minimap-close { opacity: 1; }
+    #minimap-close:hover { color: var(--text); }
+    #minimap-reopen {
+      position: absolute;
+      bottom: 16px; right: 16px;
+      z-index: 500;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      display: none;
+    }
+    #minimap-reopen:hover { background: var(--border); color: var(--text); }
     #config-panel {
       position: fixed;
       top: 0; right: 0;
@@ -448,7 +487,12 @@ _HTML_TEMPLATE = """\
   {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
+    <div id="minimap-wrap">
+      <canvas id="minimap-canvas" width="180" height="120"></canvas>
+      <button id="minimap-close" title="Hide minimap" onclick="document.getElementById('minimap-wrap').style.display='none';document.getElementById('minimap-reopen').style.display='block';">&times;</button>
+    </div>
   </div>
+  <button id="minimap-reopen" title="Show minimap" onclick="document.getElementById('minimap-wrap').style.display='';document.getElementById('minimap-reopen').style.display='none';">&#9638; Map</button>
   {% if key_insights %}
   <div id="insights-panel">
     <div id="insights-panel-drag-handle"></div>

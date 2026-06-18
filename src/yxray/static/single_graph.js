@@ -855,6 +855,104 @@ function exitConnectMode() {
   document.getElementById('connect-mode-hint').style.display = 'none';
 }
 
+// ── Minimap ───────────────────────────────────────────────────────────────
+function drawMinimap() {
+  var mc = document.getElementById('minimap-canvas');
+  if (!mc || !network || !nodesDataset) return;
+  var mCtx = mc.getContext('2d');
+  var mW = mc.width;
+  var mH = mc.height;
+
+  // Bounding box from original data node positions (stable; falls back to
+  // stored x/y for nodes that are currently collapsed inside a cluster).
+  var positions = network.getPositions(NODES_DATA.map(function(nd) { return nd.id; }));
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+  });
+  if (!isFinite(minX)) return;
+
+  var PAD = 80;
+  minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+  var graphW = maxX - minX;
+  var graphH = maxY - minY;
+  if (graphW <= 0 || graphH <= 0) return;
+
+  // Fit the graph inside the minimap canvas while preserving aspect ratio.
+  var s = Math.min(mW / graphW, mH / graphH) * 0.92;
+  var offX = (mW - graphW * s) / 2;
+  var offY = (mH - graphH * s) / 2;
+  function gx(x) { return (x - minX) * s + offX; }
+  function gy(y) { return (y - minY) * s + offY; }
+
+  // Background
+  mCtx.clearRect(0, 0, mW, mH);
+  mCtx.fillStyle = isDark ? 'rgba(15,23,42,0.94)' : 'rgba(248,250,252,0.94)';
+  mCtx.fillRect(0, 0, mW, mH);
+
+  // Edges — use stored x/y for nodes collapsed inside clusters.
+  mCtx.strokeStyle = isDark ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.65)';
+  mCtx.lineWidth = 0.5;
+  EDGES_DATA.forEach(function(edge) {
+    var fp = positions[edge.from] || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.from;}); return nd ? {x:nd.x,y:nd.y} : null; })();
+    var tp = positions[edge.to]   || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.to;});   return nd ? {x:nd.x,y:nd.y} : null; })();
+    if (!fp || !tp) return;
+    mCtx.beginPath();
+    mCtx.moveTo(gx(fp.x), gy(fp.y));
+    mCtx.lineTo(gx(tp.x), gy(tp.y));
+    mCtx.stroke();
+  });
+
+  // Cluster/container nodes that are currently visible in the graph.
+  var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
+  nodesDataset.getIds().forEach(function(id) {
+    if (typeof id !== 'string') return;
+    if (id.indexOf('memo:') === 0) return;
+    var p = network.getPosition(id);
+    if (!p) return;
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 3.5, 0, Math.PI * 2);
+    mCtx.fillStyle = isDark ? '#7c3aed' : '#6d28d9';
+    mCtx.fill();
+  });
+
+  // Data nodes — on top so they're always readable.
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    var isFocused = nd.id === focusedId;
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), isFocused ? 3.5 : 2.5, 0, Math.PI * 2);
+    if (isFocused) {
+      mCtx.fillStyle = '#f59e0b';
+      mCtx.shadowColor = 'rgba(245,158,11,0.8)';
+      mCtx.shadowBlur = 6;
+    } else {
+      mCtx.fillStyle = isDark ? '#3b82f6' : '#1d4ed8';
+      mCtx.shadowBlur = 0;
+    }
+    mCtx.fill();
+    mCtx.shadowBlur = 0;
+  });
+
+  // Viewport rectangle.
+  var scale = network.getScale();
+  var vp = network.getViewPosition();
+  var mainC = network.canvas.frame.canvas;
+  var vW = mainC.clientWidth / scale;
+  var vH = mainC.clientHeight / scale;
+  var rX = gx(vp.x - vW / 2);
+  var rY = gy(vp.y - vH / 2);
+  var rW = vW * s;
+  var rH = vH * s;
+  mCtx.fillStyle = isDark ? 'rgba(148,163,184,0.07)' : 'rgba(15,23,42,0.05)';
+  mCtx.fillRect(rX, rY, rW, rH);
+  mCtx.strokeStyle = isDark ? 'rgba(148,163,184,0.7)' : 'rgba(71,85,105,0.65)';
+  mCtx.lineWidth = 1.2;
+  mCtx.strokeRect(rX, rY, rW, rH);
+}
+
 // ── Network init ──────────────────────────────────────────────────────────
 function initNetwork() {
   if (network) return;
@@ -1181,6 +1279,9 @@ function initNetwork() {
       ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
       ctx.restore();
     });
+
+    // 4. Minimap overlay.
+    drawMinimap();
   });
 
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
