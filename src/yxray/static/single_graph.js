@@ -855,6 +855,134 @@ function exitConnectMode() {
   document.getElementById('connect-mode-hint').style.display = 'none';
 }
 
+// ── Minimap ───────────────────────────────────────────────────────────────
+function drawMinimap() {
+  var mc = document.getElementById('minimap-canvas');
+  if (!mc || !network || !nodesDataset) return;
+  var mCtx = mc.getContext('2d');
+  var mW = mc.width;
+  var mH = mc.height;
+
+  // Bounding box from original data node positions (stable; falls back to
+  // stored x/y for nodes that are currently collapsed inside a cluster).
+  var positions = network.getPositions(NODES_DATA.map(function(nd) { return nd.id; }));
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+  });
+  if (!isFinite(minX)) return;
+
+  var PAD = 80;
+  minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+  var graphW = maxX - minX;
+  var graphH = maxY - minY;
+  if (graphW <= 0 || graphH <= 0) return;
+
+  // Fit the graph inside the minimap canvas while preserving aspect ratio.
+  var s = Math.min(mW / graphW, mH / graphH) * 0.92;
+  var offX = (mW - graphW * s) / 2;
+  var offY = (mH - graphH * s) / 2;
+  function gx(x) { return (x - minX) * s + offX; }
+  function gy(y) { return (y - minY) * s + offY; }
+
+  // Background
+  mCtx.clearRect(0, 0, mW, mH);
+  mCtx.fillStyle = isDark ? 'rgba(15,23,42,0.94)' : 'rgba(248,250,252,0.94)';
+  mCtx.fillRect(0, 0, mW, mH);
+
+  // Edges — use stored x/y for nodes collapsed inside clusters.
+  mCtx.strokeStyle = isDark ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.65)';
+  mCtx.lineWidth = 0.5;
+  EDGES_DATA.forEach(function(edge) {
+    var fp = positions[edge.from] || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.from;}); return nd ? {x:nd.x,y:nd.y} : null; })();
+    var tp = positions[edge.to]   || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.to;});   return nd ? {x:nd.x,y:nd.y} : null; })();
+    if (!fp || !tp) return;
+    mCtx.beginPath();
+    mCtx.moveTo(gx(fp.x), gy(fp.y));
+    mCtx.lineTo(gx(tp.x), gy(tp.y));
+    mCtx.stroke();
+  });
+
+  // ── Layer 1: Viewport rectangle (drawn first so focus glows render on top) ──
+  var scale = network.getScale();
+  var vp = network.getViewPosition();
+  var mainC = network.canvas.frame.canvas;
+  var vW = mainC.clientWidth / scale;
+  var vH = mainC.clientHeight / scale;
+  var rX = gx(vp.x - vW / 2);
+  var rY = gy(vp.y - vH / 2);
+  var rW = vW * s;
+  var rH = vH * s;
+  mCtx.fillStyle = isDark ? 'rgba(148,163,184,0.07)' : 'rgba(15,23,42,0.05)';
+  mCtx.fillRect(rX, rY, rW, rH);
+  mCtx.strokeStyle = isDark ? 'rgba(148,163,184,0.7)' : 'rgba(71,85,105,0.65)';
+  mCtx.lineWidth = 1.2;
+  mCtx.strokeRect(rX, rY, rW, rH);
+
+  // ── Layer 2: All nodes — neutral/dim ─────────────────────────────────────
+  var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
+  var dimColor = isDark ? 'rgba(148,163,184,0.45)' : 'rgba(100,116,139,0.45)';
+
+  nodesDataset.getIds().forEach(function(id) {
+    if (typeof id !== 'string') return;
+    if (id.indexOf('memo:') === 0) return;
+    var p = network.getPosition(id);
+    if (!p) return;
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 3, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+
+  // ── Layer 3: Focused indicator (always on top) ───────────────────────────
+  if (focusedId !== null) {
+    var fp2 = positions[focusedId] || (function() {
+      var nd = NODES_DATA.find(function(n) { return n.id === focusedId; });
+      return nd ? {x: nd.x, y: nd.y} : null;
+    })();
+    if (fp2) {
+      mCtx.save();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 8, 0, Math.PI * 2);
+      mCtx.fillStyle = 'rgba(251,191,36,0.2)';
+      mCtx.shadowColor = 'rgba(251,191,36,0.9)';
+      mCtx.shadowBlur = 12;
+      mCtx.fill();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 5, 0, Math.PI * 2);
+      mCtx.fillStyle = '#fbbf24';
+      mCtx.shadowBlur = 10;
+      mCtx.fill();
+      mCtx.shadowBlur = 0;
+      mCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+      mCtx.lineWidth = 1.5;
+      mCtx.stroke();
+      mCtx.restore();
+    }
+  }
+
+  if (_focusedContainerIdx !== null && CONTAINERS_DATA[_focusedContainerIdx]) {
+    var cd = CONTAINERS_DATA[_focusedContainerIdx];
+    mCtx.save();
+    mCtx.strokeStyle = '#f59e0b';
+    mCtx.lineWidth = 2;
+    mCtx.shadowColor = 'rgba(245,158,11,0.9)';
+    mCtx.shadowBlur = 10;
+    mCtx.setLineDash([4, 3]);
+    mCtx.strokeRect(gx(cd.x), gy(cd.y), cd.w * s, cd.h * s);
+    mCtx.restore();
+  }
+}
+
 // ── Network init ──────────────────────────────────────────────────────────
 function initNetwork() {
   if (network) return;
@@ -1181,6 +1309,9 @@ function initNetwork() {
       ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
       ctx.restore();
     });
+
+    // 4. Minimap overlay.
+    drawMinimap();
   });
 
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
@@ -1603,7 +1734,7 @@ function makeSearchTester(query) {
 function focusSearchMatch(nodeId, animationDuration) {
   if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
   network.focus(nodeId, {
-    scale: 1.2,
+    scale: 0.9,
     animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
   });
   return true;
@@ -1869,6 +2000,39 @@ applyTheme(savedTheme);
   }
   function onUp() {
     handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+// ── Minimap resize (drag top-left handle) ─────────────────────────────────
+(function() {
+  var handle = document.getElementById('minimap-resize-handle');
+  var mc = document.getElementById('minimap-canvas');
+  if (!handle || !mc) return;
+  var MIN_W = 140, MIN_H = 90, MAX_W = 500, MAX_H = 360;
+  var startX, startY, startW, startH;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = mc.width;
+    startH = mc.height;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    // Dragging toward top-left expands; toward bottom-right shrinks.
+    var dx = startX - e.clientX;
+    var dy = startY - e.clientY;
+    var newW = Math.max(MIN_W, Math.min(MAX_W, startW + dx));
+    var newH = Math.max(MIN_H, Math.min(MAX_H, startH + dy));
+    mc.width  = Math.round(newW);
+    mc.height = Math.round(newH);
+    if (network) network.redraw();
+  }
+  function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
   }
