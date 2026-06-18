@@ -927,10 +927,30 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
+  // Pan sync: dragging only (zoom event is NOT used — moveTo() also fires zoom,
+  // creating a feedback loop that pans the graph on hover/redraw).
   networkLeft.on('dragging', syncLeftToRight);
-  networkLeft.on('zoom', syncLeftToRight);
   networkRight.on('dragging', syncRightToLeft);
-  networkRight.on('zoom', syncRightToLeft);
+
+  // Zoom sync: wheel event on the container divs. wheel fires only from real
+  // user scroll; moveTo() does not fire wheel, so no feedback loop is possible.
+  var _wheelLRId = null, _wheelRLId = null;
+  leftContainer.addEventListener('wheel', function() {
+    if (_wheelLRId) return;
+    _wheelLRId = requestAnimationFrame(function() {
+      _wheelLRId = null;
+      if (networkLeft && networkRight)
+        networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
+    });
+  }, {passive: true});
+  rightContainer.addEventListener('wheel', function() {
+    if (_wheelRLId) return;
+    _wheelRLId = requestAnimationFrame(function() {
+      _wheelRLId = null;
+      if (networkLeft && networkRight)
+        networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
+    });
+  }, {passive: true});
 
   function onSplitNodeClick(params) {
     if (params.nodes.length === 0) { closeSidePanel(); return; }
