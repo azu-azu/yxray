@@ -509,10 +509,10 @@ _HTML_TEMPLATE = """\
     <div id="minimap-wrap">
       <div id="minimap-resize-handle"></div>
       <canvas id="minimap-canvas" width="240" height="160"></canvas>
-      <button id="minimap-close" title="Hide minimap" onclick="document.getElementById('minimap-wrap').style.display='none';document.getElementById('minimap-reopen').style.display='block';">&times;</button>
+      <button id="minimap-close" title="Hide minimap" onclick="closeMinimapPanel()">&times;</button>
     </div>
   </div>
-  <button id="minimap-reopen" title="Show minimap" onclick="document.getElementById('minimap-wrap').style.display='';document.getElementById('minimap-reopen').style.display='none';">&#9638; Map</button>
+  <button id="minimap-reopen" title="Show minimap" onclick="openMinimapPanel()">&#9638; Map</button>
   {% if key_insights %}
   <div id="insights-panel">
     <div id="insights-panel-drag-handle"></div>
@@ -660,7 +660,7 @@ function focusNode(toolId, clickedEl) {
         });
     }
 
-    network.focus(visibleId, { scale: 0.9, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.focus(visibleId, { scale: FOCUS_SCALE, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
     network.selectNodes([visibleId]);
 
     // Highlight the clicked panel element
@@ -729,7 +729,7 @@ function openSearchResultsPanel(entries) {
                     var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
                     if (visId !== null) {
                         network.selectNodes([visId]);
-                        network.focus(visId, {scale: 0.9, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                        network.focus(visId, {scale: FOCUS_SCALE, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
                     }
                 }
             };
@@ -857,10 +857,10 @@ var _containerFocusEl = null;
 function focusContainer(containerIdx, clickedEl) {
     // Clear node focus state
     if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
-        var _restoreColor = _focusHighlightOrigColor !== null
+        var restoreColor = _focusHighlightOrigColor !== null
             ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
             : {id: _focusHighlightId, color: null, shadow: false};
-        nodesDataset.update(_restoreColor);
+        nodesDataset.update(restoreColor);
     }
     _focusHighlightId = null;
     _focusHighlightOrigColor = null;
