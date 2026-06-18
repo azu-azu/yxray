@@ -969,6 +969,35 @@ class SingleGraphRenderer:
                 for s in workflow_steps
             ]
 
+        # Sort containers in topological order (same method as the Summary / Workflow Steps panel).
+        # Each container gets the minimum topological rank of its member nodes; containers with no
+        # ranked members sort last, ties broken by original XML order.
+        if workflow_steps and containers_list:
+            n_steps = len(workflow_steps)
+            step_rank: dict[int, int] = {
+                int(ws.tool_id if hasattr(ws, "tool_id") else ws["tool_id"]): i
+                for i, ws in enumerate(workflow_steps)
+            }
+            members_min_rank: dict[int, int] = {}
+            for node in doc.nodes:
+                if node.container_id is not None:
+                    cid = int(node.container_id)
+                    rank = step_rank.get(int(node.tool_id), n_steps)
+                    if cid not in members_min_rank or rank < members_min_rank[cid]:
+                        members_min_rank[cid] = rank
+            container_tool_ids = [
+                int(n.tool_id)
+                for n in doc.nodes
+                if "ToolContainer" in n.tool_type and n.width > 0 and n.height > 0
+            ]
+            if len(container_tool_ids) == len(containers_list):
+                indexed = [
+                    (i, tid, c)
+                    for i, (tid, c) in enumerate(zip(container_tool_ids, containers_list))
+                ]
+                indexed.sort(key=lambda t: (members_min_rank.get(t[1], n_steps), t[0]))
+                containers_list = [c for _, _, c in indexed]
+
         insights_dicts: list[Any] | None = None
         if key_insights:
             insights_dicts = [
