@@ -172,6 +172,25 @@ _HTML_TEMPLATE = """\
       user-select: none;
     }
     #minimap-canvas { display: block; }
+    #minimap-resize-handle {
+      position: absolute;
+      top: 0; left: 0;
+      width: 16px; height: 16px;
+      cursor: nw-resize;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-resize-handle::before {
+      content: '';
+      position: absolute;
+      top: 4px; left: 4px;
+      width: 7px; height: 7px;
+      border-top: 2px solid var(--text-muted);
+      border-left: 2px solid var(--text-muted);
+      border-radius: 1px;
+    }
+    #minimap-wrap:hover #minimap-resize-handle { opacity: 1; }
     #minimap-close {
       position: absolute;
       top: 3px; right: 4px;
@@ -488,7 +507,8 @@ _HTML_TEMPLATE = """\
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
     <div id="minimap-wrap">
-      <canvas id="minimap-canvas" width="180" height="120"></canvas>
+      <div id="minimap-resize-handle"></div>
+      <canvas id="minimap-canvas" width="240" height="160"></canvas>
       <button id="minimap-close" title="Hide minimap" onclick="document.getElementById('minimap-wrap').style.display='none';document.getElementById('minimap-reopen').style.display='block';">&times;</button>
     </div>
   </div>
@@ -636,7 +656,7 @@ function focusNode(toolId, clickedEl) {
         });
     }
 
-    network.focus(visibleId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.focus(visibleId, { scale: 0.9, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
     network.selectNodes([visibleId]);
 
     // Highlight the clicked panel element
@@ -705,7 +725,7 @@ function openSearchResultsPanel(entries) {
                     var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
                     if (visId !== null) {
                         network.selectNodes([visId]);
-                        network.focus(visId, {scale: 1.2, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                        network.focus(visId, {scale: 0.9, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
                     }
                 }
             };

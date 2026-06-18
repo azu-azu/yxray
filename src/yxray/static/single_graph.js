@@ -1974,3 +1974,36 @@ applyTheme(savedTheme);
     document.removeEventListener('mouseup', onUp);
   }
 })();
+
+// ── Minimap resize (drag top-left handle) ─────────────────────────────────
+(function() {
+  var handle = document.getElementById('minimap-resize-handle');
+  var mc = document.getElementById('minimap-canvas');
+  if (!handle || !mc) return;
+  var MIN_W = 140, MIN_H = 90, MAX_W = 500, MAX_H = 360;
+  var startX, startY, startW, startH;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = mc.width;
+    startH = mc.height;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    // Dragging toward top-left expands; toward bottom-right shrinks.
+    var dx = startX - e.clientX;
+    var dy = startY - e.clientY;
+    var newW = Math.max(MIN_W, Math.min(MAX_W, startW + dx));
+    var newH = Math.max(MIN_H, Math.min(MAX_H, startH + dy));
+    mc.width  = Math.round(newW);
+    mc.height = Math.round(newH);
+    if (network) network.redraw();
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
