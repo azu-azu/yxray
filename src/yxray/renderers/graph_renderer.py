@@ -234,7 +234,9 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   padding: 4px 0;
   background: var(--surface);
   color: var(--text);
+  direction: rtl;
 }
+.split-change-rows > * { direction: ltr; }
 
 .split-controls {
   display: flex;
@@ -342,6 +344,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   text-transform: uppercase;
   letter-spacing: 1px;
 }
+
 
 .diff-unified {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -679,24 +682,22 @@ function buildPanelContent(panel, entry) {
   titleEl.className = 'panel-title';
   titleEl.textContent = entry.data.tool_type + ' (ID: ' + entry.data.tool_id + ') \u2014 ' + entry.category;
   panel.appendChild(titleEl);
-  if (entry.category === 'modified') {
-    panel.appendChild(buildConfigDiff(entry.data.old_config, entry.data.new_config));
-  } else {
-    var config = entry.data.config || {};
-    Object.keys(config).forEach(function(k) {
-      var row = document.createElement('div');
-      row.className = 'panel-field-row';
-      var nameEl = document.createElement('div');
-      nameEl.className = 'panel-field-name';
-      nameEl.textContent = k;
-      var valEl = document.createElement('div');
-      valEl.className = 'value-mono';
-      valEl.textContent = formatVal(config[k]);
-      row.appendChild(nameEl);
-      row.appendChild(valEl);
-      panel.appendChild(row);
-    });
-  }
+  var config = entry.category === 'modified'
+    ? (entry.data.new_config || {})
+    : (entry.data.config || {});
+  Object.keys(config).forEach(function(k) {
+    var row = document.createElement('div');
+    row.className = 'panel-field-row';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'panel-field-name';
+    nameEl.textContent = k;
+    var valEl = document.createElement('div');
+    valEl.className = 'value-mono';
+    valEl.textContent = formatVal(config[k]);
+    row.appendChild(nameEl);
+    row.appendChild(valEl);
+    panel.appendChild(row);
+  });
 }
 
 function formatVal(v) {
@@ -925,10 +926,30 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
+  // Pan sync: dragging only (zoom event is NOT used — moveTo() also fires zoom,
+  // creating a feedback loop that pans the graph on hover/redraw).
   networkLeft.on('dragging', syncLeftToRight);
-  networkLeft.on('zoom', syncLeftToRight);
   networkRight.on('dragging', syncRightToLeft);
-  networkRight.on('zoom', syncRightToLeft);
+
+  // Zoom sync: wheel event on the container divs. wheel fires only from real
+  // user scroll; moveTo() does not fire wheel, so no feedback loop is possible.
+  var _wheelLRId = null, _wheelRLId = null;
+  leftContainer.addEventListener('wheel', function() {
+    if (_wheelLRId) return;
+    _wheelLRId = requestAnimationFrame(function() {
+      _wheelLRId = null;
+      if (networkLeft && networkRight)
+        networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
+    });
+  }, {passive: true});
+  rightContainer.addEventListener('wheel', function() {
+    if (_wheelRLId) return;
+    _wheelRLId = requestAnimationFrame(function() {
+      _wheelRLId = null;
+      if (networkLeft && networkRight)
+        networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
+    });
+  }, {passive: true});
 
   function onSplitNodeClick(params) {
     if (params.nodes.length === 0) { closeSidePanel(); return; }
@@ -1214,6 +1235,8 @@ function switchView(view) {
 
 window.switchView = switchView;
 window.graphFocusNode = focusNode;
+window.expandAllChanges = expandAllChanges;
+window.collapseAllChanges = collapseAllChanges;
 switchView(currentView);
 
 })();
