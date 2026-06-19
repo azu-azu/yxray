@@ -9,7 +9,7 @@ Public API:
     build_split_node_list(result, nodes_old, nodes_new) -> tuple[list[dict], list[dict]]
 
 This module is internal (underscore prefix); it is consumed exclusively by
-graph_renderer.py. Unit tests import directly from here.
+diff_graph_renderer.py. Unit tests import directly from here.
 """
 
 from __future__ import annotations
