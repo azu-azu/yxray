@@ -5,6 +5,14 @@ var EDGES_DATA = __d.edges;
 var CONFIG_MAP = __d.config_map;
 var CONTAINERS_DATA = __d.containers;
 
+var BROWSE_NODE_IDS = (function() {
+  var ids = {};
+  NODES_DATA.forEach(function(n) {
+    if (n.title && n.title.split('.').pop().toLowerCase() === 'browse') ids[n.id] = true;
+  });
+  return ids;
+}());
+
 // ── vis-network setup ─────────────────────────────────────────────────────
 var network = null;
 var nodesDataset = null;
@@ -557,13 +565,22 @@ function expandCluster(cid) {
   c.memberIds.forEach(function(mid) {
     var orig = NODES_DATA.find(function(n) { return n.id === mid; });
     if (!orig) return;
+    var nodeColor, fontColor;
+    if (BROWSE_NODE_IDS[mid]) {
+      var bc = browseNodeColor();
+      nodeColor = bc;
+      fontColor = contrastColor(bc.background);
+    } else {
+      nodeColor = {background: col.bg, border: col.bd,
+              highlight: {background: '#92400e', border: '#f59e0b'},
+              hover: {background: col.hover, border: col.bd}};
+      fontColor = contrastColor(col.bg);
+    }
     nodesDataset.add({
       id: orig.id, label: orig.label, title: orig.title, shape: 'box',
       x: orig.x, y: orig.y,
-      color: {background: col.bg, border: col.bd,
-              highlight: {background: '#92400e', border: '#f59e0b'},
-              hover: {background: col.hover, border: col.bd}},
-      font: {color: contrastColor(col.bg)}
+      color: nodeColor,
+      font: {color: fontColor}
     });
   });
 
@@ -1658,6 +1675,16 @@ function nodeColors() {
   };
 }
 
+function browseNodeColor() {
+  return isDark
+    ? {background: '#334155', border: '#475569',
+       highlight: {background: '#92400e', border: '#f59e0b'},
+       hover: {background: '#475569', border: '#475569'}}
+    : {background: '#94a3b8', border: '#64748b',
+       highlight: {background: '#92400e', border: '#f59e0b'},
+       hover: {background: '#cbd5e1', border: '#64748b'}};
+}
+
 // Returns the base (un-highlighted, un-dimmed) color update object for node n.
 // col = nodeColors() result. Used by clearSearch and applyTheme.
 function baseNodeColorUpdate(n, col) {
@@ -1672,6 +1699,10 @@ function baseNodeColorUpdate(n, col) {
   }
   if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
     return {id: n.id, font: {color: '#000000'}};
+  }
+  if (BROWSE_NODE_IDS[n.id]) {
+    var bc = browseNodeColor();
+    return {id: n.id, color: bc, font: {color: contrastColor(bc.background)}, shadow: false};
   }
   return {id: n.id, color: {
     background: col.bg, border: col.bd,
@@ -1977,6 +2008,11 @@ function applyTheme(theme) {
   nodesDataset.getIds().forEach(function(id) {
     if (AppState.clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
+    if (BROWSE_NODE_IDS[id]) {
+      var bc = browseNodeColor();
+      nodeUpdates.push({id: id, color: bc, font: {color: contrastColor(bc.background)}});
+      return;
+    }
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
       highlight: {background: '#92400e', border: '#f59e0b'},
       hover: {background: nodeHover, border: nodeBd}}, font: {color: contrastColor(nodeBg)}});
