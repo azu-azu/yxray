@@ -1,4 +1,4 @@
-"""Tests for GraphRenderer — GRPH-01 through GRPH-04."""
+"""Tests for DiffGraphRenderer — GRPH-01 through GRPH-04."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from yxray.models import DiffResult
 from yxray.models.types import ToolID
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers import (
-    GraphRenderer,
+    DiffGraphRenderer,
     HTMLRenderer,
     InspectReportRenderer,
     SingleGraphRenderer,
@@ -40,7 +40,7 @@ def _extract_graph_nodes(html: str) -> list[dict]:
 
 def test_render_self_contained() -> None:
     """GRPH-01 / REPT-04: no CDN references; graph-container and vis.Network present."""
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(
         ALL_CHANGE_TYPES_DIFF,
         ALL_CONNECTIONS,
@@ -54,7 +54,7 @@ def test_render_self_contained() -> None:
 
 def test_standalone_graph_report_button_reuses_existing_companion_window() -> None:
     """Graph -> report navigation uses a stable window target and focuses it."""
-    html = GraphRenderer().render_standalone(EMPTY_DIFF, (), (), ())
+    html = DiffGraphRenderer().render_standalone(EMPTY_DIFF, (), (), ())
 
     assert "function companionWindowName(url)" in html
     assert "window.name = companionWindowName(window.location.href)" in html
@@ -93,7 +93,7 @@ def test_single_graph_has_summary_panel_js() -> None:
 
 def test_render_returns_fragment_not_full_document() -> None:
     """GRPH-01: output is a fragment, not a full HTML document."""
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(
         EMPTY_DIFF,
         (),
@@ -108,7 +108,7 @@ def test_render_returns_fragment_not_full_document() -> None:
 
 def test_node_colors_match_diff_status() -> None:
     """GRPH-03: each diff-status category maps to the correct hex color."""
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(
         ALL_CHANGE_TYPES_DIFF,
         ALL_CONNECTIONS,
@@ -130,7 +130,7 @@ def test_node_count_matches_all_unique_tool_ids() -> None:
     # ALL_NODES_OLD: 811(removed), 812(mod_old), 813(conn_src), 814(conn_dst), 815(unch)
     # ALL_NODES_NEW: 810(added),   812(mod_new), 813(conn_src), 814(conn_dst), 815(unch)
     # Unique IDs: 810, 811, 812, 813, 814, 815 = 6 nodes
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(
         ALL_CHANGE_TYPES_DIFF,
         ALL_CONNECTIONS,
@@ -143,7 +143,7 @@ def test_node_count_matches_all_unique_tool_ids() -> None:
 
 def test_hierarchical_layout_produces_positions() -> None:
     """GRPH-02: hierarchical layout assigns valid x/y positions to all nodes."""
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     # Simple two-node chain: 801 -> 802 with a connection
     html = renderer.render(
         EMPTY_DIFF,
@@ -174,7 +174,7 @@ def test_canvas_layout_uses_alteryx_coordinates() -> None:
     n_new = AlteryxNode(
         tool_id=ToolID(820), tool_type="InputData", x=300.0, y=400.0, config={}
     )
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(DiffResult(), (), (n_old,), (n_new,), canvas_layout=True)
     nodes = _extract_graph_nodes(html)
     assert len(nodes) == 1
@@ -184,7 +184,7 @@ def test_canvas_layout_uses_alteryx_coordinates() -> None:
 
 def test_diff_panel_data_available_for_modified_node() -> None:
     """GRPH-04: diff panel elements are present in graph fragment for modified nodes."""
-    renderer = GraphRenderer()
+    renderer = DiffGraphRenderer()
     html = renderer.render(
         MODIFIED_DIFF,
         (),

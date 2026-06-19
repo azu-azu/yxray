@@ -1,7 +1,7 @@
 # ruff: noqa: E501
-"""Interactive vis-network graph HTML fragment renderer.
+"""Interactive vis-network graph HTML fragment renderer for diff output.
 
-GraphRenderer.render() produces a self-contained HTML fragment (not a full
+DiffGraphRenderer.render() produces a self-contained HTML fragment (not a full
 document) that is embedded into the full report by HTMLRenderer via the
 ``{{ graph_html | safe }}`` template placeholder.
 
@@ -1363,7 +1363,7 @@ function openReport() {
 """
 
 
-class GraphRenderer:
+class DiffGraphRenderer:
     """Render a DiffResult as an interactive vis-network graph HTML fragment.
 
     Produces: <section id="graph-section"> containing:

@@ -499,7 +499,7 @@ class HTMLRenderer:
             result: The diff output to render.
             file_a: Display name for the baseline workflow file.
             file_b: Display name for the changed workflow file.
-            graph_html: Optional HTML fragment from GraphRenderer to embed in the
+            graph_html: Optional HTML fragment from DiffGraphRenderer to embed in the
                 report. When non-empty, the interactive vis-network graph section
                 is inserted before the closing container div. Defaults to "".
             metadata: Optional governance metadata dict for ALCOA+ compliance footer.
