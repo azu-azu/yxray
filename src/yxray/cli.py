@@ -26,8 +26,7 @@ app = typer.Typer(no_args_is_help=True)
 _err_console = Console(stderr=True)
 
 
-@app.command()
-def diff(  # noqa: B008
+def _diff_impl(  # noqa: B008
     workflow_a: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help="Baseline .yxmd or .yxwz file (quote paths that contain spaces)"
     ),
@@ -81,7 +80,7 @@ def diff(  # noqa: B008
 
     Paths that contain spaces must be quoted in the shell, e.g.:
 
-      alteryx-diff "My Workflow A.yxmd" "My Workflow B.yxmd"
+      acd diff "My Workflow A.yxmd" "My Workflow B.yxmd"
     """
     # Compute governance metadata upfront — single timestamp for audit consistency
     # Guard here: missing file raises FileNotFoundError before pipeline even starts
@@ -170,8 +169,11 @@ def diff(  # noqa: B008
     raise typer.Exit(code=1)
 
 
-@app.command()
-def inspect(  # noqa: B008
+app.command("diff")(_diff_impl)
+app.command("d", hidden=True)(_diff_impl)
+
+
+def _inspect_impl(  # noqa: B008
     workflow: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help=".yxmd or .yxwz workflow file to inspect"
     ),
@@ -218,6 +220,10 @@ def inspect(  # noqa: B008
     webbrowser.open(out_path.resolve().as_uri())
 
 
+app.command("inspect")(_inspect_impl)
+app.command("i", hidden=True)(_inspect_impl)
+
+
 def _file_sha256(path: pathlib.Path) -> str:
     """Return 64-char SHA-256 hex digest. Uses hashlib.file_digest (Python 3.11+)."""
     with path.open("rb") as f:
@@ -246,7 +252,6 @@ def _cli_json_output(result: DiffResult, metadata: dict[str, Any]) -> str:
     Distinct from JSONRenderer output ({summary, tools, connections}).
     Kept separate to avoid breaking existing JSONRenderer tests (5 passing).
     """
-    r: DiffResult = result
     payload: dict[str, Any] = {
         "added": [
             {
@@ -254,7 +259,7 @@ def _cli_json_output(result: DiffResult, metadata: dict[str, Any]) -> str:
                 "tool_type": n.tool_type,
                 "config": dict(n.config),
             }
-            for n in r.added_nodes
+            for n in result.added_nodes
         ],
         "removed": [
             {
@@ -262,7 +267,7 @@ def _cli_json_output(result: DiffResult, metadata: dict[str, Any]) -> str:
                 "tool_type": n.tool_type,
                 "config": dict(n.config),
             }
-            for n in r.removed_nodes
+            for n in result.removed_nodes
         ],
         "modified": [
             {
@@ -273,7 +278,7 @@ def _cli_json_output(result: DiffResult, metadata: dict[str, Any]) -> str:
                     for k, v in nd.field_diffs.items()
                 ],
             }
-            for nd in r.modified_nodes
+            for nd in result.modified_nodes
         ],
         "metadata": metadata,
     }
