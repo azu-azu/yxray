@@ -895,7 +895,7 @@ document.getElementById('split-search-clear').addEventListener('click', function
 var networkLeft = null, networkRight = null;
 var nodesDatasetLeft = null, nodesDatasetRight = null;
 var edgesDatasetLeft = null, edgesDatasetRight = null;
-var syncingViewport = false;
+var _dragSource = null; // 'left' | 'right' | null — set by pointerdown, cleared by pointerup
 
 var SPLIT_OPTIONS = {
   physics: {enabled: false},
@@ -926,10 +926,19 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
-  // Pan sync: dragging only (zoom event is NOT used — moveTo() also fires zoom,
-  // creating a feedback loop that pans the graph on hover/redraw).
-  networkLeft.on('dragging', syncLeftToRight);
-  networkRight.on('dragging', syncRightToLeft);
+  // Track which canvas the user's pointer is pressed on.
+  // This is the only reliable way to know "which graph the user is dragging":
+  // vis-network's 'dragging' event fires for both user pans AND programmatic
+  // moveTo() calls, so _dragSource lets us ignore the latter on the target side.
+  leftContainer.addEventListener('pointerdown',  function() { _dragSource = 'left';  }, true);
+  rightContainer.addEventListener('pointerdown', function() { _dragSource = 'right'; }, true);
+  window.addEventListener('pointerup',     function() { _dragSource = null; }, true);
+  window.addEventListener('pointercancel', function() { _dragSource = null; }, true);
+
+  // Pan sync: only propagate when the user is actively pressing on that side.
+  // The _dragSource guard prevents moveTo() on the target from bouncing back.
+  networkLeft.on('dragging',  function() { if (_dragSource === 'left')  syncLeftToRight(); });
+  networkRight.on('dragging', function() { if (_dragSource === 'right') syncRightToLeft(); });
 
   // Zoom sync: wheel event on the container divs. wheel fires only from real
   // user scroll; moveTo() does not fire wheel, so no feedback loop is possible.
@@ -967,24 +976,20 @@ function initSplitNetworks() {
 var _syncLRFrameId = null, _syncRLFrameId = null;
 
 function syncLeftToRight() {
-  if (syncingViewport || _syncLRFrameId) return;
+  if (_syncLRFrameId) return;
   _syncLRFrameId = requestAnimationFrame(function() {
     _syncLRFrameId = null;
-    if (syncingViewport) return;
-    syncingViewport = true;
-    networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
-    syncingViewport = false;
+    if (networkLeft && networkRight)
+      networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
   });
 }
 
 function syncRightToLeft() {
-  if (syncingViewport || _syncRLFrameId) return;
+  if (_syncRLFrameId) return;
   _syncRLFrameId = requestAnimationFrame(function() {
     _syncRLFrameId = null;
-    if (syncingViewport) return;
-    syncingViewport = true;
-    networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
-    syncingViewport = false;
+    if (networkLeft && networkRight)
+      networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
   });
 }
 
