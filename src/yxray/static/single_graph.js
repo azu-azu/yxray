@@ -5,6 +5,15 @@ var EDGES_DATA = __d.edges;
 var CONFIG_MAP = __d.config_map;
 var CONTAINERS_DATA = __d.containers;
 
+var BROWSE_NODE_IDS = (function() {
+  var ids = {};
+  NODES_DATA.forEach(function(n) {
+    var tip = n.title ? n.title.split('.').pop().toLowerCase() : '';
+    if (tip === 'browse' || tip === 'browsev2') ids[n.id] = true;
+  });
+  return ids;
+}());
+
 // ── vis-network setup ─────────────────────────────────────────────────────
 var network = null;
 var nodesDataset = null;
@@ -22,14 +31,33 @@ var CONT_PAD_Y          = 36; // vertical padding around container boundary box
 var CONT_R              = 10; // corner radius of container boundary box
 var CONTAINER_BOUNDARY_PAD = 8; // tolerance for nodes on/near the container boundary
 var HANDLE_HIT_PX          = 10; // resize handle hit radius in DOM pixels
-var NODE_LABEL_FONT_COLOR  = '#000000'; // text inside vis-network node boxes
+
+// ── Focus / zoom constants ────────────────────────────────────────────────
+var FOCUS_SCALE = 0.9; // unified zoom level for focusNode / search / container focus
+
+// ── Minimap constants ─────────────────────────────────────────────────────
+var MINIMAP_GRAPH_PAD = 80;   // padding added around graph bounding box in minimap
+var MINIMAP_FIT       = 0.92; // scale factor to leave a small margin inside minimap canvas
+var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
+var _containerBounds       = [];   // [{x1,y1,x2,y2}] updated each beforeDrawing frame
+var _containerDragState    = null; // active container drag, or null
+// Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
+function contrastColor(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? '#000000' : '#ffffff';
+}
 
 // ── Cluster color palette ─────────────────────────────────────────────────
 // type = same-type BFS cluster (purple); container = ToolContainer group (red).
 var CLUSTER_STYLE = {
   type: {
     normal: {background:'#4c1d95', border:'#7c3aed',
-             highlight:{background:'#5b21b6', border:'#7c3aed'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#5b21b6', border:'#7c3aed'}},
     dim:    {background:'#2e1065', border:'#4c1d95'},
     matchBg: '#5b21b6',
@@ -37,7 +65,7 @@ var CLUSTER_STYLE = {
   },
   container: {
     normal: {background:'#7f1d1d', border:'#ef4444',
-             highlight:{background:'#991b1b', border:'#ef4444'},
+             highlight:{background:'#92400e', border:'#f59e0b'},
              hover:    {background:'#991b1b', border:'#ef4444'}},
     dim:    {background:'#450a0a', border:'#7f1d1d'},
     matchBg: '#991b1b',
@@ -64,7 +92,8 @@ var AppState = {
   memoHandles: {},        // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
   resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
 };
-var MEMO_STORAGE_KEY = 'yxray-memos-' + (document.title || 'default');
+var MEMO_STORAGE_KEY           = 'yxray-memos-'           + (document.title || 'default');
+var CONTAINER_ORDER_KEY        = 'yxray-container-order-' + (document.title || 'default');
 
 var options = {
   physics: {enabled: false},
@@ -200,16 +229,16 @@ function buildClusters(skipSet) {
     nodesDataset.add({
       id: c.cid,
       label: c.toolType + ' ×' + c.chain.length,
-      title: c.toolType + ' cluster — Double-click to expand',
+      title: c.toolType + ' cluster — Click to expand/collapse',
       shape: 'box',
       borderDashes: [5, 3],
       x: cPos.x, y: cPos.y,
       color: {
         background: '#4c1d95', border: '#7c3aed',
-        highlight: {background: '#5b21b6', border: '#7c3aed'},
+        highlight: {background: '#92400e', border: '#f59e0b'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
-      font: {color: NODE_LABEL_FONT_COLOR, size: 13}
+      font: {color: contrastColor('#4c1d95'), size: 13}
     });
   });
 
@@ -312,16 +341,16 @@ function _containerNodeStyle(fillHex) {
   // Returns {color, fontColor} for a container cluster node.
   // Falls back to default red if fill is null / near-white / near-gray.
   if (!fillHex || _isNearWhiteOrGray(fillHex)) {
-    return {color: CLUSTER_STYLE.container.normal, fontColor: NODE_LABEL_FONT_COLOR};
+    return {color: CLUSTER_STYLE.container.normal, fontColor: contrastColor('#7f1d1d')};
   }
   var dark = _darkenHex(fillHex, 20);
   return {
     color: {
       background: fillHex,  border: dark,
-      highlight: {background: _darkenHex(fillHex, 8), border: dark},
+      highlight: {background: '#92400e', border: '#f59e0b'},
       hover:     {background: _darkenHex(fillHex, 8), border: dark}
     },
-    fontColor: NODE_LABEL_FONT_COLOR
+    fontColor: contrastColor(fillHex)
   };
 }
 
@@ -374,7 +403,7 @@ function buildContainerClusters(membership) {
     var ns = _containerNodeStyle(c.fillColor);
     nodesDataset.add({
       id: c.cid, label: c.label,
-      title: c.caption + ' — Double-click to expand',
+      title: c.caption + ' — Click to expand/collapse',
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
       color: ns.color,
@@ -453,12 +482,12 @@ function recollapseGroup(groupKey) {
   // Re-add cluster node with appropriate colors
   var isContainer = group.isContainer || false;
   var clusterTitle = isContainer
-    ? group.toolType + ' \u2014 Double-click to expand'
-    : group.toolType + ' cluster \u2014 Double-click to expand';
+    ? group.toolType + ' \u2014 Click to expand/collapse'
+    : group.toolType + ' cluster \u2014 Click to expand/collapse';
   var cPos = centroid(group.memberIds);
   var ns = isContainer
     ? _containerNodeStyle(group.fillColorHex || null)
-    : {color: CLUSTER_STYLE.type.normal, fontColor: NODE_LABEL_FONT_COLOR};
+    : {color: CLUSTER_STYLE.type.normal, fontColor: contrastColor('#4c1d95')};
   nodesDataset.add({
     id: groupKey,
     label: group.toolType + ' \xd7' + group.memberIds.length,
@@ -507,7 +536,7 @@ function recollapseGroup(groupKey) {
     isContainer: group.isContainer || false,
     containerNodeId: group.containerNodeId,
     fillColorHex: group.fillColorHex || null,
-    fontColorHex: group.fontColorHex || NODE_LABEL_FONT_COLOR,
+    fontColorHex: group.fontColorHex || (group.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95')),
   };
 
   // Clean up expanded state
@@ -520,7 +549,7 @@ function recollapseGroup(groupKey) {
   // Re-apply search so the newly restored cluster node is highlighted/dimmed correctly.
   if (searchActive) {
     var q = document.getElementById('search-input').value;
-    if (q) doSearch(q);
+    if (q) doSearch(q, true, true);
   }
 }
 
@@ -537,13 +566,22 @@ function expandCluster(cid) {
   c.memberIds.forEach(function(mid) {
     var orig = NODES_DATA.find(function(n) { return n.id === mid; });
     if (!orig) return;
+    var nodeColor, fontColor;
+    if (BROWSE_NODE_IDS[mid]) {
+      var bc = browseNodeColor();
+      nodeColor = bc;
+      fontColor = contrastColor(bc.background);
+    } else {
+      nodeColor = {background: col.bg, border: col.bd,
+              highlight: {background: '#92400e', border: '#f59e0b'},
+              hover: {background: col.hover, border: col.bd}};
+      fontColor = contrastColor(col.bg);
+    }
     nodesDataset.add({
       id: orig.id, label: orig.label, title: orig.title, shape: 'box',
       x: orig.x, y: orig.y,
-      color: {background: col.bg, border: col.bd,
-              highlight: {background: col.sel, border: col.bd},
-              hover: {background: col.hover, border: col.bd}},
-      font: {color: NODE_LABEL_FONT_COLOR}
+      color: nodeColor,
+      font: {color: fontColor}
     });
   });
 
@@ -553,7 +591,7 @@ function expandCluster(cid) {
   var expandedIsContainer = c.isContainer || false;
   var expandedContainerNodeId = c.containerNodeId;
   var expandedFillColorHex = c.fillColorHex || null;
-  var expandedFontColorHex = c.fontColorHex || NODE_LABEL_FONT_COLOR;
+  var expandedFontColorHex = c.fontColorHex || (c.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95'));
   delete AppState.clusterMap[cid];
   AppState.groupMembers[cid] = {
     memberIds: expandedMemberIds,
@@ -604,7 +642,7 @@ function expandCluster(cid) {
   if (searchActive) {
     var q = document.getElementById('search-input').value;
     if (q) {
-      doSearch(q, true);
+      doSearch(q, true, true);
       if (focusFirstVisibleSearchMatch(q, expandedMemberIds)) return;
     }
   }
@@ -626,7 +664,7 @@ function _memoNodeDef(id, text, x, y, w, h) {
       highlight: {background: '#fef08a', border: '#a16207'},
       hover:     {background: '#fef08a', border: '#a16207'}
     },
-    font: {color: NODE_LABEL_FONT_COLOR, size: 13},
+    font: {color: '#000000', size: 13},
     borderWidth: 2,
     shapeProperties: {borderRadius: 4}
   };
@@ -677,6 +715,110 @@ function loadMemos() {
     console.warn('[yxray] memo load failed:', e);
   }
 }
+
+// ── Container order persistence ───────────────────────────────────────────
+function saveContainerOrder() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  var order = Array.from(body.querySelectorAll('.container-row')).map(function(el) {
+    return el.getAttribute('data-label');
+  });
+  try {
+    localStorage.setItem(CONTAINER_ORDER_KEY, JSON.stringify(order));
+  } catch(e) {
+    console.warn('[yxray] container order save failed:', e);
+  }
+}
+
+function loadContainerOrder() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  try {
+    var raw = localStorage.getItem(CONTAINER_ORDER_KEY);
+    if (!raw) return;
+    var order = JSON.parse(raw);
+    if (!Array.isArray(order)) return;
+    var rows = Array.from(body.querySelectorAll('.container-row'));
+    // Use arrays to handle duplicate labels without losing rows.
+    var rowMap = {};
+    rows.forEach(function(el) {
+      var lbl = el.getAttribute('data-label');
+      if (!rowMap[lbl]) rowMap[lbl] = [];
+      rowMap[lbl].push(el);
+    });
+    // Re-append in saved order; duplicate labels consume from the front of each array.
+    var placedSet = new Set();
+    order.forEach(function(label) {
+      if (rowMap[label] && rowMap[label].length > 0) {
+        var el = rowMap[label].shift();
+        body.appendChild(el);
+        placedSet.add(el);
+      }
+    });
+    // Append any rows not covered by saved order (new containers or leftover duplicates).
+    rows.forEach(function(el) {
+      if (!placedSet.has(el)) body.appendChild(el);
+    });
+  } catch(e) {
+    console.warn('[yxray] container order load failed:', e);
+  }
+}
+
+// ── Container row drag-to-reorder ─────────────────────────────────────────
+(function() {
+  var body = document.getElementById('containers-panel-body');
+  if (!body) return;
+  var dragSrc = null;
+
+  body.addEventListener('dragstart', function(e) {
+    var row = e.target.closest('.container-row');
+    if (!row) return;
+    dragSrc = row;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  function clearDragIndicators() {
+    body.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(function(el) {
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+  }
+
+  function isAfterMidpoint(e, el) {
+    var rect = el.getBoundingClientRect();
+    return e.clientY > rect.top + rect.height / 2;
+  }
+
+  body.addEventListener('dragend', function(e) {
+    var row = e.target.closest('.container-row');
+    if (row) row.classList.remove('dragging');
+    clearDragIndicators();
+    dragSrc = null;
+  });
+
+  body.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var row = e.target.closest('.container-row');
+    clearDragIndicators();
+    if (row && row !== dragSrc) {
+      row.classList.add(isAfterMidpoint(e, row) ? 'drag-over-bottom' : 'drag-over-top');
+    }
+  });
+
+  body.addEventListener('drop', function(e) {
+    e.preventDefault();
+    var target = e.target.closest('.container-row');
+    if (!target || !dragSrc || target === dragSrc) return;
+    clearDragIndicators();
+    if (isAfterMidpoint(e, target)) {
+      body.insertBefore(dragSrc, target.nextSibling);  // null → appendChild 相当
+    } else {
+      body.insertBefore(dragSrc, target);
+    }
+    saveContainerOrder();
+  });
+})();
 
 function openMemoModal(targetId, x, y) {
   AppState.memoEditTarget = targetId;
@@ -738,9 +880,144 @@ function exitConnectMode() {
   document.getElementById('connect-mode-hint').style.display = 'none';
 }
 
-// ── Network init ──────────────────────────────────────────────────────────
-var _clusterClickTimer = null;
+// ── Minimap ───────────────────────────────────────────────────────────────
+function closeMinimapPanel() {
+  document.getElementById('minimap-wrap').style.display = 'none';
+  document.getElementById('minimap-reopen').style.display = 'block';
+}
+function openMinimapPanel() {
+  document.getElementById('minimap-wrap').style.display = '';
+  document.getElementById('minimap-reopen').style.display = 'none';
+}
 
+function drawMinimap() {
+  var mc = document.getElementById('minimap-canvas');
+  if (!mc || !network || !nodesDataset) return;
+  var mCtx = mc.getContext('2d');
+  var mW = mc.width;
+  var mH = mc.height;
+
+  // Bounding box from original data node positions (stable; falls back to
+  // stored x/y for nodes that are currently collapsed inside a cluster).
+  var positions = network.getPositions(NODES_DATA.map(function(nd) { return nd.id; }));
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+  });
+  if (!isFinite(minX)) return;
+
+  minX -= MINIMAP_GRAPH_PAD; minY -= MINIMAP_GRAPH_PAD;
+  maxX += MINIMAP_GRAPH_PAD; maxY += MINIMAP_GRAPH_PAD;
+  var graphW = maxX - minX;
+  var graphH = maxY - minY;
+  if (graphW <= 0 || graphH <= 0) return;
+
+  // Fit the graph inside the minimap canvas while preserving aspect ratio.
+  var s = Math.min(mW / graphW, mH / graphH) * MINIMAP_FIT;
+  var offX = (mW - graphW * s) / 2;
+  var offY = (mH - graphH * s) / 2;
+  function gx(x) { return (x - minX) * s + offX; }
+  function gy(y) { return (y - minY) * s + offY; }
+
+  // Background
+  mCtx.clearRect(0, 0, mW, mH);
+  mCtx.fillStyle = isDark ? 'rgba(15,23,42,0.94)' : 'rgba(248,250,252,0.94)';
+  mCtx.fillRect(0, 0, mW, mH);
+
+  // Edges — use stored x/y for nodes collapsed inside clusters.
+  mCtx.strokeStyle = isDark ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.65)';
+  mCtx.lineWidth = 0.5;
+  EDGES_DATA.forEach(function(edge) {
+    var fp = positions[edge.from] || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.from;}); return nd ? {x:nd.x,y:nd.y} : null; })();
+    var tp = positions[edge.to]   || (function() { var nd = NODES_DATA.find(function(n){return n.id===edge.to;});   return nd ? {x:nd.x,y:nd.y} : null; })();
+    if (!fp || !tp) return;
+    mCtx.beginPath();
+    mCtx.moveTo(gx(fp.x), gy(fp.y));
+    mCtx.lineTo(gx(tp.x), gy(tp.y));
+    mCtx.stroke();
+  });
+
+  // ── Layer 1: Viewport rectangle (drawn first so focus glows render on top) ──
+  var scale = network.getScale();
+  var vp = network.getViewPosition();
+  var mainC = network.canvas.frame.canvas;
+  var vW = mainC.clientWidth / scale;
+  var vH = mainC.clientHeight / scale;
+  var rX = gx(vp.x - vW / 2);
+  var rY = gy(vp.y - vH / 2);
+  var rW = vW * s;
+  var rH = vH * s;
+  mCtx.fillStyle = isDark ? 'rgba(148,163,184,0.07)' : 'rgba(15,23,42,0.05)';
+  mCtx.fillRect(rX, rY, rW, rH);
+  mCtx.strokeStyle = isDark ? 'rgba(148,163,184,0.7)' : 'rgba(71,85,105,0.65)';
+  mCtx.lineWidth = 1.2;
+  mCtx.strokeRect(rX, rY, rW, rH);
+
+  // ── Layer 2: All nodes — neutral/dim ─────────────────────────────────────
+  var focusedId = typeof _focusHighlightId !== 'undefined' ? _focusHighlightId : null;
+  var dimColor = isDark ? 'rgba(148,163,184,0.45)' : 'rgba(100,116,139,0.45)';
+
+  nodesDataset.getIds().forEach(function(id) {
+    if (typeof id !== 'string') return;
+    if (id.indexOf('memo:') === 0) return;
+    var p = network.getPosition(id);
+    if (!p) return;
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 3, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+  NODES_DATA.forEach(function(nd) {
+    var p = positions[nd.id] || {x: nd.x, y: nd.y};
+    mCtx.beginPath();
+    mCtx.arc(gx(p.x), gy(p.y), 2.5, 0, Math.PI * 2);
+    mCtx.fillStyle = dimColor;
+    mCtx.fill();
+  });
+
+  // ── Layer 3: Focused indicator (always on top) ───────────────────────────
+  if (focusedId !== null) {
+    var fp2 = positions[focusedId] || (function() {
+      var nd = NODES_DATA.find(function(n) { return n.id === focusedId; });
+      return nd ? {x: nd.x, y: nd.y} : null;
+    })();
+    if (fp2) {
+      mCtx.save();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 8, 0, Math.PI * 2);
+      mCtx.fillStyle = 'rgba(251,191,36,0.2)';
+      mCtx.shadowColor = 'rgba(251,191,36,0.9)';
+      mCtx.shadowBlur = 12;
+      mCtx.fill();
+      mCtx.beginPath();
+      mCtx.arc(gx(fp2.x), gy(fp2.y), 5, 0, Math.PI * 2);
+      mCtx.fillStyle = '#fbbf24';
+      mCtx.shadowBlur = 10;
+      mCtx.fill();
+      mCtx.shadowBlur = 0;
+      mCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+      mCtx.lineWidth = 1.5;
+      mCtx.stroke();
+      mCtx.restore();
+    }
+  }
+
+  if (_focusedContainerIdx !== null && CONTAINERS_DATA[_focusedContainerIdx]) {
+    var cd = CONTAINERS_DATA[_focusedContainerIdx];
+    mCtx.save();
+    mCtx.strokeStyle = '#f59e0b';
+    mCtx.lineWidth = 2;
+    mCtx.shadowColor = 'rgba(245,158,11,0.9)';
+    mCtx.shadowBlur = 10;
+    mCtx.setLineDash([4, 3]);
+    mCtx.strokeRect(gx(cd.x), gy(cd.y), cd.w * s, cd.h * s);
+    mCtx.restore();
+  }
+}
+
+// ── Network init ──────────────────────────────────────────────────────────
 function initNetwork() {
   if (network) return;
   var canvas = document.getElementById('graph-canvas');
@@ -771,6 +1048,7 @@ function initNetwork() {
   //    initial canvas position fell inside the container's XML bounds)
   network.on('beforeDrawing', function(ctx) {
     if (CONTAINERS_DATA.length === 0) return;
+    _containerBounds = new Array(CONTAINERS_DATA.length);
     ctx.save();
 
     CONTAINERS_DATA.forEach(function(c, idx) {
@@ -813,6 +1091,12 @@ function initNetwork() {
       var w = maxX - minX + CONT_PAD_X * 2;
       var h = maxY - minY + CONT_PAD_Y * 2;
       var r = CONT_R;
+      // Cache label hit area for container drag. Label is drawn at (x+10, y-6).
+      if (c.label) {
+        ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
+        var tw = ctx.measureText(c.label).width;
+        _containerBounds[idx] = {x1: x + 4, y1: y - 34, x2: x + 14 + tw, y2: y};
+      }
 
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -825,20 +1109,97 @@ function initNetwork() {
       ctx.lineTo(x,     y + r);
       ctx.arcTo(x,     y,     x + r, y,          r);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(244,114,182,0.06)';
+      var focused = (idx === _focusedContainerIdx);
+      ctx.fillStyle   = focused ? 'rgba(245,158,11,0.12)' : 'rgba(244,114,182,0.06)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(244,114,182,0.65)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = focused ? '#f59e0b'               : 'rgba(244,114,182,0.65)';
+      ctx.lineWidth   = focused ? 2.5                     : 1.5;
       ctx.setLineDash([8, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
       if (c.label) {
-        ctx.font = 'bold 18px system-ui,-apple-system,sans-serif';
-        ctx.fillStyle = 'rgba(249,168,212,0.95)';
+        ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
+        ctx.fillStyle = focused ? '#f59e0b' : 'rgba(249,168,212,0.95)';
         ctx.fillText(c.label, x + 10, y - 6);
       }
     });
     ctx.restore();
+  });
+
+  // ── Container label drag: grab the label text to move all members ──────────
+  var _cvs = network.canvas.frame.canvas;
+
+  function _findLabelAt(cp) {
+    for (var i = _containerBounds.length - 1; i >= 0; i--) {
+      var b = _containerBounds[i];
+      if (!b) continue;
+      if (cp.x >= b.x1 && cp.x <= b.x2 && cp.y >= b.y1 && cp.y <= b.y2) return i;
+    }
+    return -1;
+  }
+
+  function _onContainerDragMove(e) {
+    if (!_containerDragState || (!e.movementX && !e.movementY)) return;
+    var scale = network.getScale();
+    var dx = e.movementX / scale;
+    var dy = e.movementY / scale;
+    var cur = _containerDragState.curPositions;
+    nodesDataset.update(_containerDragState.reps.map(function(id) {
+      var key = String(id);
+      cur[key] = {x: cur[key].x + dx, y: cur[key].y + dy};
+      return {id: id, x: cur[key].x, y: cur[key].y}; // original typed id
+    }));
+  }
+
+  function _onContainerDragEnd() {
+    _containerDragState = null;
+    document.removeEventListener('mousemove', _onContainerDragMove);
+    document.removeEventListener('mouseup', _onContainerDragEnd);
+    _cvs.style.cursor = '';
+  }
+
+  // Attach to the frame div (parent of canvas) so stopPropagation fires
+  // BEFORE vis-network's canvas-level handlers in the capture phase.
+  var _frame = network.canvas.frame;
+  var _canvasRect = null;
+  _frame.addEventListener('mousedown', function(e) {
+    if (e.button !== 0 || _containerDragState) return;
+    _canvasRect = _cvs.getBoundingClientRect();
+    var domX = e.clientX - _canvasRect.left;
+    var domY = e.clientY - _canvasRect.top;
+    var cp = network.DOMtoCanvas({x: domX, y: domY});
+    var cidx = _findLabelAt(cp);
+    if (cidx < 0) return;
+    e.stopPropagation(); // prevents canvas from receiving event
+    e.preventDefault();
+    var membership = computeContainerMembership();
+    // Collect reps preserving original ID types (numeric for regular nodes).
+    var repsArr = [], repsKeySet = {};
+    Object.keys(membership).forEach(function(k) {
+      if (membership[parseInt(k)] === cidx) {
+        var rep = resolveNode(parseInt(k));
+        if (rep !== null) {
+          var key = String(rep);
+          if (!repsKeySet[key]) { repsKeySet[key] = true; repsArr.push(rep); }
+        }
+      }
+    });
+    var positions = network.getPositions(repsArr);
+    var curPositions = {};
+    repsArr.forEach(function(id) {
+      var p = positions[id];
+      curPositions[String(id)] = p ? {x: p.x, y: p.y} : {x: 0, y: 0};
+    });
+    _containerDragState = {cidx: cidx, reps: repsArr, curPositions: curPositions};
+    _cvs.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', _onContainerDragMove);
+    document.addEventListener('mouseup', _onContainerDragEnd);
+  }, true);
+
+  _cvs.addEventListener('mousemove', function(e) {
+    if (_containerDragState) return;
+    var cp = network.DOMtoCanvas({x: e.offsetX, y: e.offsetY});
+    _cvs.style.cursor = _findLabelAt(cp) >= 0 ? 'grab' : '';
   });
 
   network.on('click', function(params) {
@@ -858,22 +1219,9 @@ function initNetwork() {
       return;
     }
     if (params.nodes.length === 0) { closePanel(); return; }
-    var nodeId = params.nodes[0];
-    // Delay panel open for any node that is double-clickable (cluster or
-    // expanded member) so the overlay does not block the second tap.
-    if (AppState.clusterMap[nodeId] || AppState.expandedGroups[nodeId]) {
-      clearTimeout(_clusterClickTimer);
-      _clusterClickTimer = setTimeout(function() {
-        _clusterClickTimer = null;
-        openPanel(nodeId);
-      }, 280);
-    } else {
-      openPanel(nodeId);
-    }
+    openPanel(params.nodes[0]);
   });
   network.on('doubleClick', function(params) {
-    clearTimeout(_clusterClickTimer);
-    _clusterClickTimer = null;
     // Empty canvas double-click → create memo at that canvas position
     if (params.nodes.length === 0) {
       var cp = params.pointer.canvas;
@@ -884,12 +1232,13 @@ function initNetwork() {
     // Memo node double-click → edit
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
-      return;
     }
+    // Cluster expand/collapse via double-click (shortcut — panel stays open)
     if (AppState.clusterMap[nodeId]) {
-      expandCluster(nodeId);
+      expandCluster(nodeId); _refreshClusterPanel(nodeId);
     } else if (AppState.expandedGroups[nodeId]) {
-      recollapseGroup(AppState.expandedGroups[nodeId]);
+      var _gk = AppState.expandedGroups[nodeId];
+      recollapseGroup(_gk); _refreshClusterPanel(_gk);
     }
   });
   // Persist memo positions after drag
@@ -901,73 +1250,64 @@ function initNetwork() {
     if (hasMemo) saveMemos();
   });
 
-  // Draw a rounded-rect border around each expanded cluster's member nodes.
-  // Runs on every canvas redraw so it automatically follows zoom / pan / drag.
+  // Single afterDrawing handler: cluster boxes, memo handles, file subtitles.
+  // Consolidated from three separate listeners to reduce per-frame overhead.
   network.on('afterDrawing', function(ctx) {
+    // 1. Draw rounded-rect border around each expanded cluster's member nodes.
     var groupKeys = Object.keys(AppState.groupMembers);
-    if (groupKeys.length === 0) return;
+    if (groupKeys.length > 0) {
+      ctx.save();
+      groupKeys.forEach(function(groupKey) {
+        var group = AppState.groupMembers[groupKey];
+        var positions = network.getPositions(group.memberIds);
 
-    ctx.save();
-    groupKeys.forEach(function(groupKey) {
-      var group = AppState.groupMembers[groupKey];
-      var positions = network.getPositions(group.memberIds);
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        var hasNode = false;
+        group.memberIds.forEach(function(mid) {
+          var pos = positions[mid];
+          if (!pos) return;
+          hasNode = true;
+          minX = Math.min(minX, pos.x);
+          minY = Math.min(minY, pos.y);
+          maxX = Math.max(maxX, pos.x);
+          maxY = Math.max(maxY, pos.y);
+        });
+        if (!hasNode) return;
 
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      var hasNode = false;
-      group.memberIds.forEach(function(mid) {
-        var pos = positions[mid];
-        if (!pos) return;
-        hasNode = true;
-        minX = Math.min(minX, pos.x);
-        minY = Math.min(minY, pos.y);
-        maxX = Math.max(maxX, pos.x);
-        maxY = Math.max(maxY, pos.y);
+        var x = minX - BOX_PAD_X, y = minY - BOX_PAD_Y;
+        var w = maxX - minX + BOX_PAD_X * 2;
+        var h = maxY - minY + BOX_PAD_Y * 2;
+        var r = BOX_RADIUS;
+
+        var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y,     x + w, y + r,     r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x,     y + h, x,     y + h - r, r);
+        ctx.lineTo(x,     y + r);
+        ctx.arcTo(x,     y,     x + r, y,          r);
+        ctx.closePath();
+
+        ctx.fillStyle = bs.fill;
+        ctx.fill();
+        ctx.strokeStyle = bs.stroke;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = bs.label;
+        ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+        ctx.fillText(group.toolType, x + 8, y - 5);
       });
-      if (!hasNode) return;
+      ctx.restore();
+    }
 
-      var x = minX - BOX_PAD_X, y = minY - BOX_PAD_Y;
-      var w = maxX - minX + BOX_PAD_X * 2;
-      var h = maxY - minY + BOX_PAD_Y * 2;
-      var r = BOX_RADIUS;
-
-      var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-      var strokeColor = bs.stroke;
-      var fillColor   = bs.fill;
-      var labelColor  = bs.label;
-
-      // Rounded rectangle path
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.arcTo(x + w, y,     x + w, y + r,     r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-      ctx.lineTo(x + r, y + h);
-      ctx.arcTo(x,     y + h, x,     y + h - r, r);
-      ctx.lineTo(x,     y + r);
-      ctx.arcTo(x,     y,     x + r, y,          r);
-      ctx.closePath();
-
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([7, 4]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Group label in the top-left corner of the box
-      ctx.fillStyle = labelColor;
-      ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
-      ctx.fillText(group.toolType, x + 8, y - 5);
-    });
-    ctx.restore();
-  });
-
-  // Draw resize handles (small orange squares at bottom-right corner) for all memo nodes.
-  // Also refreshes AppState.memoHandles used for hit-testing in the mousedown listener.
-  network.on('afterDrawing', function(ctx) {
+    // 2. Memo resize handles + refresh AppState.memoHandles for hit-testing.
     AppState.memoHandles = {};
     Object.keys(AppState.memoData).forEach(function(memoId) {
       if (!nodesDataset.get(memoId)) return;
@@ -984,17 +1324,13 @@ function initNetwork() {
       ctx.stroke();
       ctx.restore();
     });
-  });
 
-  // Draw file path subtitles below input/output nodes (those with a subtitle field).
-  // Shown only when the node is currently in the DataSet (not clustered away).
-  network.on('afterDrawing', function(ctx) {
+    // 3. File path subtitles below input/output nodes (not shown when clustered).
     NODES_DATA.forEach(function(nd) {
       if (!nd.subtitle) return;
-      if (!nodesDataset.get(nd.id)) return;  // clustered: skip
+      if (!nodesDataset.get(nd.id)) return;
       var bb = network.getBoundingBox(nd.id);
       if (!bb) return;
-      // Extract filename from path — handles both / and \ separators
       var bsIdx = nd.subtitle.lastIndexOf(String.fromCharCode(92));
       var fsIdx = nd.subtitle.lastIndexOf('/');
       var sepIdx = Math.max(bsIdx, fsIdx);
@@ -1007,6 +1343,9 @@ function initNetwork() {
       ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
       ctx.restore();
     });
+
+    // 4. Minimap overlay.
+    drawMinimap();
   });
 
   // ── Memo resize drag (capture-phase so we intercept before vis-network) ──
@@ -1090,6 +1429,7 @@ function initNetwork() {
 
 try {
   initNetwork();
+  loadContainerOrder();
   requestAnimationFrame(function() {
     if (network) { network.redraw(); network.fit({animation: false}); }
   });
@@ -1105,6 +1445,60 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
+// Shared render helper: builds Expand/Collapse button + member list for a cluster.
+// Called from openPanel() and from within the buttons themselves so the panel
+// stays open and its content flips between "Expand" and "Collapse" states.
+function _refreshClusterPanel(groupKey) {
+  _panelNodeId = groupKey;
+  var body = document.getElementById('panel-body');
+  body.innerHTML = '';
+  if (AppState.clusterMap[groupKey]) {
+    // Collapsed state → show Expand button
+    var c = AppState.clusterMap[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'ctrl-btn';
+    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
+    expandBtn.textContent = 'Expand';
+    expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(expandBtn);
+    // Select the cluster node so vis-network applies the amber highlight color
+    if (network) network.selectNodes([groupKey]);
+    c.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  } else if (AppState.groupMembers[groupKey]) {
+    // Expanded state → show Collapse button
+    var group = AppState.groupMembers[groupKey];
+    document.getElementById('panel-title-text').textContent =
+      group.toolType + ' \xd7' + group.memberIds.length + ' nodes';
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse';
+    collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
+    body.appendChild(collapseBtn);
+    if (network) network.selectNodes([]);
+    group.memberIds.forEach(function(mid) {
+      var entry = CONFIG_MAP[String(mid)];
+      if (!entry) return;
+      var hdr = document.createElement('div');
+      hdr.className = 'cluster-member-header';
+      hdr.textContent = entry.label;
+      body.appendChild(hdr);
+      renderConfigRows(entry, body);
+    });
+  }
+  document.getElementById('config-panel').classList.add('open');
+}
+
 function renderConfigRows(entry, container) {
   var keys = Object.keys(entry.config);
   if (keys.length === 0) {
@@ -1130,7 +1524,10 @@ function renderConfigRows(entry, container) {
   });
 }
 
+var _panelNodeId = null;
+
 function openPanel(nodeId) {
+  _panelNodeId = nodeId;
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -1170,24 +1567,26 @@ function openPanel(nodeId) {
     return;
   }
 
-  // Cluster node — show member list
+  // Cluster node (collapsed) — delegate to shared refresh helper
   if (AppState.clusterMap[nodeId]) {
-    var c = AppState.clusterMap[nodeId];
+    _refreshClusterPanel(nodeId);
+    return;
+  }
+
+  // Expanded cluster member — show config + collapse button
+  var _groupKey = AppState.expandedGroups[nodeId];
+  if (_groupKey) {
+    var _group = AppState.groupMembers[_groupKey];
+    var _entry = CONFIG_MAP[String(nodeId)];
     document.getElementById('panel-title-text').textContent =
-      c.toolType + ' ×' + c.memberIds.length + ' nodes';
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
-    hint.textContent = 'Double-click the node to expand.';
-    body.appendChild(hint);
-    c.memberIds.forEach(function(mid) {
-      var entry = CONFIG_MAP[String(mid)];
-      if (!entry) return;
-      var hdr = document.createElement('div');
-      hdr.className = 'cluster-member-header';
-      hdr.textContent = entry.label;
-      body.appendChild(hdr);
-      renderConfigRows(entry, body);
-    });
+      _entry ? _entry.label : 'Node ' + nodeId;
+    var collapseBtn = document.createElement('button');
+    collapseBtn.className = 'ctrl-btn';
+    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+    collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
+    collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
+    body.appendChild(collapseBtn);
+    if (_entry) renderConfigRows(_entry, body);
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -1201,8 +1600,12 @@ function openPanel(nodeId) {
 
 function closePanel() {
   document.getElementById('config-panel').classList.remove('open');
+  _panelNodeId = null;
 }
 
+document.getElementById('panel-title-text').addEventListener('click', function() {
+  if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
+});
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
@@ -1270,8 +1673,17 @@ function nodeColors() {
     bg:    s.getPropertyValue('--node-bg').trim(),
     bd:    s.getPropertyValue('--node-border').trim(),
     hover: s.getPropertyValue('--node-hover').trim(),
-    sel:   s.getPropertyValue('--node-select').trim(),
   };
+}
+
+function browseNodeColor() {
+  return isDark
+    ? {background: '#334155', border: '#475569',
+       highlight: {background: '#92400e', border: '#f59e0b'},
+       hover: {background: '#475569', border: '#475569'}}
+    : {background: '#94a3b8', border: '#64748b',
+       highlight: {background: '#92400e', border: '#f59e0b'},
+       hover: {background: '#cbd5e1', border: '#64748b'}};
 }
 
 // Returns the base (un-highlighted, un-dimmed) color update object for node n.
@@ -1284,16 +1696,20 @@ function baseNodeColorUpdate(n, col) {
       return {id: n.id, color: ns.color, font: {color: ns.fontColor}};
     }
     var cs = cm.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
-    return {id: n.id, color: cs.normal, font: {color: NODE_LABEL_FONT_COLOR}};
+    return {id: n.id, color: cs.normal, font: {color: contrastColor(cs.normal.background)}};
   }
   if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
-    return {id: n.id, font: {color: NODE_LABEL_FONT_COLOR}};
+    return {id: n.id, font: {color: '#000000'}};
+  }
+  if (BROWSE_NODE_IDS[n.id]) {
+    var bc = browseNodeColor();
+    return {id: n.id, color: bc, font: {color: contrastColor(bc.background)}, shadow: false};
   }
   return {id: n.id, color: {
     background: col.bg, border: col.bd,
-    highlight: {background: col.sel, border: col.bd},
+    highlight: {background: '#92400e', border: '#f59e0b'},
     hover: {background: col.hover, border: col.bd}
-  }, font: {color: NODE_LABEL_FONT_COLOR}};
+  }, font: {color: contrastColor(col.bg)}, shadow: false};
 }
 
 function buildNodeDataLookup() {
@@ -1334,6 +1750,25 @@ function firstClusterMemberMatch(clusterId, testStr, nodeDataLookup, visited) {
   return null;
 }
 
+function allClusterMemberMatches(clusterId, testStr, nodeDataLookup, visited, results) {
+  var cm = AppState.clusterMap[clusterId];
+  if (!cm) return results;
+  visited = visited || {};
+  results = results || [];
+  if (visited[clusterId]) return results;
+  visited[clusterId] = true;
+  var memberIds = cm.memberIds || [];
+  for (var mi = 0; mi < memberIds.length; mi++) {
+    var mid = memberIds[mi];
+    if (AppState.clusterMap[mid]) {
+      allClusterMemberMatches(mid, testStr, nodeDataLookup, visited, results);
+    } else if (nodeMatchesSearch(mid, testStr, nodeDataLookup)) {
+      results.push(mid);
+    }
+  }
+  return results;
+}
+
 function makeSearchTester(query) {
   var re;
   try { re = new RegExp(query, 'i'); } catch(e) { re = null; }
@@ -1347,7 +1782,7 @@ function makeSearchTester(query) {
 function focusSearchMatch(nodeId, animationDuration) {
   if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
   network.focus(nodeId, {
-    scale: 1.2,
+    scale: FOCUS_SCALE,
     animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
   });
   return true;
@@ -1365,7 +1800,57 @@ function focusFirstVisibleSearchMatch(query, candidateIds) {
   return false;
 }
 
-function doSearch(query, skipFocus) {
+function _toolTypeToBadgeRole(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t === 'filter') return 'filter';
+  if (t === 'formula' || t === 'multirowformula' || t === 'multifieldbinner') return 'formula';
+  if (t.indexOf('join') !== -1 || t === 'findreplace' || t === 'spatialmatch') return 'join';
+  if (t === 'union') return 'union';
+  if (t === 'summarize' || t === 'sample' || t === 'tile') return 'aggregate';
+  if (t === 'crosstab' || t === 'transpose' || t === 'regex') return 'reshape';
+  if (t.indexOf('output') !== -1 || t === 'browse' || t === 'browsev2') return 'output';
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput') return 'input';
+  return 'union';
+}
+
+function _toolTypeToStepCategory(toolType) {
+  var t = (toolType || '').toLowerCase();
+  if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput' || t === 'recordid') return 'input';
+  if (t.indexOf('output') !== -1 || t === 'browse' || t === 'browsev2') return 'output';
+  if (t !== '') return 'transform';
+  return 'unknown';
+}
+
+function _escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function _highlightEl(el, re) {
+  if (!el.dataset.origText) el.dataset.origText = el.textContent;
+  el.innerHTML = _escapeHtml(el.dataset.origText).replace(re, '<mark class="search-mark">$1</mark>');
+}
+function _clearPanelHighlights() {
+  document.querySelectorAll('[data-orig-text]').forEach(function(el) {
+    el.textContent = el.dataset.origText;
+    delete el.dataset.origText;
+  });
+}
+function _highlightPanelText(query) {
+  _clearPanelHighlights();
+  if (!query) return;
+  var q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var re;
+  try { re = new RegExp('(' + q + ')', 'gi'); } catch(e) { return; }
+  var insightsBody = document.getElementById('insights-panel-body');
+  if (insightsBody) {
+    insightsBody.querySelectorAll('.ki-badge, .ki-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+  var summaryBody = document.getElementById('summary-panel-body');
+  if (summaryBody) {
+    summaryBody.querySelectorAll('.step-badge, .step-desc').forEach(function(el) { _highlightEl(el, re); });
+  }
+}
+
+function doSearch(query, skipFocus, skipPanel) {
   query = query.trim();
   if (!query) { clearSearch(); return; }
   searchActive = true;
@@ -1377,15 +1862,17 @@ function doSearch(query, skipFocus) {
   var allNodes = nodesDataset.get();
   var updates = [];
   var firstMatch = null;
+  var matchedEntries = [];
 
   // Build a lookup from original node data (pre-clustering) for member searches.
   var nodeDataLookup = buildNodeDataLookup();
 
   allNodes.forEach(function(n) {
-    // Memo nodes: match on label text only
+    // Memo nodes: match label text for firstMatch, but skip amber/dim color changes.
+    // Memo nodes are user overlays and should remain visually neutral during search.
     if (typeof n.id === 'string' && n.id.indexOf('memo:') === 0) {
       var mMatch = testStr(n.label || '');
-      updates.push({id: n.id, font: {color: NODE_LABEL_FONT_COLOR}});
+      updates.push({id: n.id, font: {color: '#000000'}});
       if (mMatch && firstMatch === null) firstMatch = n.id;
       return;
     }
@@ -1412,36 +1899,52 @@ function doSearch(query, skipFocus) {
           background: matchBg, border: '#f59e0b',
           highlight: {background: matchBg, border: '#f59e0b'},
           hover:     {background: matchBg, border: '#f59e0b'}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+        }, font: {color: contrastColor(matchBg)}});
+        var memberMatches = allClusterMemberMatches(n.id, testStr, nodeDataLookup, {}, []);
+        if (memberMatches.length > 0) {
+          memberMatches.forEach(function(mid) {
+            var mnd = nodeDataLookup[mid];
+            var mst = mnd ? (mnd.title || '').split('.').pop() : '';
+            matchedEntries.push({id: mid, shortType: mst, role: _toolTypeToBadgeRole(mst), category: _toolTypeToStepCategory(mst), label: mnd ? (mnd.label || '') : ''});
+          });
+        } else {
+          matchedEntries.push({id: n.id, shortType: cm.toolType || '?', role: _toolTypeToBadgeRole(cm.toolType), category: _toolTypeToStepCategory(cm.toolType), label: n.label || cm.toolType || ''});
+        }
       } else {
         updates.push({id: n.id, color: {
-          background: col.bg, border: '#f59e0b',
-          highlight: {background: col.sel, border: '#f59e0b'},
-          hover: {background: col.hover, border: '#f59e0b'}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+          background: '#92400e', border: '#f59e0b',
+          highlight: {background: '#78350f', border: '#fbbf24'},
+          hover: {background: '#78350f', border: '#fbbf24'}
+        }, font: {color: '#ffffff'},
+           shadow: {enabled: true, color: 'rgba(245,158,11,0.45)', size: 10, x: 0, y: 0}});
+        var nd = nodeDataLookup[n.id];
+        var st = nd ? (nd.title || '').split('.').pop() : (n.label || '');
+        matchedEntries.push({id: n.id, shortType: st, role: _toolTypeToBadgeRole(st), category: _toolTypeToStepCategory(st), label: nd ? (nd.label || n.label || '') : (n.label || '')});
       }
     } else {
       if (AppState.clusterMap[n.id]) {
         var cm2 = AppState.clusterMap[n.id];
         var dimColor;
+        var dimBg;
         if (cm2.isContainer && cm2.fillColorHex) {
-          var dimmed = _darkenHex(cm2.fillColorHex, 35);
-          dimColor = {background: dimmed, border: dimmed,
-                      highlight: {background: dimmed, border: dimmed},
-                      hover:     {background: dimmed, border: dimmed}};
+          dimBg = _darkenHex(cm2.fillColorHex, 35);
+          dimColor = {background: dimBg, border: dimBg,
+                      highlight: {background: dimBg, border: dimBg},
+                      hover:     {background: dimBg, border: dimBg}};
         } else {
           var cd = (cm2.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type).dim;
-          dimColor = {background: cd.background, border: cd.border,
-                      highlight: {background: cd.background, border: cd.border},
-                      hover:     {background: cd.background, border: cd.border}};
+          dimBg = cd.background;
+          dimColor = {background: dimBg, border: cd.border,
+                      highlight: {background: dimBg, border: dimBg},
+                      hover:     {background: dimBg, border: dimBg}};
         }
-        updates.push({id: n.id, color: dimColor, font: {color: NODE_LABEL_FONT_COLOR}});
+        updates.push({id: n.id, color: dimColor, font: {color: contrastColor(dimBg)}});
       } else {
         updates.push({id: n.id, color: {
           background: col.bg, border: col.bd,
           highlight: {background: col.bg, border: col.bd},
           hover: {background: col.bg, border: col.bd}
-        }, font: {color: NODE_LABEL_FONT_COLOR}});
+        }, font: {color: contrastColor(col.bg)}});
       }
     }
   });
@@ -1450,9 +1953,13 @@ function doSearch(query, skipFocus) {
   if (!skipFocus && firstMatch !== null) {
     focusSearchMatch(firstMatch, 400);
   }
+  _highlightPanelText(query);
+  if (!skipPanel && typeof openSearchResultsPanel === 'function') openSearchResultsPanel(matchedEntries);
 }
 
 function clearSearch() {
+  _clearPanelHighlights();
+  if (typeof closeSearchResultsPanel === 'function') closeSearchResultsPanel();
   searchActive = false;
   document.getElementById('search-input').value = '';
   document.getElementById('search-clear-btn').style.display = 'none';
@@ -1495,7 +2002,6 @@ function applyTheme(theme) {
   var nodeBg    = s.getPropertyValue('--node-bg').trim();
   var nodeBd    = s.getPropertyValue('--node-border').trim();
   var nodeHover = s.getPropertyValue('--node-hover').trim();
-  var nodeSel   = s.getPropertyValue('--node-select').trim();
   // Iterate only nodes/edges currently in the DataSet.
   // Using NODES_DATA.map() here would re-create clustered-away nodes because
   // DataSet.update() inserts missing IDs as new (label-less) items.
@@ -1503,9 +2009,14 @@ function applyTheme(theme) {
   nodesDataset.getIds().forEach(function(id) {
     if (AppState.clusterMap[id]) return;  // cluster node: fixed color (purple/teal) — skip
     if (typeof id === 'string' && id.indexOf('memo:') === 0) return;  // memo: keep yellow
+    if (BROWSE_NODE_IDS[id]) {
+      var bc = browseNodeColor();
+      nodeUpdates.push({id: id, color: bc, font: {color: contrastColor(bc.background)}});
+      return;
+    }
     nodeUpdates.push({id: id, color: {background: nodeBg, border: nodeBd,
-      highlight: {background: nodeSel, border: nodeBd},
-      hover: {background: nodeHover, border: nodeBd}}, font: {color: NODE_LABEL_FONT_COLOR}});
+      highlight: {background: '#92400e', border: '#f59e0b'},
+      hover: {background: nodeHover, border: nodeBd}}, font: {color: contrastColor(nodeBg)}});
   });
   nodesDataset.update(nodeUpdates);
   edgesDataset.update(edgesDataset.getIds().map(function(id) {
@@ -1519,3 +2030,63 @@ document.getElementById('theme-btn').addEventListener('click', function() {
 });
 var savedTheme = localStorage.getItem('yxray-theme') || 'dark';
 applyTheme(savedTheme);
+
+// ── Config panel drag-resize ──────────────────────────────────────────────
+(function() {
+  var panel = document.getElementById('config-panel');
+  var handle = document.getElementById('panel-drag-handle');
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = startX - e.clientX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
+// ── Minimap resize (drag top-left handle) ─────────────────────────────────
+(function() {
+  var handle = document.getElementById('minimap-resize-handle');
+  var mc = document.getElementById('minimap-canvas');
+  if (!handle || !mc) return;
+  var MIN_W = 140, MIN_H = 90, MAX_W = 500, MAX_H = 360;
+  var startX, startY, startW, startH;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = mc.width;
+    startH = mc.height;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    // Dragging toward top-left expands; toward bottom-right shrinks.
+    var dx = startX - e.clientX;
+    var dy = startY - e.clientY;
+    var newW = Math.max(MIN_W, Math.min(MAX_W, startW + dx));
+    var newH = Math.max(MIN_H, Math.min(MAX_H, startH + dy));
+    mc.width  = Math.round(newW);
+    mc.height = Math.round(newH);
+    if (network) network.redraw();
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();

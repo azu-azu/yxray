@@ -36,6 +36,17 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 </div>
 
 <div id="split-view" class="split-view">
+  <div id="split-changes-col" class="split-changes-col">
+    <div class="split-changes-drag-handle"></div>
+    <div class="split-changes-header">
+      Diff Details
+      <div class="split-changes-actions">
+        <button class="split-action-btn" onclick="expandAllChanges()">All ▼</button>
+        <button class="split-action-btn" onclick="collapseAllChanges()">All ▲</button>
+      </div>
+    </div>
+    <div id="split-change-rows" class="split-change-rows"></div>
+  </div>
   <div class="split-graphs-col">
     <div class="split-pane">
       <div class="split-header">Before</div>
@@ -46,16 +57,16 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
       <div id="split-view-right" class="split-graph-canvas"></div>
     </div>
   </div>
-  <div class="split-changes-col">
-    <div class="split-changes-header">Changes</div>
-    <div id="split-change-rows" class="split-change-rows"></div>
-  </div>
 </div>
 
 <div id="split-controls" class="split-controls">
   <button id="fit-both-btn" class="ctrl-btn" onclick="if(networkLeft)networkLeft.fit();if(networkRight)networkRight.fit();">Fit Both</button>
   <button id="split-fullscreen-btn" class="ctrl-btn">Fullscreen</button>
   <button id="split-toggle-changes" class="ctrl-btn">Show Only Changes</button>
+  <div class="graph-search-wrap">
+    <input type="text" id="split-search-input" class="graph-search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
+    <button class="graph-search-clear" id="split-search-clear" aria-label="Clear">&times;</button>
+  </div>
   <span class="graph-legend">
     <span class="legend-dot legend-dot-added"></span>Added
     <span class="legend-dot legend-dot-removed"></span>Removed
@@ -64,7 +75,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   </span>
 </div>
 
-<div id="diff-panel" class="diff-panel"></div>
+<div id="diff-panel" class="diff-panel"><div class="diff-panel-drag-handle"></div><div id="diff-panel-body"></div></div>
 <div id="graph-overlay" class="graph-overlay"></div>
 
 <div id="overlay-view" class="overlay-view">
@@ -174,9 +185,23 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 
 .split-changes-col {
   width: 280px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.split-changes-drag-handle {
+  position: absolute;
+  top: 0; right: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.split-changes-drag-handle:hover,
+.split-changes-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
 }
 
 .split-changes-header {
@@ -191,7 +216,17 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.split-changes-actions { display: flex; gap: 4px; }
+.split-action-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer;
+  font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+.split-action-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .split-change-rows {
   flex: 1;
@@ -199,7 +234,9 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   padding: 4px 0;
   background: var(--surface);
   color: var(--text);
+  direction: rtl;
 }
+.split-change-rows > * { direction: ltr; }
 
 .split-controls {
   display: flex;
@@ -224,30 +261,42 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   border-radius: 50%;
   margin: 0 3px;
 }
-.legend-dot-added { background: #6ee7b7; border: 1px solid #059669; }
-.legend-dot-removed { background: #fca5a5; border: 1px solid #dc2626; }
-.legend-dot-modified { background: #fcd34d; border: 1px solid #b45309; }
-.legend-dot-connection { background: #93c5fd; border: 1px solid #1d4ed8; }
-.legend-dot-unchanged { background: #e2e8f0; border: 1px solid #94a3b8; }
+.legend-dot-added      { background: var(--accent-added-border);    border: 1px solid var(--accent-added); }
+.legend-dot-removed    { background: var(--accent-removed-border);  border: 1px solid var(--accent-removed); }
+.legend-dot-modified   { background: var(--accent-modified-border); border: 1px solid var(--accent-modified); }
+.legend-dot-connection { background: var(--accent-conn-border);     border: 1px solid var(--accent-conn); }
+.legend-dot-unchanged  { background: var(--border);                 border: 1px solid var(--text-muted); }
 
 .diff-panel {
   position: fixed;
   top: 0;
-  right: -420px;
+  right: 0;
   width: 400px;
   height: 100%;
   background: var(--surface);
   border-left: 1px solid var(--border);
   box-shadow: -2px 0 8px rgba(0,0,0,0.15);
   overflow-y: auto;
-  transition: right 0.2s ease;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
   z-index: 1000;
   padding: 16px;
   box-sizing: border-box;
   border-radius: 8px 0 0 8px;
   color: var(--text);
 }
-.diff-panel.open { right: 0; }
+.diff-panel.open { transform: translateX(0); }
+.diff-panel-drag-handle {
+  position: absolute;
+  top: 0; left: 0;
+  width: 6px; height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.diff-panel-drag-handle:hover, .diff-panel-drag-handle.dragging {
+  background: rgba(148,163,184,0.18);
+}
 
 .graph-overlay {
   display: none;
@@ -296,20 +345,26 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
   letter-spacing: 1px;
 }
 
-.panel-before {
-  background: var(--accent-removed-bg);
-  border-left: 3px solid var(--accent-removed);
-  padding: 6px 10px;
-  margin: 4px 0;
+
+.diff-unified {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; border-radius: 4px; overflow: hidden; margin: 4px 0;
+  border: 1px solid var(--border);
 }
-.panel-after {
-  background: var(--accent-added-bg);
-  border-left: 3px solid var(--accent-added);
-  padding: 6px 10px;
-  margin: 4px 0;
+.diff-line { display: flex; line-height: 1.5; }
+.diff-line-del { background: var(--accent-removed-bg); }
+.diff-line-ins { background: var(--accent-added-bg); }
+.diff-line-ctx { }
+.diff-line-skip { justify-content: center; padding: 2px 0; }
+.diff-gutter {
+  width: 18px; flex-shrink: 0; text-align: center; font-weight: 700; padding: 0 2px;
+  user-select: none;
 }
-.panel-before-label { font-weight: 600; color: var(--accent-removed); }
-.panel-after-label { font-weight: 600; color: var(--accent-added); }
+.diff-line-del .diff-gutter { color: var(--accent-removed); }
+.diff-line-ins .diff-gutter { color: var(--accent-added); }
+.diff-text { flex: 1; white-space: pre-wrap; word-break: break-all; padding: 0 6px; color: var(--text); }
+.diff-line-ctx .diff-text { color: var(--text-muted); }
+.diff-skip-text { color: var(--text-muted); font-style: italic; font-size: 11px; }
 .value-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -319,16 +374,32 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 }
 
 .split-change-row {
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text);
+}
+.change-row-header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  font-size: 12px;
-  color: var(--text);
 }
-.split-change-row:hover { background: var(--surface-2); }
+.change-row-header:hover { background: var(--surface-2); }
+.change-row-header.focused { background: rgba(245,158,11,0.15); outline: 1px solid #f59e0b; }
+.change-chevron {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  user-select: none;
+}
+.change-chevron.open { transform: rotate(90deg); }
+.change-detail {
+  display: none;
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
 
 .split-change-badge {
   display: inline-block;
@@ -362,7 +433,7 @@ _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 @media (max-width: 800px) {
   .split-view { flex-direction: column; height: auto; }
   .split-pane { min-height: 400px; }
-  .split-changes-col { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+  .split-changes-col { width: 100%; border-right: none; border-top: 1px solid var(--border); }
 }
 .graph-search-wrap { position: relative; display: flex; align-items: center; }
 .graph-search-input { width: 150px; padding: 5px 24px 5px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg); color: var(--text); outline: none; transition: width 0.2s; }
@@ -451,16 +522,22 @@ function isDark() {
   return !document.documentElement.classList.contains('light');
 }
 
+// NOTE: identical copy also lives in static/single_graph.js — keep in sync.
+function contrastColor(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? '#000000' : '#ffffff';
+}
+
 function applyThemeColors() {
-  var dark = isDark();
-  var palette = dark ? DARK_COLORS : LIGHT_COLORS;
-  var fontLight = '#ffffff';
-  var fontDark  = '#1e293b';
-  var fontMuted = '#cbd5e1';
+  var palette = isDark() ? DARK_COLORS : LIGHT_COLORS;
   nodesDataset.update(GRAPH_NODES.map(function(n) {
     var c = palette[n.status];
-    var fontColor = dark ? (n.status === 'unchanged' ? fontMuted : fontLight) : fontDark;
-    return {id: n.id, color: {background: c.background, border: c.border, highlight: {background: c.background, border: c.border}, hover: {background: c.background, border: c.border}}, font: {color: fontColor}};
+    return {id: n.id, color: {background: c.background, border: c.border, highlight: {background: c.background, border: c.border}, hover: {background: c.background, border: c.border}}, font: {color: contrastColor(c.background)}};
   }));
   // Sync legend dots
   document.querySelectorAll('[data-legend]').forEach(function(dot) {
@@ -537,75 +614,185 @@ document.addEventListener('fullscreenchange', function() {
 
 // Panel open/close
 function openSidePanel(nodeId, entry) {
-  var panel = document.getElementById('diff-panel');
-  while (panel.firstChild) { panel.removeChild(panel.firstChild); }
-  buildPanelContent(panel, entry);
-  panel.classList.add('open');
+  var body = document.getElementById('diff-panel-body');
+  while (body.firstChild) { body.removeChild(body.firstChild); }
+  buildPanelContent(body, entry);
+  document.getElementById('diff-panel').classList.add('open');
 }
 
 function closeSidePanel() {
   document.getElementById('diff-panel').classList.remove('open');
 }
 
+// Split changes column drag-resize
+(function() {
+  var col = document.getElementById('split-changes-col');
+  var handle = col ? col.querySelector('.split-changes-drag-handle') : null;
+  if (!handle || !col) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = col.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMoveCol);
+    document.addEventListener('mouseup', onUpCol);
+  });
+  function onMoveCol(e) {
+    var dx = e.clientX - startX;
+    var newW = Math.max(160, Math.min(Math.floor(window.innerWidth * 0.5), startW + dx));
+    col.style.width = newW + 'px';
+  }
+  function onUpCol() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMoveCol);
+    document.removeEventListener('mouseup', onUpCol);
+  }
+})();
+
+// Diff panel drag-resize
+(function() {
+  var panel = document.getElementById('diff-panel');
+  var handle = panel ? panel.querySelector('.diff-panel-drag-handle') : null;
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx = startX - e.clientX;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
+
 function buildPanelContent(panel, entry) {
   var titleEl = document.createElement('div');
   titleEl.className = 'panel-title';
   titleEl.textContent = entry.data.tool_type + ' (ID: ' + entry.data.tool_id + ') \u2014 ' + entry.category;
   panel.appendChild(titleEl);
-  if (entry.category === 'modified') {
-    entry.data.field_diffs.forEach(function(fd) {
-      var row = document.createElement('div');
-      row.className = 'panel-field-row';
-      var nameEl = document.createElement('div');
-      nameEl.className = 'panel-field-name';
-      nameEl.textContent = fd.field;
-      var beforeRow = document.createElement('div');
-      beforeRow.className = 'panel-before';
-      var beforeLabel = document.createElement('span');
-      beforeLabel.className = 'panel-before-label';
-      beforeLabel.textContent = 'Before: ';
-      var beforeVal = document.createElement('span');
-      beforeVal.className = 'value-mono';
-      beforeVal.textContent = formatVal(fd.before);
-      beforeRow.appendChild(beforeLabel);
-      beforeRow.appendChild(beforeVal);
-      var afterRow = document.createElement('div');
-      afterRow.className = 'panel-after';
-      var afterLabel = document.createElement('span');
-      afterLabel.className = 'panel-after-label';
-      afterLabel.textContent = 'After: ';
-      var afterVal = document.createElement('span');
-      afterVal.className = 'value-mono';
-      afterVal.textContent = formatVal(fd.after);
-      afterRow.appendChild(afterLabel);
-      afterRow.appendChild(afterVal);
-      row.appendChild(nameEl);
-      row.appendChild(beforeRow);
-      row.appendChild(afterRow);
-      panel.appendChild(row);
-    });
-  } else {
-    var config = entry.data.config || {};
-    Object.keys(config).forEach(function(k) {
-      var row = document.createElement('div');
-      row.className = 'panel-field-row';
-      var nameEl = document.createElement('div');
-      nameEl.className = 'panel-field-name';
-      nameEl.textContent = k;
-      var valEl = document.createElement('div');
-      valEl.className = 'value-mono';
-      valEl.textContent = formatVal(config[k]);
-      row.appendChild(nameEl);
-      row.appendChild(valEl);
-      panel.appendChild(row);
-    });
-  }
+  var config = entry.category === 'modified'
+    ? (entry.data.new_config || {})
+    : (entry.data.config || {});
+  Object.keys(config).forEach(function(k) {
+    var row = document.createElement('div');
+    row.className = 'panel-field-row';
+    var nameEl = document.createElement('div');
+    nameEl.className = 'panel-field-name';
+    nameEl.textContent = k;
+    var valEl = document.createElement('div');
+    valEl.className = 'value-mono';
+    valEl.textContent = formatVal(config[k]);
+    row.appendChild(nameEl);
+    row.appendChild(valEl);
+    panel.appendChild(row);
+  });
 }
 
 function formatVal(v) {
   if (v === null || v === undefined) return 'null';
   if (typeof v === 'object') return JSON.stringify(v, null, 2);
   return String(v);
+}
+
+function lcsOps(arr, brr) {
+  var m = arr.length, n = brr.length, i, j;
+  var dp = new Array(m + 1);
+  for (i = 0; i <= m; i++) { dp[i] = new Array(n + 1).fill(0); }
+  for (i = 1; i <= m; i++) {
+    for (j = 1; j <= n; j++) {
+      dp[i][j] = arr[i-1] === brr[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  var ops = [];
+  i = m; j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && arr[i-1] === brr[j-1]) {
+      ops.push({type: 'equal', val: arr[i-1]}); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.push({type: 'insert', val: brr[j-1]}); j--;
+    } else {
+      ops.push({type: 'delete', val: arr[i-1]}); i--;
+    }
+  }
+  ops.reverse();
+  return ops;
+}
+
+function flattenConfig(obj, prefix) {
+  if (prefix === undefined) prefix = '';
+  if (obj === null || obj === undefined) return [prefix + ': null'];
+  if (typeof obj !== 'object') return [prefix + ': ' + obj];
+  if (Array.isArray(obj)) {
+    var out = [];
+    obj.forEach(function(item, i) {
+      var k = prefix ? prefix + '[' + i + ']' : '[' + i + ']';
+      flattenConfig(item, k).forEach(function(l) { out.push(l); });
+    });
+    return out;
+  }
+  var out = [];
+  Object.keys(obj).forEach(function(k) {
+    var sub = prefix ? prefix + '.' + k : k;
+    flattenConfig(obj[k], sub).forEach(function(l) { out.push(l); });
+  });
+  return out;
+}
+
+function buildConfigDiff(oldCfg, newCfg) {
+  var CONTEXT = 2;
+  var oldLines = flattenConfig(oldCfg, '');
+  var newLines = flattenConfig(newCfg, '');
+  var ops = lcsOps(oldLines, newLines);
+  var near = new Array(ops.length).fill(false);
+  for (var i = 0; i < ops.length; i++) {
+    if (ops[i].type !== 'equal') {
+      for (var j = Math.max(0, i - CONTEXT); j <= Math.min(ops.length - 1, i + CONTEXT); j++) near[j] = true;
+    }
+  }
+  var wrap = document.createElement('div');
+  wrap.className = 'diff-unified';
+  var skip = 0;
+  function flushSkip() {
+    if (!skip) return;
+    var skipEl = document.createElement('div');
+    skipEl.className = 'diff-line diff-line-skip';
+    var t = document.createElement('span');
+    t.className = 'diff-skip-text';
+    t.textContent = '⋯ ' + skip + ' unchanged line' + (skip === 1 ? '' : 's') + ' ⋯';
+    skipEl.appendChild(t);
+    wrap.appendChild(skipEl);
+    skip = 0;
+  }
+  ops.forEach(function(op, idx) {
+    if (op.type === 'equal' && !near[idx]) { skip++; return; }
+    flushSkip();
+    var lineEl = document.createElement('div');
+    var cls = op.type === 'equal' ? 'ctx' : op.type === 'delete' ? 'del' : 'ins';
+    lineEl.className = 'diff-line diff-line-' + cls;
+    var gutter = document.createElement('span');
+    gutter.className = 'diff-gutter';
+    gutter.textContent = op.type === 'equal' ? ' ' : op.type === 'delete' ? '-' : '+';
+    var text = document.createElement('span');
+    text.className = 'diff-text';
+    text.textContent = op.val;
+    lineEl.appendChild(gutter);
+    lineEl.appendChild(text);
+    wrap.appendChild(lineEl);
+  });
+  flushSkip();
+  return wrap;
 }
 
 // Escape key and overlay click
@@ -656,11 +843,59 @@ document.getElementById('graph-search-clear').addEventListener('click', function
   document.getElementById('graph-search-input').focus();
 });
 
+// ── Split view search ─────────────────────────────────────────────────────
+function doSplitSearch(q) {
+  var clearBtn = document.getElementById('split-search-clear');
+  clearBtn.style.display = q ? 'block' : 'none';
+  if (!q) { applyThemeColorsToSplit(); return; }
+  var dim = isDark()
+    ? {bg: '#1e293b', bd: '#334155', font: '#475569'}
+    : {bg: '#f1f5f9', bd: '#cbd5e1', font: '#94a3b8'};
+  var re;
+  try { re = new RegExp(q, 'i'); } catch(e) { re = null; }
+  function testStr(s) { return re ? re.test(s) : s.toLowerCase().indexOf(q.toLowerCase()) !== -1; }
+  var firstMatch = null;
+  [
+    {dataset: nodesDatasetLeft,  nodes: NODES_OLD},
+    {dataset: nodesDatasetRight, nodes: NODES_NEW}
+  ].forEach(function(pair) {
+    if (!pair.dataset) return;
+    var updates = [];
+    pair.nodes.forEach(function(n) {
+      if (n.status === 'ghost_added' || n.status === 'ghost_removed') return;
+      var hit = !q || testStr(String(n.id)) || testStr(n.label || '') || testStr(n.configStr || '');
+      if (!hit) {
+        updates.push({id: n.id, color: {
+          background: dim.bg, border: dim.bd,
+          highlight: {background: dim.bg, border: dim.bd}
+        }, font: {color: dim.font}});
+      } else if (firstMatch === null) {
+        firstMatch = n.id;
+      }
+    });
+    pair.dataset.update(updates);
+  });
+  if (q && firstMatch !== null) focusNode(firstMatch);
+}
+
+function clearSplitSearch() {
+  document.getElementById('split-search-input').value = '';
+  doSplitSearch('');
+}
+
+document.getElementById('split-search-input').addEventListener('input', function() {
+  doSplitSearch(this.value.trim());
+});
+document.getElementById('split-search-clear').addEventListener('click', function() {
+  clearSplitSearch();
+  document.getElementById('split-search-input').focus();
+});
+
 // ── Section C: Split network + view switcher ──────────────────────────────
 var networkLeft = null, networkRight = null;
 var nodesDatasetLeft = null, nodesDatasetRight = null;
 var edgesDatasetLeft = null, edgesDatasetRight = null;
-var syncingViewport = false;
+var _dragSource = null; // 'left' | 'right' | null — set by pointerdown, cleared by pointerup
 
 var SPLIT_OPTIONS = {
   physics: {enabled: false},
@@ -678,8 +913,8 @@ function initSplitNetworks() {
   var leftNodeIds = new Set(NODES_OLD.filter(function(n) { return n.status !== 'ghost_added'; }).map(function(n) { return n.id; }));
   var rightNodeIds = new Set(NODES_NEW.filter(function(n) { return n.status !== 'ghost_removed'; }).map(function(n) { return n.id; }));
 
-  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to); });
-  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to); });
+  var leftEdges = GRAPH_EDGES.filter(function(e) { return leftNodeIds.has(e.from) && leftNodeIds.has(e.to) && e.status !== 'added'; });
+  var rightEdges = GRAPH_EDGES.filter(function(e) { return rightNodeIds.has(e.from) && rightNodeIds.has(e.to) && e.status !== 'removed'; });
 
   nodesDatasetLeft = new vis.DataSet(NODES_OLD);
   edgesDatasetLeft = new vis.DataSet(leftEdges);
@@ -691,10 +926,39 @@ function initSplitNetworks() {
   networkLeft.fit();
   networkRight.fit();
 
-  networkLeft.on('dragEnd', syncLeftToRight);
-  networkLeft.on('zoom', syncLeftToRight);
-  networkRight.on('dragEnd', syncRightToLeft);
-  networkRight.on('zoom', syncRightToLeft);
+  // Track which canvas the user's pointer is pressed on.
+  // This is the only reliable way to know "which graph the user is dragging":
+  // vis-network's 'dragging' event fires for both user pans AND programmatic
+  // moveTo() calls, so _dragSource lets us ignore the latter on the target side.
+  leftContainer.addEventListener('pointerdown',  function() { _dragSource = 'left';  }, true);
+  rightContainer.addEventListener('pointerdown', function() { _dragSource = 'right'; }, true);
+  window.addEventListener('pointerup',     function() { _dragSource = null; }, true);
+  window.addEventListener('pointercancel', function() { _dragSource = null; }, true);
+
+  // Pan sync: only propagate when the user is actively pressing on that side.
+  // The _dragSource guard prevents moveTo() on the target from bouncing back.
+  networkLeft.on('dragging',  function() { if (_dragSource === 'left')  syncLeftToRight(); });
+  networkRight.on('dragging', function() { if (_dragSource === 'right') syncRightToLeft(); });
+
+  // Zoom sync: wheel event on the container divs. wheel fires only from real
+  // user scroll; moveTo() does not fire wheel, so no feedback loop is possible.
+  var _wheelLRId = null, _wheelRLId = null;
+  leftContainer.addEventListener('wheel', function() {
+    if (_wheelLRId) return;
+    _wheelLRId = requestAnimationFrame(function() {
+      _wheelLRId = null;
+      if (networkLeft && networkRight)
+        networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
+    });
+  }, {passive: true});
+  rightContainer.addEventListener('wheel', function() {
+    if (_wheelRLId) return;
+    _wheelRLId = requestAnimationFrame(function() {
+      _wheelRLId = null;
+      if (networkLeft && networkRight)
+        networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
+    });
+  }, {passive: true});
 
   function onSplitNodeClick(params) {
     if (params.nodes.length === 0) { closeSidePanel(); return; }
@@ -712,24 +976,20 @@ function initSplitNetworks() {
 var _syncLRFrameId = null, _syncRLFrameId = null;
 
 function syncLeftToRight() {
-  if (syncingViewport || _syncLRFrameId) return;
+  if (_syncLRFrameId) return;
   _syncLRFrameId = requestAnimationFrame(function() {
     _syncLRFrameId = null;
-    if (syncingViewport) return;
-    syncingViewport = true;
-    networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
-    syncingViewport = false;
+    if (networkLeft && networkRight)
+      networkRight.moveTo({position: networkLeft.getViewPosition(), scale: networkLeft.getScale(), animation: false});
   });
 }
 
 function syncRightToLeft() {
-  if (syncingViewport || _syncRLFrameId) return;
+  if (_syncRLFrameId) return;
   _syncRLFrameId = requestAnimationFrame(function() {
     _syncRLFrameId = null;
-    if (syncingViewport) return;
-    syncingViewport = true;
-    networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
-    syncingViewport = false;
+    if (networkLeft && networkRight)
+      networkLeft.moveTo({position: networkRight.getViewPosition(), scale: networkRight.getScale(), animation: false});
   });
 }
 
@@ -779,18 +1039,74 @@ function applyThemeColorsToSplit() {
   });
 }
 
+var _focusHighlightId = null;
+var _focusHighlightOrigOverlay = null;
+var _focusHighlightOrigLeft = null;
+var _focusHighlightOrigRight = null;
+var _FOCUS_COLOR = {
+  background: '#92400e', border: '#f59e0b',
+  highlight: {background: '#78350f', border: '#fbbf24'},
+  hover:     {background: '#78350f', border: '#fbbf24'}
+};
+var _FOCUS_SHADOW = {enabled: true, color: 'rgba(245,158,11,0.55)', size: 14, x: 0, y: 0};
+
 function focusNode(toolId) {
-  var pos = null;
-  try { pos = networkLeft.getPosition(toolId); } catch(e) { pos = null; }
-  if (!pos) {
-    try { pos = networkRight.getPosition(toolId); } catch(e) { pos = null; }
+  // Restore previous highlighted node
+  if (_focusHighlightId !== null) {
+    if (nodesDataset && nodesDataset.get(_focusHighlightId) !== null)
+      nodesDataset.update({id: _focusHighlightId, color: _focusHighlightOrigOverlay, shadow: false});
+    if (nodesDatasetLeft && nodesDatasetLeft.get(_focusHighlightId) !== null)
+      nodesDatasetLeft.update({id: _focusHighlightId, color: _focusHighlightOrigLeft, shadow: false});
+    if (nodesDatasetRight && nodesDatasetRight.get(_focusHighlightId) !== null)
+      nodesDatasetRight.update({id: _focusHighlightId, color: _focusHighlightOrigRight, shadow: false});
+    _focusHighlightId = null;
   }
-  if (pos) {
-    var moveOpts = {position: pos, scale: 1.2, animation: {duration: 300, easingFunction: 'easeInOutQuad'}};
-    networkLeft.moveTo(moveOpts);
-    networkRight.moveTo(moveOpts);
+
+  // Snapshot original colours and apply amber highlight
+  _focusHighlightId = toolId;
+  var nO = nodesDataset ? nodesDataset.get(toolId) : null;
+  _focusHighlightOrigOverlay = nO ? (nO.color || null) : null;
+  if (nO) nodesDataset.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  var nL = nodesDatasetLeft ? nodesDatasetLeft.get(toolId) : null;
+  _focusHighlightOrigLeft = nL ? (nL.color || null) : null;
+  if (nL) nodesDatasetLeft.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  var nR = nodesDatasetRight ? nodesDatasetRight.get(toolId) : null;
+  _focusHighlightOrigRight = nR ? (nR.color || null) : null;
+  if (nR) nodesDatasetRight.update({id: toolId, color: _FOCUS_COLOR, shadow: _FOCUS_SHADOW});
+
+  // Move viewport to the node
+  if (currentView === 'overlay' && network && nO) {
+    network.focus(toolId, {scale: 1.5, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+    network.selectNodes([toolId]);
+  } else {
+    var pos = null;
+    try { pos = networkLeft ? networkLeft.getPosition(toolId) : null; } catch(e) { pos = null; }
+    if (!pos) { try { pos = networkRight ? networkRight.getPosition(toolId) : null; } catch(e) { pos = null; } }
+    if (pos) {
+      var moveOpts = {position: pos, scale: 1.2, animation: {duration: 300, easingFunction: 'easeInOutQuad'}};
+      if (networkLeft) { networkLeft.moveTo(moveOpts); if (nL) networkLeft.selectNodes([toolId]); }
+      if (networkRight) { networkRight.moveTo(moveOpts); if (nR) networkRight.selectNodes([toolId]); }
+    }
   }
 }
+
+function expandAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && !chevron.classList.contains('open')) header.click();
+  });
+}
+
+function collapseAllChanges() {
+  document.querySelectorAll('#split-change-rows .change-row-header').forEach(function(header) {
+    var chevron = header.querySelector('.change-chevron');
+    if (chevron && chevron.classList.contains('open')) header.click();
+  });
+}
+
+var _focusChangeRowEl = null;
 
 function buildCenterPanel() {
   var container = document.getElementById('split-change-rows');
@@ -811,9 +1127,14 @@ function buildCenterPanel() {
   entries.forEach(function(e) {
     var item = e.item;
     var cat = e.cat;
-    var row = document.createElement('div');
-    row.className = 'split-change-row';
-    row.setAttribute('data-tool-id', item.tool_id);
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'split-change-row';
+    wrapper.setAttribute('data-tool-id', item.tool_id);
+
+    // Header row
+    var header = document.createElement('div');
+    header.className = 'change-row-header';
 
     var badge = document.createElement('span');
     badge.className = 'split-change-badge';
@@ -829,11 +1150,48 @@ function buildCenterPanel() {
     catTag.style.color = '#64748b';
     catTag.textContent = cat;
 
-    row.appendChild(badge);
-    row.appendChild(label);
-    row.appendChild(catTag);
-    row.addEventListener('click', function() { focusNode(item.tool_id); });
-    container.appendChild(row);
+    var chevron = document.createElement('span');
+    chevron.className = 'change-chevron';
+    chevron.textContent = '▶';
+
+    header.appendChild(badge);
+    header.appendChild(label);
+    header.appendChild(catTag);
+    header.appendChild(chevron);
+
+    // Detail area (built lazily on first open)
+    var detail = document.createElement('div');
+    detail.className = 'change-detail';
+
+    header.addEventListener('click', function() {
+      if (_focusChangeRowEl) _focusChangeRowEl.classList.remove('focused');
+      header.classList.add('focused');
+      _focusChangeRowEl = header;
+      focusNode(item.tool_id);
+
+      var isOpen = chevron.classList.contains('open');
+      if (!isOpen) {
+        if (!detail.dataset.built) {
+          detail.dataset.built = 'true';
+          if (cat === 'modified') {
+            detail.appendChild(buildConfigDiff(item.old_config, item.new_config));
+          } else if (cat === 'added') {
+            detail.appendChild(buildConfigDiff({}, item.config));
+          } else {
+            detail.appendChild(buildConfigDiff(item.config, {}));
+          }
+        }
+        detail.style.display = 'block';
+        chevron.classList.add('open');
+      } else {
+        detail.style.display = 'none';
+        chevron.classList.remove('open');
+      }
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(detail);
+    container.appendChild(wrapper);
   });
 }
 
@@ -851,6 +1209,7 @@ function switchView(view) {
   var btnSplit = document.getElementById('btn-split');
   var btnOverlay = document.getElementById('btn-overlay');
   if (view === 'split') {
+    clearGraphSearch();
     splitView.style.display = 'flex';
     splitControls.style.display = 'flex';
     overlayView.style.display = 'none';
@@ -864,6 +1223,7 @@ function switchView(view) {
       });
     });
   } else {
+    clearSplitSearch();
     splitView.style.display = 'none';
     splitControls.style.display = 'none';
     overlayView.style.display = 'block';
@@ -879,6 +1239,9 @@ function switchView(view) {
 }
 
 window.switchView = switchView;
+window.graphFocusNode = focusNode;
+window.expandAllChanges = expandAllChanges;
+window.collapseAllChanges = collapseAllChanges;
 switchView(currentView);
 
 })();
@@ -1092,10 +1455,31 @@ class GraphRenderer:
                     f"{entry['label']} | modified | {count} field(s) changed"
                 )
 
-        # Build edges list
-        edges_json: list[dict[str, Any]] = [
-            {"id": f"{src}-{dst}", "from": src, "to": dst} for src, dst in G.edges()
-        ]
+        # Build edges list — color connection-diff edges (removed=red, added=green)
+        edge_removed_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "removed"
+        }
+        edge_added_set = {
+            (int(e.src_tool), int(e.dst_tool))
+            for e in result.edge_diffs
+            if e.change_type == "added"
+        }
+        edges_json: list[dict[str, Any]] = []
+        for src, dst in G.edges():
+            edge: dict[str, Any] = {"id": f"{src}-{dst}", "from": src, "to": dst}
+            if (src, dst) in edge_removed_set:
+                edge["color"] = {"color": "#fca5a5", "highlight": "#dc2626", "hover": "#dc2626"}
+                edge["width"] = 2.5
+                edge["status"] = "removed"
+            elif (src, dst) in edge_added_set:
+                edge["color"] = {"color": "#6ee7b7", "highlight": "#059669", "hover": "#059669"}
+                edge["width"] = 2.5
+                edge["status"] = "added"
+            else:
+                edge["status"] = "unchanged"
+            edges_json.append(edge)
 
         # Build split view node lists
         old_vis_nodes, new_vis_nodes = build_split_node_list(

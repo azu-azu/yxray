@@ -4,16 +4,6 @@ from __future__ import annotations
 
 import json
 
-from yxray.models import DiffResult
-from yxray.models.types import ToolID
-from yxray.models.workflow import AlteryxNode, WorkflowDoc
-from yxray.renderers import (
-    GraphRenderer,
-    HTMLRenderer,
-    InspectReportRenderer,
-    SingleGraphRenderer,
-)
-from yxray.renderers._graph_builder import COLOR_MAP
 from tests.fixtures.graph import (
     ALL_CHANGE_TYPES_DIFF,
     ALL_CONNECTIONS,
@@ -27,6 +17,16 @@ from tests.fixtures.graph import (
     NODE_UNCHANGED_A,
     NODE_UNCHANGED_B,
 )
+from yxray.models import DiffResult
+from yxray.models.types import ToolID
+from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.renderers import (
+    GraphRenderer,
+    HTMLRenderer,
+    InspectReportRenderer,
+    SingleGraphRenderer,
+)
+from yxray.renderers._graph_builder import COLOR_MAP
 
 
 def _extract_graph_nodes(html: str) -> list[dict]:
@@ -82,19 +82,13 @@ def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
     assert "_graph$1$2" in html
 
 
-def test_single_graph_report_button_reuses_existing_companion_window() -> None:
-    """Single graph -> inspect report navigation reuses an existing report tab/window."""
+def test_single_graph_has_summary_panel_js() -> None:
+    """Single graph includes summary panel open/close functions."""
     html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
 
-    assert "function companionWindowName(url)" in html
-    assert "window.name = companionWindowName(window.location.href)" in html
-    assert "'yxray_companion_' + kind + '_'" in html
-    assert "function openCompanionFile(url)" in html
-    assert "window.open(url, targetName)" in html
-    assert "existingOrNew.focus()" in html
-    assert "openCompanionFile(window.location.href.replace" in html
-    assert "_graph" in html
-    assert "_report$1$2" in html
+    assert "openSummaryPanel" in html
+    assert "closeSummaryPanel" in html
+    assert "toggleStepDetail" in html
 
 
 def test_render_returns_fragment_not_full_document() -> None:
@@ -218,4 +212,4 @@ def test_html_renderer_embeds_graph_fragment() -> None:
     assert "test-graph" in html
     assert "GRAPH_PLACEHOLDER" in html
     assert "diff-data" in html
-    assert "Added Tools" in html
+    assert "Added" in html

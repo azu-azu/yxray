@@ -11,17 +11,16 @@ Same-type BFS clusters (purple) and ToolContainer dashed borders are drawn.
 
 from __future__ import annotations
 
+import importlib.resources as pkg_resources
 import json
 import pathlib
 from typing import Any
 
-import importlib.resources as pkg_resources
-
 from jinja2 import Environment
 
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
-from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._graph_builder import load_vis_js
+from yxray.renderers._report_assets import STEP_DETAIL_JS
 
 
 def _load_single_graph_js() -> str:
@@ -60,6 +59,18 @@ _HTML_TEMPLATE = """\
       --node-hover: #2563eb;
       --node-select: #1e40af;
       --edge-color: #475569;
+      --accent-added: #57ef92; --accent-added-bg: #052e16; --accent-added-border: #166534;
+      --accent-modified: #fbbf24; --accent-modified-bg: #1c1506; --accent-modified-border: #78350f;
+      --accent-conn: #60a5fa; --accent-conn-bg: #0c1a3a; --accent-conn-border: #1e3a5f;
+      --badge-input-bg: #052e16;  --badge-input-text: #6ee7b7;  --badge-input-border: #166534;
+      --badge-output-bg: #0c1a3a; --badge-output-text: #93c5fd; --badge-output-border: #1e3a5f;
+      --badge-join-bg: #2e1065;   --badge-join-text: #c4b5fd;   --badge-join-border: #4c1d95;
+      --badge-union-bg: #1e293b;  --badge-union-text: #94a3b8;  --badge-union-border: #334155;
+      --badge-aggregate-bg: #1c1506; --badge-aggregate-text: #fcd34d; --badge-aggregate-border: #78350f;
+      --badge-filter-bg: #450a0a;  --badge-filter-text: #fca5a5;  --badge-filter-border: #7f1d1d;
+      --badge-formula-bg: #0c2938; --badge-formula-text: #67e8f9; --badge-formula-border: #164e63;
+      --badge-reshape-bg: #1e1b4b; --badge-reshape-text: #a5b4fc; --badge-reshape-border: #3730a3;
+      --connect-hint-bg: #92400e; --connect-hint-text: #fef3c7;
     }
     html.light {
       --bg: #f8fafc;
@@ -76,6 +87,18 @@ _HTML_TEMPLATE = """\
       --node-hover: #bfdbfe;
       --node-select: #60a5fa;
       --edge-color: #94a3b8;
+      --accent-added: #16a34a; --accent-added-bg: #f0fdf4; --accent-added-border: #bbf7d0;
+      --accent-modified: #d97706; --accent-modified-bg: #fffbeb; --accent-modified-border: #fde68a;
+      --accent-conn: #2563eb; --accent-conn-bg: #eff6ff; --accent-conn-border: #bfdbfe;
+      --badge-input-bg: #d1fae5;  --badge-input-text: #065f46;  --badge-input-border: #6ee7b7;
+      --badge-output-bg: #dbeafe; --badge-output-text: #1e40af; --badge-output-border: #93c5fd;
+      --badge-join-bg: #ede9fe;   --badge-join-text: #5b21b6;   --badge-join-border: #c4b5fd;
+      --badge-union-bg: #f1f5f9;  --badge-union-text: #475569;  --badge-union-border: #cbd5e1;
+      --badge-aggregate-bg: #fef3c7; --badge-aggregate-text: #92400e; --badge-aggregate-border: #fcd34d;
+      --badge-filter-bg: #fee2e2;  --badge-filter-text: #991b1b;  --badge-filter-border: #fca5a5;
+      --badge-formula-bg: #cffafe; --badge-formula-text: #155e75; --badge-formula-border: #67e8f9;
+      --badge-reshape-bg: #e0e7ff; --badge-reshape-text: #3730a3; --badge-reshape-border: #a5b4fc;
+      --connect-hint-bg: #ca8a04; --connect-hint-text: #fff;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -110,6 +133,7 @@ _HTML_TEMPLATE = """\
       transition: background 0.15s;
     }
     .ctrl-btn:hover { background: var(--border); }
+    .ctrl-btn-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
     .search-wrap { position: relative; display: flex; align-items: center; }
     .search-input {
       width: 200px; padding: 5px 28px 5px 10px;
@@ -132,22 +156,94 @@ _HTML_TEMPLATE = """\
       flex: 1;
       background: var(--bg);
       overflow: hidden;
+      position: relative;
     }
     #graph-canvas { width: 100%; height: 100%; }
+    #minimap-wrap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 500;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+      background: var(--surface);
+      user-select: none;
+    }
+    #minimap-canvas { display: block; }
+    #minimap-resize-handle {
+      position: absolute;
+      top: 0; left: 0;
+      width: 16px; height: 16px;
+      cursor: nw-resize;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-resize-handle::before {
+      content: '';
+      position: absolute;
+      top: 4px; left: 4px;
+      width: 7px; height: 7px;
+      border-top: 2px solid var(--text-muted);
+      border-left: 2px solid var(--text-muted);
+      border-radius: 1px;
+    }
+    #minimap-wrap:hover #minimap-resize-handle { opacity: 1; }
+    #minimap-close {
+      position: absolute;
+      top: 3px; right: 4px;
+      background: none; border: none;
+      color: var(--text-muted); cursor: pointer;
+      font-size: 12px; line-height: 1; padding: 0 2px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #minimap-wrap:hover #minimap-close { opacity: 1; }
+    #minimap-close:hover { color: var(--text); }
+    #minimap-reopen {
+      position: absolute;
+      bottom: 16px; right: 16px;
+      z-index: 500;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      display: none;
+    }
+    #minimap-reopen:hover { background: var(--border); color: var(--text); }
     #config-panel {
       position: fixed;
-      top: 0; right: -420px;
+      top: 0; right: 0;
       width: 400px; height: 100%;
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -2px 0 12px rgba(0,0,0,0.2);
-      overflow-y: auto;
-      transition: right 0.2s ease;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
       z-index: 1000;
-      padding: 20px;
       border-radius: 8px 0 0 8px;
     }
-    #config-panel.open { right: 0; }
+    #config-panel .panel-title { padding: 20px 20px 10px; margin-bottom: 0; flex-shrink: 0; }
+    #panel-body { flex: 1; overflow-y: auto; padding: 14px 20px 20px; min-height: 0; }
+    #config-panel.open { transform: translateX(0); }
+    #panel-drag-handle {
+      position: absolute;
+      top: 0; left: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      user-select: none;
+    }
+    #panel-drag-handle:hover, #panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
     #panel-overlay {
       display: none;
       position: fixed;
@@ -168,6 +264,8 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
+    #panel-title-text { cursor: pointer; }
+    #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
     .config-row { margin: 8px 0; }
     .config-key {
       font-size: 11px; font-weight: 600;
@@ -219,10 +317,152 @@ _HTML_TEMPLATE = """\
     #connect-mode-hint {
       display: none; position: fixed; top: 65px; left: 50%;
       transform: translateX(-50%); z-index: 1500; pointer-events: none;
-      background: #ca8a04; color: #fff; padding: 6px 18px;
+      background: var(--connect-hint-bg); color: var(--connect-hint-text); padding: 6px 18px;
       border-radius: 6px; font-size: 12px; font-weight: 500;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
+    /* ---- IO stat bar (above graph) ---- */
+    #io-stat-bar {
+      display: flex; gap: 8px; padding: 6px 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+    .io-stat-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 12px; border-radius: 12px; cursor: pointer;
+      font-size: 11px; font-weight: 600; border: 1px solid;
+      transition: opacity 0.15s; font: inherit;
+    }
+    .io-stat-btn:hover { opacity: 0.75; }
+    .io-stat-input  { color: var(--badge-input-text);     border-color: var(--badge-input-border);     background: var(--badge-input-bg); }
+    .io-stat-output { color: var(--badge-output-text);    border-color: var(--badge-output-border);    background: var(--badge-output-bg); }
+    .io-stat-join   { color: var(--badge-join-text);      border-color: var(--badge-join-border);      background: var(--badge-join-bg); }
+    .io-stat-count  { font-size: 12px; font-weight: 700; }
+    /* ---- Left panels (summary + insights + search-results) ---- */
+    #summary-panel, #insights-panel, #search-results-panel {
+      position: fixed;
+      top: 0; left: 0;
+      width: 640px; height: 100%;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 1000;
+      border-radius: 0 8px 8px 0;
+    }
+    #summary-panel.open, #insights-panel.open, #search-results-panel.open { transform: translateX(0); }
+    #summary-panel-drag-handle, #insights-panel-drag-handle, #search-results-panel-drag-handle {
+      position: absolute;
+      top: 0; right: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      user-select: none;
+    }
+    #summary-panel-drag-handle:hover, #summary-panel-drag-handle.dragging,
+    #insights-panel-drag-handle:hover, #insights-panel-drag-handle.dragging,
+    #search-results-panel-drag-handle:hover, #search-results-panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
+    #summary-panel-header, #insights-panel-header, #search-results-panel-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #summary-panel-body > * { direction: ltr; }
+    #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #insights-panel-body > * { direction: ltr; }
+    #search-results-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #search-results-panel-body > * { direction: ltr; }
+    /* ---- Containers panel ---- */
+    #containers-panel {
+      position: fixed; top: 0; left: 0;
+      width: 360px; height: 100%;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 1000;
+      border-radius: 0 8px 8px 0;
+    }
+    #containers-panel.open { transform: translateX(0); }
+    #containers-panel-drag-handle {
+      position: absolute; top: 0; right: 0;
+      width: 6px; height: 100%;
+      cursor: col-resize; z-index: 10; user-select: none;
+    }
+    #containers-panel-drag-handle:hover, #containers-panel-drag-handle.dragging {
+      background: rgba(148,163,184,0.18);
+    }
+    #containers-panel-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #containers-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #containers-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
+    #containers-panel-body > * { direction: ltr; }
+    .container-row { display: flex; align-items: center; gap: 8px; cursor: grab; border-radius: 4px; padding: 5px 8px; }
+    .container-row:hover { background: rgba(148,163,184,0.12); }
+    .container-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+    .container-row.drag-over-top { border-top: 2px solid #f59e0b; }
+    .container-row.drag-over-bottom { border-bottom: 2px solid #f59e0b; }
+    .container-row.dragging { opacity: 0.4; }
+    .container-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.25); }
+    .container-label { font-size: 12px; color: var(--text); }
+    .ki-summary { font-size: 11px; color: var(--text-muted); padding: 2px 0 8px;
+      border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+    .ki-row { display: flex; align-items: baseline; gap: 6px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+    .ki-row:hover { background: rgba(148,163,184,0.12); }
+    .ki-row.focused { background: rgba(245,158,11,0.18); outline: 1px solid #f59e0b; }
+    .step-badge { cursor: pointer; }
+    .step-badge:hover { filter: brightness(0.88); }
+    .step-badge.focused { background: #92400e !important; border-color: #f59e0b !important; color: #fef3c7 !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.5); }
+    .ki-badge { font-size: 10px; font-weight: 700; border-radius: 3px;
+      padding: 1px 5px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+    .ki-badge-input    { background: var(--badge-input-bg);     color: var(--badge-input-text);     border: 1px solid var(--badge-input-border); }
+    .ki-badge-output   { background: var(--badge-output-bg);    color: var(--badge-output-text);    border: 1px solid var(--badge-output-border); }
+    .ki-badge-join     { background: var(--badge-join-bg);      color: var(--badge-join-text);      border: 1px solid var(--badge-join-border); }
+    .ki-badge-union    { background: var(--badge-union-bg);     color: var(--badge-union-text);     border: 1px solid var(--badge-union-border); }
+    .ki-badge-aggregate{ background: var(--badge-aggregate-bg); color: var(--badge-aggregate-text); border: 1px solid var(--badge-aggregate-border); }
+    .ki-badge-filter   { background: var(--badge-filter-bg);    color: var(--badge-filter-text);    border: 1px solid var(--badge-filter-border); }
+    .ki-badge-formula  { background: var(--badge-formula-bg);   color: var(--badge-formula-text);   border: 1px solid var(--badge-formula-border); }
+    .ki-badge-reshape  { background: var(--badge-reshape-bg);   color: var(--badge-reshape-text);   border: 1px solid var(--badge-reshape-border); }
+    .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; color: var(--text); white-space: nowrap; }
+    .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+    .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
+    .summary-step:hover { filter: brightness(1.08); }
+    .summary-step-input  { background: var(--accent-conn-bg); }
+    .summary-step-output { background: var(--accent-added-bg); }
+    .summary-step-transform { background: var(--surface-2); }
+    .summary-step-unknown { background: var(--surface-2); opacity: 0.7; }
+    .summary-step-added    { outline: 1px solid var(--accent-added-border); }
+    .summary-step-modified { outline: 1px solid var(--accent-modified-border); }
+    .step-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; }
+    .step-num { font-size: 11px; color: var(--text-muted); min-width: 22px; text-align: right; flex-shrink: 0; }
+    .step-badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 7px; border: 1px solid; flex-shrink: 0; }
+    .step-badge-input    { color: var(--accent-conn);     background: var(--accent-conn-bg);     border-color: var(--accent-conn-border); }
+    .step-badge-output   { color: var(--accent-added);    background: var(--accent-added-bg);    border-color: var(--accent-added-border); }
+    .step-badge-transform { color: var(--accent-modified); background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
+    .step-badge-unknown  { color: var(--text-muted);      background: var(--surface-2);          border-color: var(--border); }
+    .step-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
+    .step-expand-arrow { font-size: 10px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; transition: transform 0.15s ease; }
+    .search-mark { background: rgba(245,158,11,0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
+    .step-expand-arrow.open { transform: rotate(90deg); }
+    .step-detail { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
+    .step-detail-inner { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
+    .step-config-row { display: flex; gap: 8px; align-items: baseline; }
+    .step-config-key { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; flex-shrink: 0; min-width: 120px; }
+    .step-config-val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text); word-break: break-all; }
   </style>
 </head>
 <body>
@@ -243,17 +483,110 @@ _HTML_TEMPLATE = """\
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
       </div>
-      <button class="ctrl-btn" id="report-btn" onclick="openReport()">Report</button>
+      {% if containers_for_panel %}<button class="ctrl-btn" id="containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
+      {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
+      {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
       <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
+  {% if key_insights %}
+  {% set _input_count = key_insights | selectattr('role', 'equalto', 'input') | list | length %}
+  {% set _output_count = key_insights | selectattr('role', 'equalto', 'output') | list | length %}
+  {% set _join_count = key_insights | selectattr('role', 'equalto', 'join') | list | length %}
+  {% if _input_count or _output_count or _join_count %}
+  <div id="io-stat-bar">
+    {% if _input_count %}<button class="io-stat-btn io-stat-input" onclick="openInsightsPanelFiltered('input')">Input <span class="io-stat-count">{{ _input_count }}</span></button>{% endif %}
+    {% if _output_count %}<button class="io-stat-btn io-stat-output" onclick="openInsightsPanelFiltered('output')">Output <span class="io-stat-count">{{ _output_count }}</span></button>{% endif %}
+    {% if _join_count %}<button class="io-stat-btn io-stat-join" onclick="openInsightsPanelFiltered('join')">Join <span class="io-stat-count">{{ _join_count }}</span></button>{% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
+    <div id="minimap-wrap">
+      <div id="minimap-resize-handle"></div>
+      <canvas id="minimap-canvas" width="240" height="160"></canvas>
+      <button id="minimap-close" title="Hide minimap" onclick="closeMinimapPanel()">&times;</button>
+    </div>
+  </div>
+  <button id="minimap-reopen" title="Show minimap" onclick="openMinimapPanel()">&#9638; Map</button>
+  {% if key_insights %}
+  <div id="insights-panel">
+    <div id="insights-panel-drag-handle"></div>
+    <div id="insights-panel-header">
+      <span id="insights-panel-title">At a Glance</span>
+      <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+    </div>
+    <div id="insights-panel-body">
+      {% for insight in key_insights %}
+      {% if insight.role == "summary" %}
+      <div class="ki-summary">{{ insight.description }}</div>
+      {% else %}
+      <div class="ki-row" data-role="{{ insight.role }}" onclick="focusNode({{ insight.tool_id }}, this)">
+        <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
+        <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% if containers_for_panel %}
+  <div id="containers-panel">
+    <div id="containers-panel-drag-handle"></div>
+    <div id="containers-panel-header">
+      <span id="containers-panel-title">Containers ({{ containers_for_panel | length }})</span>
+    </div>
+    <div id="containers-panel-body">
+      {% for c in containers_for_panel %}
+      <div class="container-row" draggable="true" data-label="{{ c.label }}" onclick="focusContainer({{ loop.index0 }}, this)">
+        {% if c.fill_color %}<span class="container-swatch" style="background:{{ c.fill_color }};"></span>{% endif %}
+        <span class="container-label">{{ c.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% if workflow_steps %}
+  <div id="summary-panel">
+    <div id="summary-panel-drag-handle"></div>
+    <div id="summary-panel-header">
+      <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
+      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+    </div>
+    <div id="summary-panel-body">
+      <ol class="summary-steps">
+        {% for step in workflow_steps %}
+        <li class="summary-step summary-step-{{ step.category }}{% if step.change %} summary-step-{{ step.change }}{% endif %}"
+            onclick="toggleStepDetail(this)">
+          <div class="step-row">
+            <span class="step-num">{{ loop.index }}.</span>
+            <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
+            {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
+            <span class="step-expand-arrow">&#9654;</span>
+          </div>
+          <div class="step-detail" data-config="{{ step.config | tojson | forceescape }}">
+            <div class="step-detail-inner"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  {% endif %}
+  <div id="search-results-panel">
+    <div id="search-results-panel-drag-handle"></div>
+    <div id="search-results-panel-header">
+      <span id="search-results-panel-title">Results</span>
+      <button class="panel-close" onclick="closeSearchResultsPanel()">&times;</button>
+    </div>
+    <div id="search-results-panel-body"></div>
   </div>
   <div id="config-panel">
+    <div id="panel-drag-handle"></div>
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
       <span id="panel-title-text"></span>
@@ -278,11 +611,336 @@ _HTML_TEMPLATE = """\
 {{ single_graph_js | safe }}
   </script>
   <script>
-{{ companion_window_js | safe }}
+{{ step_detail_js | safe }}
 
-function openReport() {
-    openCompanionFile(window.location.href.replace(/_graph(\\.[^./?#]+)([?#].*)?$/, '_report$1$2'));
+// ── focusNode: highlight a graph node and the clicked panel element ────────
+var _focusHighlightId = null;
+var _focusHighlightOrigColor = null;
+var _focusHighlightPanelEl = null;
+
+function focusNode(toolId, clickedEl) {
+    // Clear container focus state
+    _focusedContainerIdx = null;
+    if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
+
+    // Restore previous node colour
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var restore = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(restore);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+
+    // Remove focused class from previous panel element
+    if (_focusHighlightPanelEl) {
+        _focusHighlightPanelEl.classList.remove('focused');
+        _focusHighlightPanelEl = null;
+    }
+
+    if (typeof network === 'undefined' || !network || toolId < 0) return;
+    var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
+    if (visibleId === null) return;
+
+    // Save original colour then apply vivid amber highlight
+    var nodeData = nodesDataset ? nodesDataset.get(visibleId) : null;
+    if (nodeData) {
+        _focusHighlightId = visibleId;
+        _focusHighlightOrigColor = nodeData.color || null;
+        nodesDataset.update({
+            id: visibleId,
+            color: {
+                background: '#92400e',
+                border: '#f59e0b',
+                highlight: {background: '#78350f', border: '#fbbf24'},
+                hover:     {background: '#78350f', border: '#fbbf24'}
+            },
+            shadow: {enabled: true, color: 'rgba(245,158,11,0.55)', size: 14, x: 0, y: 0}
+        });
+    }
+
+    network.focus(visibleId, { scale: FOCUS_SCALE, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    network.selectNodes([visibleId]);
+
+    // Highlight the clicked panel element
+    if (clickedEl) {
+        clickedEl.classList.add('focused');
+        _focusHighlightPanelEl = clickedEl;
+    }
 }
+
+var _insightsPanelActiveRole = null;
+var _searchPrevPanel = null;
+var _searchResultsFocusEl = null;
+
+function _syncPanelBtnState() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
+    var ib = document.getElementById('insights-btn');
+    var sb = document.getElementById('summary-btn');
+    var cb = document.getElementById('containers-btn');
+    if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
+    if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
+    if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
+}
+
+function openSearchResultsPanel(entries) {
+    var srp = document.getElementById('search-results-panel');
+    if (!srp) return;
+    if (!srp.classList.contains('open')) {
+        var ip = document.getElementById('insights-panel');
+        var sp = document.getElementById('summary-panel');
+        var cp = document.getElementById('containers-panel');
+        if (ip && ip.classList.contains('open')) _searchPrevPanel = 'insights';
+        else if (sp && sp.classList.contains('open')) _searchPrevPanel = 'summary';
+        else if (cp && cp.classList.contains('open')) _searchPrevPanel = 'containers';
+        else _searchPrevPanel = null;
+        if (ip) ip.classList.remove('open');
+        if (sp) sp.classList.remove('open');
+        if (cp) cp.classList.remove('open');
+    }
+    var body = document.getElementById('search-results-panel-body');
+    body.innerHTML = '';
+    var title = document.getElementById('search-results-panel-title');
+    if (title) title.textContent = 'Results (' + entries.length + ')';
+    var ol = document.createElement('ol');
+    ol.className = 'summary-steps';
+    entries.forEach(function(entry, idx) {
+        var li = document.createElement('li');
+        li.className = 'summary-step summary-step-' + (entry.category || 'unknown');
+        li.onclick = function() { if (typeof toggleStepDetail === 'function') toggleStepDetail(this); };
+        var row = document.createElement('div');
+        row.className = 'step-row';
+        var num = document.createElement('span');
+        num.className = 'step-num';
+        num.textContent = (idx + 1) + '.';
+        var badge = document.createElement('span');
+        badge.className = 'step-badge step-badge-' + (entry.category || 'unknown');
+        badge.textContent = entry.shortType;
+        badge.onclick = (function(id, badgeEl) {
+            return function(e) {
+                e.stopPropagation();
+                if (_searchResultsFocusEl) _searchResultsFocusEl.classList.remove('focused');
+                badgeEl.classList.add('focused');
+                _searchResultsFocusEl = badgeEl;
+                if (typeof network !== 'undefined' && network) {
+                    var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
+                    if (visId !== null) {
+                        network.selectNodes([visId]);
+                        network.focus(visId, {scale: FOCUS_SCALE, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+                    }
+                }
+            };
+        })(entry.id, badge);
+        var desc = document.createElement('span');
+        desc.className = 'step-desc';
+        desc.textContent = entry.label;
+        var arrow = document.createElement('span');
+        arrow.className = 'step-expand-arrow';
+        arrow.textContent = '▶';
+        row.appendChild(num);
+        row.appendChild(badge);
+        row.appendChild(desc);
+        row.appendChild(arrow);
+        var detail = document.createElement('div');
+        detail.className = 'step-detail';
+        var configData = (typeof CONFIG_MAP !== 'undefined' && CONFIG_MAP) ? (CONFIG_MAP[String(entry.id)] || {}) : {};
+        detail.dataset.config = JSON.stringify(configData);
+        var inner = document.createElement('div');
+        inner.className = 'step-detail-inner';
+        detail.appendChild(inner);
+        li.appendChild(row);
+        li.appendChild(detail);
+        ol.appendChild(li);
+    });
+    body.appendChild(ol);
+    srp.classList.add('open');
+    _syncPanelBtnState();
+}
+
+function closeSearchResultsPanel() {
+    var srp = document.getElementById('search-results-panel');
+    if (srp) srp.classList.remove('open');
+    _searchResultsFocusEl = null;
+    if (_searchPrevPanel === 'insights') {
+        var ip = document.getElementById('insights-panel');
+        if (ip) ip.classList.add('open');
+    } else if (_searchPrevPanel === 'summary') {
+        var sp = document.getElementById('summary-panel');
+        if (sp) sp.classList.add('open');
+    } else if (_searchPrevPanel === 'containers') {
+        var cp = document.getElementById('containers-panel');
+        if (cp) cp.classList.add('open');
+    }
+    _searchPrevPanel = null;
+    _syncPanelBtnState();
+}
+
+function openInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
+    if (!ip) return;
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === null) { ip.classList.remove('open'); _syncPanelBtnState(); return; }
+    if (sp) sp.classList.remove('open');
+    if (cp) cp.classList.remove('open');
+    _insightsPanelActiveRole = null;
+    // Reset filter — show all rows
+    var titleEl = document.getElementById('insights-panel-title');
+    if (titleEl) titleEl.textContent = 'At a Glance';
+    ip.querySelectorAll('.ki-row').forEach(function(row) { row.style.display = ''; });
+    var summary = ip.querySelector('.ki-summary');
+    if (summary) summary.style.display = '';
+    ip.classList.add('open');
+    _syncPanelBtnState();
+}
+function openInsightsPanelFiltered(role) {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var cp = document.getElementById('containers-panel');
+    if (!ip) return;
+    if (ip.classList.contains('open') && _insightsPanelActiveRole === role) {
+        ip.classList.remove('open');
+        _insightsPanelActiveRole = null;
+        _syncPanelBtnState();
+        return;
+    }
+    if (sp) sp.classList.remove('open');
+    if (cp) cp.classList.remove('open');
+    _insightsPanelActiveRole = role;
+    // Filter rows to matching role
+    var titleEl = document.getElementById('insights-panel-title');
+    if (titleEl) titleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1) + 's';
+    ip.querySelectorAll('.ki-row').forEach(function(row) {
+        row.style.display = (row.dataset.role === role) ? '' : 'none';
+    });
+    var summary = ip.querySelector('.ki-summary');
+    if (summary) summary.style.display = 'none';
+    ip.classList.add('open');
+    _syncPanelBtnState();
+}
+function closeInsightsPanel() {
+    var ip = document.getElementById('insights-panel');
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    _syncPanelBtnState();
+}
+function openSummaryPanel() {
+    var sp = document.getElementById('summary-panel');
+    var ip = document.getElementById('insights-panel');
+    var cp = document.getElementById('containers-panel');
+    if (!sp) return;
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); _syncPanelBtnState(); return; }
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    if (cp) cp.classList.remove('open');
+    sp.classList.add('open');
+    _syncPanelBtnState();
+}
+function closeSummaryPanel() {
+    var sp = document.getElementById('summary-panel');
+    if (sp) sp.classList.remove('open');
+    _syncPanelBtnState();
+}
+function openContainersPanel() {
+    var cp = document.getElementById('containers-panel');
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    if (!cp) return;
+    if (cp.classList.contains('open')) { cp.classList.remove('open'); _syncPanelBtnState(); return; }
+    if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    if (sp) sp.classList.remove('open');
+    cp.classList.add('open');
+    _syncPanelBtnState();
+}
+var _containerFocusEl = null;
+function focusContainer(containerIdx, clickedEl) {
+    // Clear node focus state
+    if (_focusHighlightId !== null && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var restoreColor = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(restoreColor);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+    if (_focusHighlightPanelEl) { _focusHighlightPanelEl.classList.remove('focused'); _focusHighlightPanelEl = null; }
+
+    if (_containerFocusEl) { _containerFocusEl.classList.remove('focused'); _containerFocusEl = null; }
+    if (clickedEl) { clickedEl.classList.add('focused'); _containerFocusEl = clickedEl; }
+    // Update graph highlight and redraw.
+    _focusedContainerIdx = containerIdx;
+    if (!network) return;
+    network.redraw();
+    // Compute bounding box of container members in vis-network canvas coords.
+    var membership = computeContainerMembership();
+    var memberIds = [];
+    Object.keys(membership).forEach(function(nid) {
+        if (membership[parseInt(nid)] === containerIdx) {
+            var rep = resolveNode(parseInt(nid));
+            if (rep !== null && memberIds.indexOf(rep) === -1) memberIds.push(rep);
+        }
+    });
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    if (memberIds.length > 0) {
+        var positions = network.getPositions(memberIds);
+        memberIds.forEach(function(id) {
+            var pos = positions[id];
+            if (pos) {
+                minX = Math.min(minX, pos.x); minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x); maxY = Math.max(maxY, pos.y);
+            }
+        });
+    }
+    if (!isFinite(minX)) {
+        var c = CONTAINERS_DATA[containerIdx];
+        if (!c) return;
+        minX = c.x; minY = c.y; maxX = c.x + (c.w || 0); maxY = c.y + (c.h || 0);
+    }
+    // Add container padding to match the drawn box.
+    minX -= CONT_PAD_X; minY -= CONT_PAD_Y;
+    maxX += CONT_PAD_X; maxY += CONT_PAD_Y;
+    var boxW = maxX - minX;
+    var boxH = maxY - minY;
+    var canvas = network.canvas.frame.canvas;
+    var scale = Math.min(Math.min(canvas.clientWidth / boxW, canvas.clientHeight / boxH) * 0.6, 0.9);
+    var center = {x: (minX + maxX) / 2, y: (minY + maxY) / 2};
+    network.moveTo({position: center, scale: scale, animation: {duration: 400, easingFunction: 'easeInOutQuad'}});
+}
+
+// ── Panel drag-resize (shared helper) ────────────────────────────────────
+// direction: +1 = handle on right edge (drag right to widen),
+//            -1 = handle on left edge  (drag left to widen, e.g. config-panel)
+function makeDragResize(panelId, handleId, direction) {
+  var panel  = document.getElementById(panelId);
+  var handle = document.getElementById(handleId);
+  if (!handle || !panel) return;
+  var startX, startW;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  function onMove(e) {
+    var dx  = (e.clientX - startX) * direction;
+    var newW = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.85), startW + dx));
+    panel.style.width = newW + 'px';
+  }
+  function onUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+}
+makeDragResize('config-panel',          'panel-drag-handle',                -1);
+makeDragResize('insights-panel',        'insights-panel-drag-handle',       +1);
+makeDragResize('summary-panel',         'summary-panel-drag-handle',        +1);
+makeDragResize('containers-panel',      'containers-panel-drag-handle',     +1);
+makeDragResize('search-results-panel',  'search-results-panel-drag-handle', +1);
   </script>
 </body>
 </html>
@@ -296,12 +954,45 @@ class SingleGraphRenderer:
     vis-network UMD is inlined — zero CDN references.
     """
 
-    def render(self, doc: WorkflowDoc) -> str:
-        """WorkflowDoc → standalone HTML string."""
-        nodes_list, edges_list, config_map, containers_list = self._build_graph_data(doc)
+    def render(
+        self,
+        doc: WorkflowDoc,
+        *,
+        workflow_steps: list[Any] | None = None,
+        key_insights: list[Any] | None = None,
+    ) -> str:
+        """WorkflowDoc → standalone HTML string.
+
+        Args:
+            doc: The parsed workflow document.
+            workflow_steps: Optional list of WorkflowStep objects. When provided,
+                a collapsible Summary panel is shown.
+            key_insights: Optional list of KeyInsight objects shown as an
+                at-a-glance summary at the top of the Summary panel.
+        """
+        nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
+            doc
+        )
         vis_js = load_vis_js()
         single_graph_js = _load_single_graph_js()
         title = pathlib.Path(doc.filepath).name
+
+        steps_dicts: list[Any] | None = None
+        if workflow_steps:
+            steps_dicts = [
+                s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
+                for s in workflow_steps
+            ]
+
+        # Sort containers by canvas position (x, y) to match the left-to-right visual flow.
+        if containers_list:
+            containers_list = sorted(containers_list, key=lambda c: (c["x"], c["y"]))
+
+        insights_dicts: list[Any] | None = None
+        if key_insights:
+            insights_dicts = [
+                i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights
+            ]
 
         graph_data_json = json.dumps(
             {
@@ -316,7 +1007,14 @@ class SingleGraphRenderer:
         env = Environment(autoescape=True)  # noqa: S701
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_HTML_TEMPLATE)
-        data_node_count = sum(1 for n in doc.nodes if "ToolContainer" not in n.tool_type)
+        data_node_count = sum(
+            1 for n in doc.nodes if "ToolContainer" not in n.tool_type
+        )
+        containers_for_panel = [
+            {"label": c["label"], "fill_color": c.get("fillColor")}
+            for c in containers_list
+        ] or None
+
         return template.render(
             title=title,
             node_count=data_node_count,
@@ -324,12 +1022,17 @@ class SingleGraphRenderer:
             graph_data_json=graph_data_json,
             vis_js=vis_js,
             single_graph_js=single_graph_js,
-            companion_window_js=COMPANION_WINDOW_JS,
+            step_detail_js=STEP_DETAIL_JS,
+            workflow_steps=steps_dicts,
+            key_insights=insights_dicts,
+            containers_for_panel=containers_for_panel,
         )
 
     def _build_graph_data(
         self, doc: WorkflowDoc
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    ) -> tuple[
+        list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]
+    ]:
         data_nodes = [n for n in doc.nodes if "ToolContainer" not in n.tool_type]
         data_node_ids = {int(n.tool_id) for n in data_nodes}
 
@@ -415,9 +1118,15 @@ class SingleGraphRenderer:
                 if style_int > 9:
                     return _hex_or_int_to_rgb(text)
                 _STYLE_COLORS: dict[int, str] = {
-                    1: "#dbeafe", 2: "#dcfce7", 3: "#fef9c3",
-                    4: "#ffedd5", 5: "#fce7f3", 6: "#ede9fe",
-                    7: "#d1fae5", 8: "#e0f2fe", 9: "#fee2e2",
+                    1: "#dbeafe",
+                    2: "#dcfce7",
+                    3: "#fef9c3",
+                    4: "#ffedd5",
+                    5: "#fce7f3",
+                    6: "#ede9fe",
+                    7: "#d1fae5",
+                    8: "#e0f2fe",
+                    9: "#fee2e2",
                 }
                 return _STYLE_COLORS.get(style_int)
             except ValueError:
@@ -426,7 +1135,11 @@ class SingleGraphRenderer:
         # Tint: Qt ARGB32 packed integer
         tint_entry = config.get("Tint")
         if tint_entry:
-            raw = tint_entry.get("#text", "") if isinstance(tint_entry, dict) else str(tint_entry)
+            raw = (
+                tint_entry.get("#text", "")
+                if isinstance(tint_entry, dict)
+                else str(tint_entry)
+            )
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result
@@ -434,7 +1147,11 @@ class SingleGraphRenderer:
         # FillColor: top-level hex string (some versions)
         fill_entry = config.get("FillColor") or config.get("fillColor")
         if fill_entry:
-            raw = fill_entry.get("#text", "") if isinstance(fill_entry, dict) else str(fill_entry)
+            raw = (
+                fill_entry.get("#text", "")
+                if isinstance(fill_entry, dict)
+                else str(fill_entry)
+            )
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result
@@ -469,7 +1186,11 @@ class SingleGraphRenderer:
         file_entry = node.config.get("File")
         if file_entry is None:
             return None
-        raw = file_entry.get("#text", "") if isinstance(file_entry, dict) else str(file_entry)
+        raw = (
+            file_entry.get("#text", "")
+            if isinstance(file_entry, dict)
+            else str(file_entry)
+        )
         return raw.strip() or None
 
     def _clean_config(self, node: AlteryxNode) -> dict[str, Any]:
