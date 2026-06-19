@@ -10,10 +10,10 @@ import pathlib
 
 import pytest
 
+from tests.fixtures.pipeline import IDENTICAL_YXMD, MINIMAL_YXMD_A, MINIMAL_YXMD_B
 from yxray.exceptions import MissingFileError
 from yxray.models import DiffResult
 from yxray.pipeline import DiffRequest, DiffResponse, run
-from tests.fixtures.pipeline import IDENTICAL_YXMD, MINIMAL_YXMD_A, MINIMAL_YXMD_B
 
 
 def test_pipeline_run_returns_diff_response(tmp_path: pathlib.Path) -> None:

@@ -8,8 +8,6 @@ removed connection -> identical workflows.
 
 from __future__ import annotations
 
-from yxray.differ import diff
-from yxray.models import AnchorName, ToolID
 from tests.fixtures.diffing import (
     SCENARIO_ABSENT_KEY_AFTER,
     SCENARIO_ABSENT_KEY_BEFORE,
@@ -23,6 +21,8 @@ from tests.fixtures.diffing import (
     SCENARIO_MODIFIED_NESTED_FIELD,
     SCENARIO_REMOVED_NODE,
 )
+from yxray.differ import diff
+from yxray.models import AnchorName, ToolID
 
 
 def test_added_node() -> None:

@@ -7,8 +7,6 @@ cross-type isolation -> count invariant.
 
 from __future__ import annotations
 
-from yxray.matcher import MatchResult, match
-from yxray.models import NormalizedNode
 from tests.fixtures.matching import (
     CROSS_TYPE_NEW,
     CROSS_TYPE_OLD,
@@ -25,6 +23,8 @@ from tests.fixtures.matching import (
     THRESHOLD_NEW,
     THRESHOLD_OLD,
 )
+from yxray.matcher import MatchResult, match
+from yxray.models import NormalizedNode
 
 
 def _check_invariant(

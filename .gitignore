@@ -23,8 +23,11 @@ tests/eval/results/
 app/frontend/.vite/
 
 # Generated output artifacts — not for version control
+/diff_graph.html
 /diff_report.html
 /review.html
 AUDIT.md
 tmp.md
 examples/*_report.html
+*_report.html
+*_graph.html
