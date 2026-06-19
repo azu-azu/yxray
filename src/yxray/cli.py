@@ -15,7 +15,7 @@ from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, run
 from yxray.renderers import (
-    GraphRenderer,
+    DiffGraphRenderer,
     HTMLRenderer,
     SingleGraphRenderer,
 )
@@ -131,7 +131,7 @@ def diff(  # noqa: B008
         file_a_str = str(workflow_a.resolve())
         file_b_str = str(workflow_b.resolve())
         all_connections = response.doc_a.connections + response.doc_b.connections
-        graph_html = GraphRenderer().render(
+        graph_html = DiffGraphRenderer().render(
             result,
             all_connections=all_connections,
             nodes_old=response.doc_a.nodes,
