@@ -8,7 +8,8 @@ var CONTAINERS_DATA = __d.containers;
 var BROWSE_NODE_IDS = (function() {
   var ids = {};
   NODES_DATA.forEach(function(n) {
-    if (n.title && n.title.split('.').pop().toLowerCase() === 'browse') ids[n.id] = true;
+    var tip = n.title ? n.title.split('.').pop().toLowerCase() : '';
+    if (tip === 'browse' || tip === 'browsev2') ids[n.id] = true;
   });
   return ids;
 }());
@@ -1807,7 +1808,7 @@ function _toolTypeToBadgeRole(toolType) {
   if (t === 'union') return 'union';
   if (t === 'summarize' || t === 'sample' || t === 'tile') return 'aggregate';
   if (t === 'crosstab' || t === 'transpose' || t === 'regex') return 'reshape';
-  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t.indexOf('output') !== -1 || t === 'browse' || t === 'browsev2') return 'output';
   if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput') return 'input';
   return 'union';
 }
@@ -1815,7 +1816,7 @@ function _toolTypeToBadgeRole(toolType) {
 function _toolTypeToStepCategory(toolType) {
   var t = (toolType || '').toLowerCase();
   if (t.indexOf('input') !== -1 || t === 'textinput' || t === 'dbfileinput' || t === 'recordid') return 'input';
-  if (t.indexOf('output') !== -1 || t === 'browse') return 'output';
+  if (t.indexOf('output') !== -1 || t === 'browse' || t === 'browsev2') return 'output';
   if (t !== '') return 'transform';
   return 'unknown';
 }
