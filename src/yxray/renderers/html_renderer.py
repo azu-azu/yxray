@@ -517,7 +517,7 @@ class HTMLRenderer:
         template = env.from_string(_TEMPLATE)
 
         def _role(ki: Any) -> str:
-            return ki.role if hasattr(ki, "role") else ki.get("role", "")
+            return str(ki.role) if hasattr(ki, "role") else str(ki.get("role", ""))
 
         input_count = sum(1 for ki in key_insights if _role(ki) == "input") if key_insights else 0
         output_count = sum(1 for ki in key_insights if _role(ki) == "output") if key_insights else 0
