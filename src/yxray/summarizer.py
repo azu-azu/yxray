@@ -86,7 +86,9 @@ class WorkflowStep:
 
     def to_dict(self, *, include_change: bool = False) -> dict[str, Any]:
         # Exclude XML attribute keys (@ prefix) — they're noise in the UI
-        clean_config = {k: v for k, v in (self.config or {}).items() if not k.startswith("@")}
+        clean_config = {
+            k: v for k, v in (self.config or {}).items() if not k.startswith("@")
+        }
         d: dict[str, Any] = {
             "tool_id": self.tool_id,
             "short_type": self.short_type,
@@ -105,7 +107,7 @@ class KeyInsight:
 
     tool_id: int
     short_type: str
-    role: str  # "input"|"output"|"join"|"union"|"aggregate"|"filter"|"formula"|"reshape"
+    role: str  # input|output|join|union|aggregate|filter|formula|reshape
     description: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -236,7 +238,9 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         elif role == "output":
             output_count += 1
         if role in ("input", "output"):
-            description = _first_text(node.config, "File", "FileName") or _describe(node.tool_type, node.config)
+            description = _first_text(
+                node.config, "File", "FileName"
+            ) or _describe(node.tool_type, node.config)
         else:
             description = _describe(node.tool_type, node.config)
         insights.append(KeyInsight(
@@ -507,7 +511,9 @@ def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
     if not selected:
         return "Selects or changes fields"
 
-    detail = f"Keeps {len(selected)} fields: " + ", ".join(name for name in selected if name)
+    detail = f"Keeps {len(selected)} fields: " + ", ".join(
+        name for name in selected if name
+    )
     extras: list[str] = []
     if renamed:
         extras.append(f"{len(renamed)} renamed")
@@ -588,7 +594,10 @@ def _describe_container(config: dict[str, Any], members: list[Any] | None) -> st
 _JOIN_SEGMENTS = frozenset({"AlteryxJoin", "Join", "AlteryxAppend", "Append"})
 _UNION_SEGMENTS = frozenset({"AlteryxUnion", "Union"})
 _AGGREGATE_SEGMENTS = frozenset(
-    {"AlteryxSummarize", "Summarize", "AlteryxCrossTab", "CrossTab", "AlteryxTranspose", "Transpose"}
+    {
+        "AlteryxSummarize", "Summarize", "AlteryxCrossTab",
+        "CrossTab", "AlteryxTranspose", "Transpose",
+    }
 )
 _FILTER_SEGMENTS = frozenset({"AlteryxFilter", "Filter"})
 _FORMULA_SEGMENTS = frozenset({"AlteryxFormula", "Formula", "MultiFieldFormula"})
