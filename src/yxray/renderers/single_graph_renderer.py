@@ -21,7 +21,7 @@ from jinja2 import Environment
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers._graph_builder import load_vis_js
 from yxray.renderers._report_assets import STEP_DETAIL_JS
-from yxray.summarizer import compute_node_layer
+from yxray.topology import compute_node_layer
 
 
 def _load_single_graph_js() -> str:
