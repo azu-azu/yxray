@@ -50,6 +50,19 @@ _GHOST_STYLE: dict[str, Any] = {"opacity": 0.25, "borderDashes": [4, 4]}
 CONTAINER_TYPE = "AlteryxGuiToolkit.ToolContainer.ToolContainer"
 
 
+def _safe_json(data: Any, **kwargs: Any) -> str:
+    """Return JSON with <, >, & replaced by unicode escapes.
+
+    Prevents </script> injection when embedding JSON inside HTML <script> blocks.
+    """
+    return (
+        json.dumps(data, **kwargs)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+
 def build_digraph(
     result: DiffResult,
     all_connections: tuple[AlteryxConnection, ...],
