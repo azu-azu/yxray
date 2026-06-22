@@ -10,11 +10,15 @@ from yxray.sql.ir import (
     IRStep,
     ProjectionStep,
     SourceStep,
+    SqlDialect,
     UnsupportedStep,
 )
 
 
-def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
+def render_sql(
+    steps: tuple[IRStep, ...],
+    dialect: SqlDialect = SqlDialect.ANSI,
+) -> ConversionResult:
     source = next((step for step in steps if isinstance(step, SourceStep)), None)
     projections = [step for step in steps if isinstance(step, ProjectionStep)]
     filters = [step for step in steps if isinstance(step, FilterStep)]
