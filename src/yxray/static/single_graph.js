@@ -1596,9 +1596,51 @@ function closePanel() {
   _panelNodeId = null;
 }
 
+function copyPanelContent() {
+  var title = document.getElementById('panel-title-text').textContent.trim();
+  var body = document.getElementById('panel-body');
+  var lines = [title, ''];
+  Array.prototype.forEach.call(body.children, function(node) {
+    if (node.classList.contains('cluster-member-header')) {
+      lines.push('── ' + node.textContent.trim() + ' ──');
+      lines.push('');
+    } else if (node.classList.contains('config-row')) {
+      var key = node.querySelector('.config-key');
+      var val = node.querySelector('.config-val');
+      if (key && val) lines.push(key.textContent.trim() + ': ' + val.textContent.trim());
+    } else if (node.classList.contains('config-val')) {
+      lines.push(node.textContent.trim());
+    }
+  });
+  var text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  var btn = document.getElementById('panel-copy-btn');
+  function showFeedback(ok) {
+    if (!btn) return;
+    btn.textContent = ok ? 'Copied!' : 'Failed';
+    btn.style.color = ok ? 'var(--accent)' : '#f87171';
+    setTimeout(function() { btn.textContent = 'Copy'; btn.style.color = ''; }, 1500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      function() { showFeedback(true); },
+      function() { showFeedback(false); }
+    );
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showFeedback(true); }
+    catch(e) { showFeedback(false); }
+    document.body.removeChild(ta);
+  }
+}
+
 document.getElementById('panel-title-text').addEventListener('click', function() {
   if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
 });
+document.getElementById('panel-copy-btn').addEventListener('click', copyPanelContent);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
