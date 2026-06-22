@@ -35,6 +35,39 @@ def test_convert_cluster_to_sql_orders_nodes_and_renders_projection_filter() -> 
     assert result.report.is_partial is False
 
 
+def test_convert_cluster_to_sql_renders_formula_as_raw_expression() -> None:
+    doc = WorkflowDoc(
+        filepath="workflow.yxmd",
+        nodes=(
+            AlteryxNode(
+                tool_id=ToolID(1),
+                tool_type="InputData",
+                x=0,
+                y=0,
+                config={"File": "orders"},
+            ),
+            AlteryxNode(
+                tool_id=ToolID(2),
+                tool_type="Formula",
+                x=10,
+                y=0,
+                config={
+                    "FormulaFields": {
+                        "FormulaField": {
+                            "@field": "total",
+                            "@expression": "[qty] * [price]",
+                        }
+                    }
+                },
+            ),
+        ),
+    )
+    result = convert_cluster_to_sql(doc, {ToolID(1), ToolID(2)})
+    assert "<raw: [qty] * [price]> AS total" in result.sql
+    assert result.report.is_partial is True
+    assert result.report.warnings == ("raw Formula expression in node 2",)
+
+
 def test_convert_cluster_to_sql_reports_unsupported_and_unresolved_source() -> None:
     doc = WorkflowDoc(
         filepath="workflow.yxmd",

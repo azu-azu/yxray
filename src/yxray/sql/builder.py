@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Collection
 
-from yxray.config_utils import as_list, field_name, first_text, select_field_rows
+from yxray.config_utils import (
+    as_list,
+    field_name,
+    first_text,
+    get_text,
+    select_field_rows,
+)
 from yxray.models.types import ToolID
 from yxray.models.workflow import WorkflowDoc
 from yxray.sql.ir import (
     AggregateField,
     AggregateStep,
+    ComputeStep,
     FilterStep,
+    FormulaField,
     IRStep,
     ProjectionStep,
     SelectField,
@@ -61,6 +69,35 @@ def build_ir(doc: WorkflowDoc, tool_ids: Collection[ToolID]) -> tuple[IRStep, ..
                 else UnsupportedStep(
                     node.tool_id, node.tool_type, "missing-filter-expression"
                 )
+            )
+        elif segment in {"Formula", "AlteryxFormula", "MultiFieldFormula"}:
+            ffs = config.get("FormulaFields", {})
+            formulas = tuple(
+                FormulaField(
+                    field=item.get("@field", "") or item.get("@name", ""),
+                    expression=(
+                        item.get("@expression", "")
+                        or item.get("@formula", "")
+                        or get_text(item, "Expression")
+                    ),
+                )
+                for item in (
+                    as_list(ffs.get("FormulaField", []))
+                    if isinstance(ffs, dict)
+                    else []
+                )
+                if isinstance(item, dict)
+                and (item.get("@field") or item.get("@name"))
+                and (
+                    item.get("@expression")
+                    or item.get("@formula")
+                    or get_text(item, "Expression")
+                )
+            )
+            steps.append(
+                ComputeStep(node.tool_id, formulas)
+                if formulas
+                else UnsupportedStep(node.tool_id, node.tool_type, "empty-formula")
             )
         elif segment in {"Summarize", "AlteryxSummarize"}:
             rows = (

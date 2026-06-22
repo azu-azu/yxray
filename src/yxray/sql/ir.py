@@ -50,13 +50,32 @@ class AggregateField:
 
 
 @dataclass(frozen=True)
+class FormulaField:
+    field: str
+    expression: str  # raw Alteryx expression; may not be valid SQL
+
+
+@dataclass(frozen=True)
+class ComputeStep:
+    tool_id: ToolID
+    formulas: tuple[FormulaField, ...]
+
+
+@dataclass(frozen=True)
 class UnsupportedStep:
     tool_id: ToolID
     tool_type: str
     reason: str
 
 
-IRStep = SourceStep | ProjectionStep | FilterStep | AggregateStep | UnsupportedStep
+IRStep = (
+    SourceStep
+    | ProjectionStep
+    | FilterStep
+    | ComputeStep
+    | AggregateStep
+    | UnsupportedStep
+)
 
 
 @dataclass(frozen=True)
