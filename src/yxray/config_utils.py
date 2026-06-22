@@ -17,6 +17,9 @@ def get_text(obj: Any, key: str) -> str:
         return value
     if isinstance(value, dict):
         return str(value.get("#text", ""))
+    if isinstance(value, list) and value:
+        first = value[0]
+        return str(first.get("#text", "")) if isinstance(first, dict) else ""
     return ""
 
 
@@ -49,7 +52,7 @@ def field_name(field: dict[str, Any]) -> str:
     return next(
         (
             str(field[key])
-            for key in ("@field", "@name", "@Field", "@Name")
+            for key in ("@field", "@name", "@Field", "@Name", "field", "name")
             if field.get(key)
         ),
         "",
