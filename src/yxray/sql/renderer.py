@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from yxray.sql.ir import (
     AggregateStep,
+    ConversionReport,
     ConversionResult,
     FilterStep,
     IRStep,
@@ -45,4 +46,14 @@ def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
     ) + tuple(
         f"unsupported {step.tool_type} (node {step.tool_id})" for step in unsupported
     )
-    return ConversionResult(steps, "\n".join(lines) + ";", warnings)
+    report = ConversionReport(
+        is_partial=bool(warnings),
+        supported=tuple(
+            type(step).__name__
+            for step in steps
+            if not isinstance(step, UnsupportedStep)
+        ),
+        unsupported=tuple(step.tool_type for step in unsupported),
+        warnings=warnings,
+    )
+    return ConversionResult(steps, "\n".join(lines) + ";", report)
