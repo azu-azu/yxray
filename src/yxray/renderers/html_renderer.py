@@ -187,6 +187,12 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   font-size: 18px; line-height: 1; background: none; border: none;
 }
 #summary-panel .panel-close:hover { color: var(--text); }
+#summary-dl-btn {
+  cursor: pointer; font-size: 11px; color: var(--text-muted);
+  background: none; border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 7px; line-height: 1.5;
+}
+#summary-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
 #left-panel-overlay {
   display: none;
   position: fixed;
@@ -273,6 +279,9 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
 {% if key_insights %}
 <script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
+{% endif %}
+{% if workflow_steps %}
+<script type="application/json" id="summary-data">{{ workflow_steps | tojson }}</script>
 {% endif %}
 {% if metadata %}
 <details id="governance">
@@ -399,6 +408,61 @@ function focusNode(toolId, clickedEl) {
 
 {{ step_detail_js | safe }}
 
+function downloadSummaryExcel() {
+  var steps = (function() {
+    var el = document.getElementById('summary-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var insights = (function() {
+    var el = document.getElementById('insights-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function xmlRow(cells) {
+    return '<Row>' + cells.map(function(c) {
+      return '<Cell><Data ss:Type="String">' + esc(c) + '</Data></Cell>';
+    }).join('') + '</Row>';
+  }
+  function xmlSheet(name, rows) {
+    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
+      rows.map(xmlRow).join('') + '</Table></Worksheet>';
+  }
+  var hasChange = steps.some(function(s) { return s.change; });
+  var summaryHeaders = ['#', 'Type', 'Category', 'Description'];
+  if (hasChange) summaryHeaders.push('Change');
+  var summaryRows = [summaryHeaders].concat(steps.map(function(s, i) {
+    var r = [i + 1, s.short_type || '', s.category || '', s.description || ''];
+    if (hasChange) r.push(s.change || '');
+    return r;
+  }));
+  var inputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'input'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+  var outputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'output'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    xmlSheet('Summary', summaryRows) +
+    xmlSheet('Input', inputRows) +
+    xmlSheet('Output', outputRows) +
+    '</Workbook>';
+  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'summary.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
 (function() {
     var ov = document.getElementById('left-panel-overlay');
     if (!ov) return;
@@ -427,7 +491,10 @@ function focusNode(toolId, clickedEl) {
   <div id="summary-panel-drag-handle"></div>
   <div id="summary-panel-header">
     <span id="summary-panel-title">Workflow Summary ({{ workflow_steps | length }} steps)</span>
-    <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <button id="summary-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>
+      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+    </div>
   </div>
   <div id="summary-panel-body">
     <ol class="summary-steps">

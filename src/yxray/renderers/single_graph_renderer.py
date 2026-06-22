@@ -387,6 +387,12 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #summary-dl-btn {
+      cursor: pointer; font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 7px; line-height: 1.5;
+    }
+    #summary-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
@@ -569,7 +575,10 @@ _HTML_TEMPLATE = """\
     <div id="summary-panel-drag-handle"></div>
     <div id="summary-panel-header">
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
-      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <button id="summary-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>
+        <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+      </div>
     </div>
     <div id="summary-panel-body">
       <ol class="summary-steps">
@@ -623,6 +632,8 @@ _HTML_TEMPLATE = """\
   <div id="connect-mode-hint">Click a node to connect &mdash; Esc to cancel</div>
   <script>{{ vis_js | safe }}</script>
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
+  {% if workflow_steps %}<script id="summary-data" type="application/json">{{ workflow_steps | tojson }}</script>{% endif %}
+  {% if key_insights %}<script id="insights-data" type="application/json">{{ key_insights | tojson }}</script>{% endif %}
   <script>
 {{ single_graph_js | safe }}
   </script>
