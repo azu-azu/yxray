@@ -1,8 +1,13 @@
 """SQL conversion intermediate representation."""
 
 from dataclasses import dataclass
+from enum import Enum
 
 from yxray.models.types import ToolID
+
+
+class SqlDialect(Enum):
+    ANSI = "ansi"
 
 
 @dataclass(frozen=True)
