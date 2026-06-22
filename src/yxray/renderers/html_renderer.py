@@ -187,12 +187,12 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   font-size: 18px; line-height: 1; background: none; border: none;
 }
 #summary-panel .panel-close:hover { color: var(--text); }
-#summary-dl-btn {
+#excel-dl-btn {
   cursor: pointer; font-size: 11px; color: var(--text-muted);
   background: none; border: 1px solid var(--border);
   border-radius: 3px; padding: 1px 7px; line-height: 1.5;
 }
-#summary-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
+#excel-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
 #left-panel-overlay {
   display: none;
   position: fixed;
@@ -218,6 +218,7 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         {% if workflow_steps %}<button class="theme-toggle" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+        {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
         <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           Graph
@@ -447,12 +448,21 @@ function downloadSummaryExcel() {
     insights.filter(function(d) { return d.role === 'output'; })
       .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
   );
+  var containers = (function() {
+    var el = document.getElementById('containers-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var containerRows = [['#', 'Label']].concat(
+    containers.map(function(c, i) { return [i + 1, c.label || '']; })
+  );
+  var sheets = xmlSheet('Summary', summaryRows) +
+    xmlSheet('Input', inputRows) +
+    xmlSheet('Output', outputRows);
+  if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
   var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    xmlSheet('Summary', summaryRows) +
-    xmlSheet('Input', inputRows) +
-    xmlSheet('Output', outputRows) +
+    sheets +
     '</Workbook>';
   var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
   var url = URL.createObjectURL(blob);
@@ -491,10 +501,7 @@ function downloadSummaryExcel() {
   <div id="summary-panel-drag-handle"></div>
   <div id="summary-panel-header">
     <span id="summary-panel-title">Workflow Summary ({{ workflow_steps | length }} steps)</span>
-    <div style="display:flex;gap:4px;align-items:center;">
-      <button id="summary-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>
-      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
-    </div>
+    <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
   </div>
   <div id="summary-panel-body">
     <ol class="summary-steps">

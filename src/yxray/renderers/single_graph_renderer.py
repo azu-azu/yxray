@@ -387,12 +387,12 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
-    #summary-dl-btn {
+    #excel-dl-btn {
       cursor: pointer; font-size: 11px; color: var(--text-muted);
       background: none; border: 1px solid var(--border);
       border-radius: 3px; padding: 1px 7px; line-height: 1.5;
     }
-    #summary-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
+    #excel-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
@@ -506,6 +506,7 @@ _HTML_TEMPLATE = """\
       {% if containers_for_panel %}<button class="ctrl-btn" id="containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
       {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
       {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+      {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
@@ -575,10 +576,7 @@ _HTML_TEMPLATE = """\
     <div id="summary-panel-drag-handle"></div>
     <div id="summary-panel-header">
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
-      <div style="display:flex;gap:4px;align-items:center;">
-        <button id="summary-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>
-        <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
-      </div>
+      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
     </div>
     <div id="summary-panel-body">
       <ol class="summary-steps">
@@ -634,6 +632,7 @@ _HTML_TEMPLATE = """\
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
   {% if workflow_steps %}<script id="summary-data" type="application/json">{{ workflow_steps | tojson }}</script>{% endif %}
   {% if key_insights %}<script id="insights-data" type="application/json">{{ key_insights | tojson }}</script>{% endif %}
+  {% if containers_for_panel %}<script id="containers-data" type="application/json">{{ containers_for_panel | tojson }}</script>{% endif %}
   <script>
 {{ single_graph_js | safe }}
   </script>

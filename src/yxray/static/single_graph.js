@@ -1639,12 +1639,23 @@ function downloadSummaryExcel() {
       .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
   );
 
+  var containers = (function() {
+    var el = document.getElementById('containers-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var containerRows = [['#', 'Label']].concat(
+    containers.map(function(c, i) { return [i + 1, c.label || '']; })
+  );
+
+  var sheets = xmlSheet('Summary', summaryRows) +
+    xmlSheet('Input', inputRows) +
+    xmlSheet('Output', outputRows);
+  if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
+
   var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    xmlSheet('Summary', summaryRows) +
-    xmlSheet('Input', inputRows) +
-    xmlSheet('Output', outputRows) +
+    sheets +
     '</Workbook>';
 
   var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
