@@ -1509,6 +1509,14 @@ function _refreshClusterPanel(groupKey) {
     expandBtn.textContent = 'Expand';
     expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(expandBtn);
+    if (window._YXRAY_SQL_ENDPOINT) {
+      var sqlBtn = document.createElement('button');
+      sqlBtn.className = 'ctrl-btn';
+      sqlBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+      sqlBtn.textContent = '→ SQL';
+      sqlBtn.onclick = (function(gk) { return function() { _exportClusterSQL(gk); }; })(groupKey);
+      body.appendChild(sqlBtn);
+    }
     // Select the cluster node so vis-network applies the amber highlight color
     if (network) network.selectNodes([groupKey]);
     c.memberIds.forEach(function(mid) {
@@ -1531,6 +1539,14 @@ function _refreshClusterPanel(groupKey) {
     collapseBtn.textContent = 'Collapse';
     collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(collapseBtn);
+    if (window._YXRAY_SQL_ENDPOINT) {
+      var sqlBtn2 = document.createElement('button');
+      sqlBtn2.className = 'ctrl-btn';
+      sqlBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
+      sqlBtn2.textContent = '→ SQL';
+      sqlBtn2.onclick = (function(gk) { return function() { _exportClusterSQL(gk); }; })(groupKey);
+      body.appendChild(sqlBtn2);
+    }
     if (network) network.selectNodes([]);
     group.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
@@ -2347,3 +2363,62 @@ applyTheme(savedTheme);
     document.removeEventListener('mouseup', onUp);
   }
 })();
+
+// ── SQL Export (server mode only) ────────────────────────────────────────────
+
+function _exportClusterSQL(groupKey) {
+  var c = AppState.clusterMap[groupKey] || AppState.groupMembers[groupKey];
+  var memberIds = c ? c.memberIds.map(Number) : [];
+  fetch(window._YXRAY_SQL_ENDPOINT, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tool_ids: memberIds})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) { _showSQLModal(data); })
+  .catch(function(err) { alert('SQL export failed: ' + err); });
+}
+
+function _showSQLModal(data) {
+  var existing = document.getElementById('sql-export-modal');
+  if (existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'sql-export-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;max-width:620px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);';
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'font-size:14px;font-weight:600;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;';
+  var title = document.createElement('span');
+  title.textContent = 'SQL Export';
+  var closeBtn = document.createElement('span');
+  closeBtn.textContent = '\u00d7';
+  closeBtn.style.cssText = 'cursor:pointer;font-size:20px;line-height:1;';
+  closeBtn.onclick = function() { overlay.remove(); };
+  hdr.appendChild(title);
+  hdr.appendChild(closeBtn);
+  var pre = document.createElement('pre');
+  pre.style.cssText = 'background:var(--bg);padding:14px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 10px;';
+  pre.textContent = data.sql;
+  var status = document.createElement('div');
+  status.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:12px;';
+  status.textContent = data.is_partial
+    ? 'partial \u2014 ' + (data.warnings || []).join('; ')
+    : 'complete';
+  var copyBtn = document.createElement('button');
+  copyBtn.className = 'ctrl-btn';
+  copyBtn.textContent = 'Copy SQL';
+  copyBtn.onclick = function() {
+    navigator.clipboard.writeText(data.sql).then(function() {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function() { copyBtn.textContent = 'Copy SQL'; }, 1500);
+    });
+  };
+  box.appendChild(hdr);
+  box.appendChild(pre);
+  box.appendChild(status);
+  box.appendChild(copyBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
