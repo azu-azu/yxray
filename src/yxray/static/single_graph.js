@@ -1202,11 +1202,11 @@ function initNetwork() {
     _cvs.style.cursor = _findLabelAt(cp) >= 0 ? 'grab' : '';
   });
 
-  var _suppressClickAfterDoubleClick = false;
+  var _lastDoubleClickTime = 0;
   network.on('click', function(params) {
-    // vis.js can fire a trailing click after doubleClick; skip it so the
-    // doubleClick handler's panel state is not overwritten.
-    if (_suppressClickAfterDoubleClick) { _suppressClickAfterDoubleClick = false; return; }
+    // vis.js fires one or more click events around doubleClick; suppress them all
+    // for 500ms after the last doubleClick so the cluster panel is not overwritten.
+    if (Date.now() - _lastDoubleClickTime < 500) return;
     // Connect mode: user clicks a target node to wire a memo edge
     if (AppState.connectMode) {
       if (params.nodes.length > 0) {
@@ -1226,8 +1226,7 @@ function initNetwork() {
     openPanel(params.nodes[0]);
   });
   network.on('doubleClick', function(params) {
-    _suppressClickAfterDoubleClick = true;
-    setTimeout(function() { _suppressClickAfterDoubleClick = false; }, 400);
+    _lastDoubleClickTime = Date.now();
     // Empty canvas double-click → create memo at that canvas position
     if (params.nodes.length === 0) {
       var cp = params.pointer.canvas;
