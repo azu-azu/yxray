@@ -1760,6 +1760,7 @@ function downloadClusterExcel() {
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
+
 function copyPanelContent() {
   var title = document.getElementById('panel-title-text').textContent.trim();
   var body = document.getElementById('panel-body');
