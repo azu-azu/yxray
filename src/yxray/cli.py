@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
 import hashlib
 import json
@@ -224,6 +225,60 @@ def _inspect_impl(  # noqa: B008
 
 app.command("inspect")(_inspect_impl)
 app.command("i", hidden=True)(_inspect_impl)
+
+
+def _serve_impl(  # noqa: B008
+    workflow: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help=".yxmd or .yxwz workflow file to serve"
+    ),
+    port: int = typer.Option(  # noqa: B008
+        7890, "--port", "-p", help="Local server port (default: 7890)"
+    ),
+    filter_ui_tools: bool = typer.Option(  # noqa: B008
+        True,
+        "--no-filter-ui-tools",
+        help=(
+            "Include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, etc.) filtered by default"
+        ),
+    ),
+) -> None:
+    """Serve an interactive inspect view with live SQL export.
+
+    Starts a local HTTP server and opens the workflow in your browser.
+    Click any cluster in the graph and use the '→ SQL' button to convert
+    it to ANSI SQL. Press Ctrl+C to stop.
+    """
+    from yxray.server import make_server
+
+    try:
+        with _err_console.status("Parsing workflow...", spinner="dots"):
+            doc = parse_one(workflow, filter_ui_tools=filter_ui_tools)
+    except MalformedXMLError as e:
+        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+    except ParseError as e:
+        typer.echo(f"Error: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+
+    steps = summarize(doc)
+    insights = extract_key_insights(doc)
+    html = SingleGraphRenderer().render(
+        doc,
+        workflow_steps=steps,
+        key_insights=insights,
+        sql_endpoint="/api/cluster-to-sql",
+    )
+    server = make_server(doc, html, port=port)
+    url = f"http://localhost:{port}/"
+    typer.echo(f"Serving {workflow.name} at {url} — Ctrl+C to stop", err=True)
+    webbrowser.open(url)
+    with contextlib.suppress(KeyboardInterrupt):
+        server.serve_forever()
+
+
+app.command("serve")(_serve_impl)
+app.command("s", hidden=True)(_serve_impl)
 
 
 def _file_sha256(path: pathlib.Path) -> str:

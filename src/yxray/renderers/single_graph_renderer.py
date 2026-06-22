@@ -630,6 +630,7 @@ _HTML_TEMPLATE = """\
   </div>
   <div id="connect-mode-hint">Click a node to connect &mdash; Esc to cancel</div>
   <script>{{ vis_js | safe }}</script>
+  <script>window._YXRAY_SQL_ENDPOINT = '{{ sql_endpoint | safe }}';</script>
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
   {% if workflow_steps %}<script id="summary-data" type="application/json">{{ workflow_steps | tojson }}</script>{% endif %}
   {% if key_insights %}<script id="insights-data" type="application/json">{{ key_insights | tojson }}</script>{% endif %}
@@ -1005,6 +1006,7 @@ class SingleGraphRenderer:
         *,
         workflow_steps: list[Any] | None = None,
         key_insights: list[Any] | None = None,
+        sql_endpoint: str = "",
     ) -> str:
         """WorkflowDoc → standalone HTML string.
 
@@ -1072,6 +1074,7 @@ class SingleGraphRenderer:
             workflow_steps=steps_dicts,
             key_insights=insights_dicts,
             containers_for_panel=containers_for_panel,
+            sql_endpoint=sql_endpoint,
         )
 
     def _build_graph_data(
