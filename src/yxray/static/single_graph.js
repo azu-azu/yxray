@@ -1509,6 +1509,13 @@ function _refreshClusterPanel(groupKey) {
     expandBtn.textContent = 'Expand';
     expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(expandBtn);
+    _setPanelBtn('excel');
+    var jsonBtn = document.createElement('button');
+    jsonBtn.className = 'ctrl-btn';
+    jsonBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
+    jsonBtn.textContent = '↓ JSON';
+    jsonBtn.onclick = function() { downloadClusterJSON(); };
+    body.appendChild(jsonBtn);
     // Select the cluster node so vis-network applies the amber highlight color
     if (network) network.selectNodes([groupKey]);
     c.memberIds.forEach(function(mid) {
@@ -1531,6 +1538,13 @@ function _refreshClusterPanel(groupKey) {
     collapseBtn.textContent = 'Collapse';
     collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(collapseBtn);
+    _setPanelBtn('excel');
+    var jsonBtn2 = document.createElement('button');
+    jsonBtn2.className = 'ctrl-btn';
+    jsonBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
+    jsonBtn2.textContent = '↓ JSON';
+    jsonBtn2.onclick = function() { downloadClusterJSON(); };
+    body.appendChild(jsonBtn2);
     if (network) network.selectNodes([]);
     group.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
@@ -1542,13 +1556,6 @@ function _refreshClusterPanel(groupKey) {
       renderConfigRows(entry, body);
     });
   }
-  _setPanelBtn('excel');
-  var jsonBtn = document.createElement('button');
-  jsonBtn.className = 'ctrl-btn';
-  jsonBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-top:6px;font-size:13px;';
-  jsonBtn.textContent = '↓ JSON';
-  jsonBtn.onclick = function() { downloadClusterJSON(); };
-  body.appendChild(jsonBtn);
   document.getElementById('config-panel').classList.add('open');
 }
 
