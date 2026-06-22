@@ -1709,7 +1709,10 @@ function downloadClusterExcel() {
     var col = [entry.label];
     Object.keys(entry.config).forEach(function(k) {
       var v = entry.config[k];
-      col.push(k + ': ' + (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)));
+      var valStr = (typeof v === 'object') ? JSON.stringify(v, null, 2) : String(v);
+      valStr.split('\n').forEach(function(line, i) {
+        col.push(i === 0 ? k + ': ' + line : '  ' + line);
+      });
     });
     return col;
   });
