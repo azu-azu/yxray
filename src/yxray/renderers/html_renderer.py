@@ -464,10 +464,18 @@ function downloadSummaryExcel() {
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
     sheets +
     '</Workbook>';
+  var baseName = {{ file_b | tojson }}.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
   var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url; a.download = 'summary.xls';
+  a.href = url; a.download = 'summary_' + baseName + '_' + ts + '.xls';
   document.body.appendChild(a);
   a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
