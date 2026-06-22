@@ -15,7 +15,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from yxray.config_utils import (
+    as_list,
+    field_name,
+    first_text,
+    get_text,
+    select_field_rows,
+)
 from yxray.models.workflow import WorkflowDoc
+from yxray.topology import compute_node_layer
 
 __all__ = [
     "WorkflowStep",
@@ -246,7 +254,7 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         elif role == "output":
             output_count += 1
         if role in ("input", "output"):
-            description = _first_text(
+            description = first_text(
                 node.config, "File", "FileName"
             ) or _describe(node.tool_type, node.config)
         else:
@@ -315,38 +323,6 @@ def _topo_sort(doc: WorkflowDoc) -> list[Any]:
     return result
 
 
-def compute_node_layer(doc: WorkflowDoc) -> dict[int, int]:
-    """Return each data node's longest-path layer from a workflow source.
-
-    Nodes with the same layer have no dependency ordering between them.  Cyclic
-    remnants, including nodes blocked by a cycle, share a final fallback layer.
-    """
-    node_ids = [n.tool_id for n in doc.nodes if "ToolContainer" not in n.tool_type]
-    in_degree: dict[Any, int] = {nid: 0 for nid in node_ids}
-    successors: dict[Any, list[Any]] = {nid: [] for nid in node_ids}
-
-    for connection in doc.connections:
-        if connection.src_tool in successors and connection.dst_tool in in_degree:
-            successors[connection.src_tool].append(connection.dst_tool)
-            in_degree[connection.dst_tool] += 1
-
-    layer: dict[Any, int] = {nid: 0 for nid in node_ids if in_degree[nid] == 0}
-    queue: deque[Any] = deque(layer)
-    while queue:
-        nid = queue.popleft()
-        for successor in successors[nid]:
-            layer[successor] = max(layer.get(successor, 0), layer[nid] + 1)
-            in_degree[successor] -= 1
-            if in_degree[successor] == 0:
-                queue.append(successor)
-
-    fallback_layer = len(node_ids)
-    for nid in node_ids:
-        layer.setdefault(nid, fallback_layer)
-
-    return {int(nid): value for nid, value in layer.items()}
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -360,77 +336,6 @@ def classify(tool_type: str) -> tuple[str, str]:
     # Macro (.yxmc path) or unknown plugin
     name = segment.replace("_", " ").replace("-", " ")
     return name, "unknown"
-
-
-def _get_text(obj: Any, key: str) -> str:
-    """Safely extract text content from a config dict value."""
-    if not isinstance(obj, dict):
-        return ""
-    val = obj.get(key)
-    if val is None:
-        return ""
-    if isinstance(val, str):
-        return val
-    if isinstance(val, dict):
-        return str(val.get("#text", ""))
-    if isinstance(val, list) and val:
-        first = val[0]
-        return str(first.get("#text", "")) if isinstance(first, dict) else ""
-    return ""
-
-
-def _iter_values(obj: Any) -> list[Any]:
-    """Return a flattened list of scalar/dict/list values for config traversal."""
-    if isinstance(obj, list):
-        values: list[Any] = []
-        for item in obj:
-            values.extend(_iter_values(item))
-        return values
-    return [obj]
-
-
-def _child_values(obj: Any, key: str) -> list[Any]:
-    """Return every value found at key under a nested dict/list config tree."""
-    found: list[Any] = []
-    if isinstance(obj, dict):
-        if key in obj:
-            found.extend(_iter_values(obj[key]))
-        for value in obj.values():
-            found.extend(_child_values(value, key))
-    elif isinstance(obj, list):
-        for item in obj:
-            found.extend(_child_values(item, key))
-    return found
-
-
-def _first_text(config: dict[str, Any], *keys: str) -> str:
-    """Return first non-empty text found for any key, searching nested config."""
-    for key in keys:
-        direct = _get_text(config, key)
-        if direct:
-            return direct
-        for value in _child_values(config, key):
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-            if isinstance(value, dict):
-                text = value.get("#text")
-                if isinstance(text, str) and text.strip():
-                    return text.strip()
-    return ""
-
-
-def _as_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    return value if isinstance(value, list) else [value]
-
-
-def _field_name(field: dict[str, Any]) -> str:
-    for key in ("@field", "@name", "@Field", "@Name", "field", "name"):
-        value = field.get(key)
-        if value:
-            return str(value)
-    return ""
 
 
 def _count_by_short_type(nodes: list[Any]) -> str:
@@ -449,7 +354,7 @@ DescribeFn = Callable[[dict[str, Any], list[Any] | None], str]
 
 
 def _describe_file_tool(config: dict[str, Any], _members: list[Any] | None) -> str:
-    path = _first_text(config, "File", "FileName")
+    path = first_text(config, "File", "FileName")
     return f"Uses file: {pathlib.Path(path).name}" if path else ""
 
 
@@ -464,7 +369,7 @@ def _describe_text_input(config: dict[str, Any], _members: list[Any] | None) -> 
 
 
 def _describe_filter(config: dict[str, Any], _members: list[Any] | None) -> str:
-    expr = _first_text(config, "Expression", "CustomFilterExpression")
+    expr = first_text(config, "Expression", "CustomFilterExpression")
     return f"Keeps rows where {expr}" if expr else "Filters rows"
 
 
@@ -474,13 +379,13 @@ def _formula_field_summaries(config: dict[str, Any]) -> list[str]:
     if not isinstance(ffs, dict):
         return formulas
 
-    for item in _as_list(ffs.get("FormulaField")):
+    for item in as_list(ffs.get("FormulaField")):
         if not isinstance(item, dict):
             continue
         expr = (
             item.get("@expression", "")
             or item.get("@formula", "")
-            or _get_text(item, "Expression")
+            or get_text(item, "Expression")
         )
         field = item.get("@field", "") or item.get("@name", "")
         if field and expr:
@@ -493,7 +398,7 @@ def _formula_field_summaries(config: dict[str, Any]) -> list[str]:
 def _describe_formula(config: dict[str, Any], _members: list[Any] | None) -> str:
     formulas = _formula_field_summaries(config)
     if not formulas:
-        expr = _first_text(config, "Expression", "Formula")
+        expr = first_text(config, "Expression", "Formula")
         if expr:
             formulas.append(expr)
     if not formulas:
@@ -514,38 +419,27 @@ def _describe_join(config: dict[str, Any], _members: list[Any] | None) -> str:
     return ""
 
 
-def _select_field_rows(config: dict[str, Any]) -> list[Any]:
-    fields = config.get("SelectFields", {})
-    if not isinstance(fields, dict) or (
-        "SelectField" not in fields and "Field" not in fields
-    ):
-        fields = config.get("Fields", {})
-    if not isinstance(fields, dict):
-        return []
-    return _as_list(fields.get("SelectField", fields.get("Field", [])))
-
-
 def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
-    rows = _select_field_rows(config)
+    rows = select_field_rows(config)
     selected = [
-        _field_name(row)
+        field_name(row)
         for row in rows
         if isinstance(row, dict)
         and row.get("@selected", "True") not in ("False", "false")
     ]
     renamed = [
-        f"{_field_name(row)} -> {row.get('@rename') or row.get('@Rename')}"
+        f"{field_name(row)} -> {row.get('@rename') or row.get('@Rename')}"
         for row in rows
         if isinstance(row, dict)
-        and _field_name(row)
+        and field_name(row)
         and (row.get("@rename") or row.get("@Rename"))
-        and (row.get("@rename") or row.get("@Rename")) != _field_name(row)
+        and (row.get("@rename") or row.get("@Rename")) != field_name(row)
     ]
     type_changes = [
-        _field_name(row)
+        field_name(row)
         for row in rows
         if isinstance(row, dict)
-        and _field_name(row)
+        and field_name(row)
         and (row.get("@type") or row.get("@Type"))
     ]
     if not selected:
@@ -567,7 +461,7 @@ def _describe_summarize(config: dict[str, Any], _members: list[Any] | None) -> s
     if not isinstance(summarize_fields, dict):
         return "Aggregates rows"
 
-    field_rows = _as_list(summarize_fields.get("SummarizeField", []))
+    field_rows = as_list(summarize_fields.get("SummarizeField", []))
     groups = [
         row.get("@field", "")
         for row in field_rows
@@ -603,7 +497,7 @@ def _describe_sort(config: dict[str, Any], _members: list[Any] | None) -> str:
 
 
 def _describe_union(config: dict[str, Any], _members: list[Any] | None) -> str:
-    mode = _first_text(config, "Mode", "ByName", "OutputMode")
+    mode = first_text(config, "Mode", "ByName", "OutputMode")
     return f"Combines inputs ({mode})" if mode else "Combines input streams"
 
 
@@ -617,12 +511,12 @@ def _describe_sample(config: dict[str, Any], _members: list[Any] | None) -> str:
 
 
 def _describe_run_command(config: dict[str, Any], _members: list[Any] | None) -> str:
-    cmd = _get_text(config, "Command") or config.get("@command", "")
+    cmd = get_text(config, "Command") or config.get("@command", "")
     return str(cmd) if cmd else ""
 
 
 def _describe_container(config: dict[str, Any], members: list[Any] | None) -> str:
-    caption = _first_text(config, "Caption")
+    caption = first_text(config, "Caption")
     member_nodes = members or []
     if not member_nodes:
         return _truncate(caption, 90) if caption else ""
@@ -667,13 +561,13 @@ def _insight_role(
     if segment in _FORMULA_SEGMENTS:
         return "formula" if downstream_count >= trunk_threshold else None
     if segment in _SELECT_SEGMENTS:
-        rows = _select_field_rows(config)
+        rows = select_field_rows(config)
         renamed = sum(
             1 for r in rows
             if isinstance(r, dict)
-            and _field_name(r)
+            and field_name(r)
             and (r.get("@rename") or r.get("@Rename"))
-            and (r.get("@rename") or r.get("@Rename")) != _field_name(r)
+            and (r.get("@rename") or r.get("@Rename")) != field_name(r)
         )
         dropped = sum(
             1 for r in rows
