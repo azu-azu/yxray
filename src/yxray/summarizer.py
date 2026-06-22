@@ -10,13 +10,20 @@ types fall back to the short class name from the plugin string.
 from __future__ import annotations
 
 import pathlib
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from yxray.models.workflow import WorkflowDoc
 
-__all__ = ["WorkflowStep", "KeyInsight", "summarize", "extract_key_insights"]
+__all__ = [
+    "WorkflowStep",
+    "KeyInsight",
+    "classify",
+    "summarize",
+    "extract_key_insights",
+]
 
 # ---------------------------------------------------------------------------
 # Tool type registry
@@ -153,7 +160,7 @@ def summarize(
         current_node = node_map.get(tid)
         if current_node is None:
             continue
-        short_type, category = _classify(current_node.tool_type)
+        short_type, category = classify(current_node.tool_type)
         description = _describe(
             current_node.tool_type,
             current_node.config,
@@ -221,7 +228,7 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         node = node_map.get(tid)
         if node is None:
             continue
-        short_type, category = _classify(node.tool_type)
+        short_type, category = classify(node.tool_type)
         segment = node.tool_type.split(".")[-1]
         dc = _downstream_count(tid)
         role = _insight_role(
@@ -289,10 +296,10 @@ def _topo_sort(doc: WorkflowDoc) -> list[Any]:
             successors[c.src_tool].append(c.dst_tool)
             in_degree[c.dst_tool] += 1
 
-    queue = [nid for nid in node_ids if in_degree[nid] == 0]
+    queue: deque[Any] = deque(nid for nid in node_ids if in_degree[nid] == 0)
     result: list[Any] = []
     while queue:
-        nid = queue.pop(0)
+        nid = queue.popleft()
         result.append(nid)
         for s in successors.get(nid, []):
             in_degree[s] -= 1
@@ -312,7 +319,7 @@ def _topo_sort(doc: WorkflowDoc) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
-def _classify(tool_type: str) -> tuple[str, str]:
+def classify(tool_type: str) -> tuple[str, str]:
     """Return (display_name, category) for a plugin string."""
     segment = tool_type.split(".")[-1]
     if segment in _TOOL_MAP:
@@ -396,7 +403,7 @@ def _field_name(field: dict[str, Any]) -> str:
 def _count_by_short_type(nodes: list[Any]) -> str:
     counts: dict[str, int] = {}
     for node in nodes:
-        short, _category = _classify(node.tool_type)
+        short, _category = classify(node.tool_type)
         counts[short] = counts.get(short, 0) + 1
     parts = [
         f"{name} x{count}" if count > 1 else name

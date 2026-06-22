@@ -10,7 +10,7 @@ from yxray.models import DiffResult, NodeDiff
 from yxray.models.diff import EdgeDiff
 from yxray.models.workflow import AlteryxNode
 from yxray.renderers._report_assets import REPORT_BASE_CSS, STEP_DETAIL_JS
-from yxray.summarizer import _classify
+from yxray.summarizer import classify
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -679,7 +679,7 @@ class HTMLRenderer:
         return {
             "tool_id": int(node.tool_id),
             "tool_type": node.tool_type,
-            "short_type": _classify(node.tool_type)[0],
+            "short_type": classify(node.tool_type)[0],
             "config": dict(node.config),
         }
 
@@ -687,7 +687,7 @@ class HTMLRenderer:
         return {
             "tool_id": int(nd.tool_id),
             "tool_type": nd.old_node.tool_type,
-            "short_type": _classify(nd.old_node.tool_type)[0],
+            "short_type": classify(nd.old_node.tool_type)[0],
             "field_diffs": [
                 {"field": k, "before": v[0], "after": v[1]}
                 for k, v in nd.field_diffs.items()

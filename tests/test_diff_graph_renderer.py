@@ -23,7 +23,6 @@ from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers import (
     DiffGraphRenderer,
     HTMLRenderer,
-    InspectReportRenderer,
     SingleGraphRenderer,
 )
 from yxray.renderers._graph_builder import COLOR_MAP
@@ -65,21 +64,6 @@ def test_standalone_graph_report_button_reuses_existing_companion_window() -> No
     assert "openCompanionFile(window.location.href.replace" in html
     assert "_graph" in html
     assert "_report$1$2" in html
-
-
-def test_inspect_report_graph_button_reuses_existing_companion_window() -> None:
-    """Inspect report -> graph navigation reuses an existing graph tab/window."""
-    html = InspectReportRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
-
-    assert "function companionWindowName(url)" in html
-    assert "window.name = companionWindowName(window.location.href)" in html
-    assert "'yxray_companion_' + kind + '_'" in html
-    assert "function openCompanionFile(url)" in html
-    assert "window.open(url, targetName)" in html
-    assert "existingOrNew.focus()" in html
-    assert "openCompanionFile(window.location.href.replace" in html
-    assert "_report" in html
-    assert "_graph$1$2" in html
 
 
 def test_single_graph_has_summary_panel_js() -> None:

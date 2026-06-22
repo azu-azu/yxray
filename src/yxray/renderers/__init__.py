@@ -1,7 +1,6 @@
 """Renderer stage for yxray.
 
-Public surface: JSONRenderer, HTMLRenderer, DiffGraphRenderer, SingleGraphRenderer,
-InspectReportRenderer
+Public surface: JSONRenderer, HTMLRenderer, DiffGraphRenderer, SingleGraphRenderer.
 
   from yxray.renderers import JSONRenderer, HTMLRenderer, DiffGraphRenderer
   graph_renderer = DiffGraphRenderer()
@@ -14,7 +13,6 @@ from __future__ import annotations
 
 from yxray.renderers.diff_graph_renderer import DiffGraphRenderer
 from yxray.renderers.html_renderer import HTMLRenderer
-from yxray.renderers.inspect_report_renderer import InspectReportRenderer
 from yxray.renderers.json_renderer import JSONRenderer
 from yxray.renderers.single_graph_renderer import SingleGraphRenderer
 
@@ -23,5 +21,4 @@ __all__ = [
     "HTMLRenderer",
     "DiffGraphRenderer",
     "SingleGraphRenderer",
-    "InspectReportRenderer",
 ]

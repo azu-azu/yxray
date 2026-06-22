@@ -42,12 +42,12 @@ ISO8601_SENTINEL: str = "__TIMESTAMP__"
 # in SQL queries, formula fields, or connection IDs.
 # GUID_VALUE_KEYS lists dict key names (derived from @key parser convention)
 # whose string values are always Alteryx-generated and safe to strip.
-# Keys are added here as discovered from real .yxmd fixture inspection.
-# Phase 3 tests with injected GUIDs validate that stripping works correctly.
+# Empty by design: add keys only when confirmed from real .yxmd fixtures.
+# The normalization contract test is xfailed until a key is registered.
 GUID_VALUE_KEYS: frozenset[str] = frozenset(
     {
         # Known Alteryx-generated GUID fields (@-prefixed dict keys from XPath leaves).
-        # Populated from fixture inspection; extend as new tool types reveal new fields.
+        # Extend when real fixtures confirm a generated, non-user value.
         # Examples (add when confirmed from real files):
         #   "@GUID"           — engine-generated session identifier
         #   "CUID"            — tool-level unique identifier in some tool configs

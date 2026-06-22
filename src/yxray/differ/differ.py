@@ -24,9 +24,8 @@ from yxray.models import (
     NodeDiff,
 )
 
-# Excluded field paths (dotted notation) — start empty per research recommendation.
-# TODO: populate from real fixture inspection before v1.0.
-# Example: GUID-like Annotation.@Id values once confirmed from fixtures.
+# Empty by design: add dotted paths only when confirmed from real .yxmd fixtures.
+# The guard in _add_field_diff() handles the empty case safely.
 _EXCLUDED_FIELDS: frozenset[str] = frozenset()
 
 
