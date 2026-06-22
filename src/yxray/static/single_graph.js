@@ -1489,6 +1489,7 @@ function _refreshClusterPanel(groupKey) {
       renderConfigRows(entry, body);
     });
   }
+  _setPanelBtn('excel');
   document.getElementById('config-panel').classList.add('open');
 }
 
@@ -1519,8 +1520,21 @@ function renderConfigRows(entry, container) {
 
 var _panelNodeId = null;
 
+function _setPanelBtn(mode) {
+  var btn = document.getElementById('panel-copy-btn');
+  if (!btn) return;
+  if (mode === 'excel') {
+    btn.textContent = '↓ Excel';
+    btn.dataset.mode = 'excel';
+  } else {
+    btn.textContent = 'Copy';
+    btn.dataset.mode = 'copy';
+  }
+}
+
 function openPanel(nodeId) {
   _panelNodeId = nodeId;
+  _setPanelBtn('copy');
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -1677,6 +1691,72 @@ function downloadSummaryExcel() {
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
+function downloadClusterExcel() {
+  var groupKey = _panelNodeId;
+  var memberIds = [];
+  if (AppState.clusterMap[groupKey]) {
+    memberIds = AppState.clusterMap[groupKey].memberIds;
+  } else if (AppState.groupMembers[groupKey]) {
+    memberIds = AppState.groupMembers[groupKey].memberIds;
+  }
+  if (memberIds.length === 0) return;
+
+  var toolType = ((AppState.clusterMap[groupKey] || AppState.groupMembers[groupKey]) || {}).toolType || 'cluster';
+
+  var columns = memberIds.map(function(mid) {
+    var entry = CONFIG_MAP[String(mid)];
+    if (!entry) return ['Node ' + mid];
+    var col = [entry.label];
+    Object.keys(entry.config).forEach(function(k) {
+      var v = entry.config[k];
+      col.push(k + ': ' + (typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)));
+    });
+    return col;
+  });
+
+  var maxLen = columns.reduce(function(m, c) { return Math.max(m, c.length); }, 0);
+  columns.forEach(function(c) { while (c.length < maxLen) c.push(''); });
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  var rowsXml = '';
+  for (var r = 0; r < maxLen; r++) {
+    rowsXml += '<Row' + (r === 0 ? ' ss:Index="2"' : '') + '>';
+    columns.forEach(function(col, c) {
+      rowsXml += '<Cell' + (c === 0 ? ' ss:Index="2"' : '') + '><Data ss:Type="String">' + esc(col[r]) + '</Data></Cell>';
+    });
+    rowsXml += '</Row>';
+  }
+
+  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    '<Worksheet ss:Name="Cluster"><Table>' + rowsXml + '</Table></Worksheet>' +
+    '</Workbook>';
+
+  var baseName = toolType.replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+
+  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'cluster_' + baseName + '_' + ts + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
 function copyPanelContent() {
   var title = document.getElementById('panel-title-text').textContent.trim();
   var body = document.getElementById('panel-body');
@@ -1721,7 +1801,11 @@ function copyPanelContent() {
 document.getElementById('panel-title-text').addEventListener('click', function() {
   if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
 });
-document.getElementById('panel-copy-btn').addEventListener('click', copyPanelContent);
+document.getElementById('panel-copy-btn').addEventListener('click', function() {
+  var btn = document.getElementById('panel-copy-btn');
+  if (btn && btn.dataset.mode === 'excel') downloadClusterExcel();
+  else copyPanelContent();
+});
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
