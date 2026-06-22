@@ -499,6 +499,7 @@ _HTML_TEMPLATE = """\
       </div>
     </div>
     <div class="header-right">
+      {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
       <div class="search-wrap">
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
@@ -506,7 +507,6 @@ _HTML_TEMPLATE = """\
       {% if containers_for_panel %}<button class="ctrl-btn" id="containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
       {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
       {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
-      {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
       <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
       <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
       <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
