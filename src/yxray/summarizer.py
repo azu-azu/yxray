@@ -21,6 +21,7 @@ __all__ = [
     "WorkflowStep",
     "KeyInsight",
     "classify",
+    "compute_node_layer",
     "summarize",
     "extract_key_insights",
 ]
@@ -312,6 +313,38 @@ def _topo_sort(doc: WorkflowDoc) -> list[Any]:
         if nid not in visited:
             result.append(nid)
     return result
+
+
+def compute_node_layer(doc: WorkflowDoc) -> dict[int, int]:
+    """Return each data node's longest-path layer from a workflow source.
+
+    Nodes with the same layer have no dependency ordering between them.  Cyclic
+    remnants, including nodes blocked by a cycle, share a final fallback layer.
+    """
+    node_ids = [n.tool_id for n in doc.nodes if "ToolContainer" not in n.tool_type]
+    in_degree: dict[Any, int] = {nid: 0 for nid in node_ids}
+    successors: dict[Any, list[Any]] = {nid: [] for nid in node_ids}
+
+    for connection in doc.connections:
+        if connection.src_tool in successors and connection.dst_tool in in_degree:
+            successors[connection.src_tool].append(connection.dst_tool)
+            in_degree[connection.dst_tool] += 1
+
+    layer: dict[Any, int] = {nid: 0 for nid in node_ids if in_degree[nid] == 0}
+    queue: deque[Any] = deque(layer)
+    while queue:
+        nid = queue.popleft()
+        for successor in successors[nid]:
+            layer[successor] = max(layer.get(successor, 0), layer[nid] + 1)
+            in_degree[successor] -= 1
+            if in_degree[successor] == 0:
+                queue.append(successor)
+
+    fallback_layer = len(node_ids)
+    for nid in node_ids:
+        layer.setdefault(nid, fallback_layer)
+
+    return {int(nid): value for nid, value in layer.items()}
 
 
 # ---------------------------------------------------------------------------

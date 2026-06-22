@@ -18,8 +18,8 @@ from tests.fixtures.graph import (
     NODE_UNCHANGED_B,
 )
 from yxray.models import DiffResult
-from yxray.models.types import ToolID
-from yxray.models.workflow import AlteryxNode, WorkflowDoc
+from yxray.models.types import AnchorName, ToolID
+from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.renderers import (
     DiffGraphRenderer,
     HTMLRenderer,
@@ -73,6 +73,34 @@ def test_single_graph_has_summary_panel_js() -> None:
     assert "openSummaryPanel" in html
     assert "closeSummaryPanel" in html
     assert "toggleStepDetail" in html
+
+
+def test_single_graph_embeds_topological_node_layers() -> None:
+    """Cluster ordering receives dependency layers from the renderer."""
+    doc = WorkflowDoc(
+        filepath="fixture.yxmd",
+        nodes=(
+            AlteryxNode(
+                tool_id=ToolID(1), tool_type="InputData", x=0.0, y=0.0
+            ),
+            AlteryxNode(tool_id=ToolID(2), tool_type="Select", x=100.0, y=0.0),
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+    html = SingleGraphRenderer().render(doc)
+    marker = '<script id="yxray-data" type="application/json">'
+    data_json = html.split(marker, maxsplit=1)[1].split("</script>", maxsplit=1)[0]
+    data = json.loads(data_json)
+
+    assert data["node_layer"] == {"1": 0, "2": 1}
 
 
 def test_render_returns_fragment_not_full_document() -> None:
