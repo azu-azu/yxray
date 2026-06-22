@@ -51,11 +51,19 @@ def render_sql(
         lines.append("WHERE " + " AND ".join(step.expression for step in filters))
     if aggregate and aggregate.group_by:
         lines.append("GROUP BY " + ", ".join(aggregate.group_by))
+    formula_warnings: tuple[str, ...] = (
+        tuple(
+            f"Formula node {step.tool_id} not included in aggregate output"
+            for step in computes
+        )
+        if aggregate
+        else tuple(
+            f"raw Formula expression in node {step.tool_id}" for step in computes
+        )
+    )
     warnings = (
         ("unresolved source",) if not source or not source.source_identifier else ()
-    ) + tuple(
-        f"raw Formula expression in node {step.tool_id}" for step in computes
-    ) + tuple(
+    ) + formula_warnings + tuple(
         f"unsupported {step.tool_type} (node {step.tool_id})" for step in unsupported
     )
     report = ConversionReport(
