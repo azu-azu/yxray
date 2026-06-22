@@ -1202,11 +1202,7 @@ function initNetwork() {
     _cvs.style.cursor = _findLabelAt(cp) >= 0 ? 'grab' : '';
   });
 
-  var _lastDoubleClickTime = 0;
   network.on('click', function(params) {
-    // vis.js fires one or more click events around doubleClick; suppress them all
-    // for 500ms after the last doubleClick so the cluster panel is not overwritten.
-    if (Date.now() - _lastDoubleClickTime < 500) return;
     // Connect mode: user clicks a target node to wire a memo edge
     if (AppState.connectMode) {
       if (params.nodes.length > 0) {
@@ -1226,7 +1222,6 @@ function initNetwork() {
     openPanel(params.nodes[0]);
   });
   network.on('doubleClick', function(params) {
-    _lastDoubleClickTime = Date.now();
     // Empty canvas double-click → create memo at that canvas position
     if (params.nodes.length === 0) {
       var cp = params.pointer.canvas;
@@ -1237,13 +1232,6 @@ function initNetwork() {
     // Memo node double-click → edit
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
-    }
-    // Cluster expand/collapse via double-click (shortcut — panel stays open)
-    if (AppState.clusterMap[nodeId]) {
-      expandCluster(nodeId); _refreshClusterPanel(nodeId);
-    } else if (AppState.expandedGroups[nodeId]) {
-      var _gk = AppState.expandedGroups[nodeId];
-      _refreshClusterPanel(_gk);
     }
   });
   // Persist memo positions after drag
