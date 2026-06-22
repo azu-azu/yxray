@@ -55,7 +55,15 @@ IRStep = SourceStep | ProjectionStep | FilterStep | AggregateStep | UnsupportedS
 
 
 @dataclass(frozen=True)
+class ConversionReport:
+    is_partial: bool
+    supported: tuple[str, ...]
+    unsupported: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ConversionResult:
     steps: tuple[IRStep, ...]
     sql: str
-    warnings: tuple[str, ...]
+    report: ConversionReport

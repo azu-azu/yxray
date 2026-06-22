@@ -21,7 +21,28 @@ def get_text(obj: Any, key: str) -> str:
 
 
 def first_text(config: dict[str, Any], *keys: str) -> str:
-    return next((get_text(config, key) for key in keys if get_text(config, key)), "")
+    for key in keys:
+        if value := get_text(config, key):
+            return value
+        for value in _child_values(config, key):
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                text = value.get("#text")
+                if isinstance(text, str):
+                    return text.strip()
+    return ""
+
+
+def _child_values(obj: Any, key: str) -> list[Any]:
+    if isinstance(obj, dict):
+        values = as_list(obj[key]) if key in obj else []
+        for value in obj.values():
+            values.extend(_child_values(value, key))
+        return values
+    if isinstance(obj, list):
+        return [child for value in obj for child in _child_values(value, key)]
+    return []
 
 
 def field_name(field: dict[str, Any]) -> str:
