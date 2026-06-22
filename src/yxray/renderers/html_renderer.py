@@ -187,6 +187,18 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   font-size: 18px; line-height: 1; background: none; border: none;
 }
 #summary-panel .panel-close:hover { color: var(--text); }
+#excel-dl-btn {
+  cursor: pointer; font-size: 11px; color: var(--text-muted);
+  background: none; border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 7px; line-height: 1.5;
+}
+#excel-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
+#left-panel-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
 /* ---- Print ---- */
 @media print {
   .ctrl-btn, .theme-toggle { display: none; }
@@ -206,6 +218,7 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         {% if workflow_steps %}<button class="theme-toggle" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+        {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
         <button class="theme-toggle" onclick="openGraph()" aria-label="Scroll to graph">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           Graph
@@ -268,6 +281,9 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 {% if key_insights %}
 <script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
 {% endif %}
+{% if workflow_steps %}
+<script type="application/json" id="summary-data">{{ workflow_steps | tojson }}</script>
+{% endif %}
 {% if metadata %}
 <details id="governance">
   <summary>Governance Metadata (ALCOA+)</summary>
@@ -311,17 +327,26 @@ function openGraph() {
     setTheme(prefersDark !== false ? 'dark' : 'light');
 })();
 
+function _updateLeftPanelOverlay() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var leftOpen = (ip && ip.classList.contains('open')) || (sp && sp.classList.contains('open'));
+    var ov = document.getElementById('left-panel-overlay');
+    if (ov) ov.style.display = leftOpen ? 'block' : '';
+}
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
     if (!sp) return;
-    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); _updateLeftPanelOverlay(); return; }
     if (ip) { ip.classList.remove('open'); _insightsPanelRole = null; }
     sp.classList.add('open');
+    _updateLeftPanelOverlay();
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _updateLeftPanelOverlay();
 }
 // ── Insights panel (input/output/join list) ───────────────────────────────
 var _insightsData = (function() {
@@ -336,6 +361,7 @@ function openInsightsPanel(role) {
   if (panel.classList.contains('open') && _insightsPanelRole === role) {
     panel.classList.remove('open');
     _insightsPanelRole = null;
+    _updateLeftPanelOverlay();
     return;
   }
   if (sp) sp.classList.remove('open');
@@ -364,10 +390,12 @@ function openInsightsPanel(role) {
     });
   }
   panel.classList.add('open');
+  _updateLeftPanelOverlay();
 }
 function closeInsightsPanel() {
   var panel = document.getElementById('insights-panel');
   if (panel) { panel.classList.remove('open'); _insightsPanelRole = null; }
+  _updateLeftPanelOverlay();
 }
 
 var _focusPanelEl = null;
@@ -380,6 +408,90 @@ function focusNode(toolId, clickedEl) {
 }
 
 {{ step_detail_js | safe }}
+
+function downloadSummaryExcel() {
+  var steps = (function() {
+    var el = document.getElementById('summary-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var insights = (function() {
+    var el = document.getElementById('insights-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function xmlRow(cells) {
+    return '<Row>' + cells.map(function(c) {
+      return '<Cell><Data ss:Type="String">' + esc(c) + '</Data></Cell>';
+    }).join('') + '</Row>';
+  }
+  function xmlSheet(name, rows) {
+    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
+      rows.map(xmlRow).join('') + '</Table></Worksheet>';
+  }
+  var hasChange = steps.some(function(s) { return s.change; });
+  var summaryHeaders = ['#', 'Type', 'Category', 'Description'];
+  if (hasChange) summaryHeaders.push('Change');
+  var summaryRows = [summaryHeaders].concat(steps.map(function(s, i) {
+    var r = [i + 1, s.short_type || '', s.category || '', s.description || ''];
+    if (hasChange) r.push(s.change || '');
+    return r;
+  }));
+  var inputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'input'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+  var outputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'output'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+  var containers = (function() {
+    var el = document.getElementById('containers-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var containerRows = [['#', 'Label']].concat(
+    containers.map(function(c, i) { return [i + 1, c.label || '']; })
+  );
+  var sheets = xmlSheet('Summary', summaryRows) +
+    xmlSheet('Input', inputRows) +
+    xmlSheet('Output', outputRows);
+  if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
+  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    sheets +
+    '</Workbook>';
+  var baseName = {{ file_b | tojson }}.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'summary_' + baseName + '_' + ts + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+(function() {
+    var ov = document.getElementById('left-panel-overlay');
+    if (!ov) return;
+    ov.addEventListener('click', function() {
+        var ip = document.getElementById('insights-panel');
+        var sp = document.getElementById('summary-panel');
+        if (ip) { ip.classList.remove('open'); _insightsPanelRole = null; }
+        if (sp) sp.classList.remove('open');
+        _updateLeftPanelOverlay();
+    });
+})();
 </script>
 {{ graph_html | safe }}
 {% if key_insights %}
@@ -420,6 +532,7 @@ function focusNode(toolId, clickedEl) {
   </div>
 </div>
 {% endif %}
+<div id="left-panel-overlay"></div>
 <script>
 // ── Panel drag-resize (runs after panels are in the DOM) ──────────────────
 (function() {

@@ -1233,13 +1233,6 @@ function initNetwork() {
     if (typeof nodeId === 'string' && nodeId.indexOf('memo:') === 0) {
       openMemoModal(nodeId);
     }
-    // Cluster expand/collapse via double-click (shortcut — panel stays open)
-    if (AppState.clusterMap[nodeId]) {
-      expandCluster(nodeId); _refreshClusterPanel(nodeId);
-    } else if (AppState.expandedGroups[nodeId]) {
-      var _gk = AppState.expandedGroups[nodeId];
-      recollapseGroup(_gk); _refreshClusterPanel(_gk);
-    }
   });
   // Persist memo positions after drag
   network.on('dragEnd', function(params) {
@@ -1603,9 +1596,132 @@ function closePanel() {
   _panelNodeId = null;
 }
 
+function downloadSummaryExcel() {
+  var steps = (function() {
+    var el = document.getElementById('summary-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var insights = (function() {
+    var el = document.getElementById('insights-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function xmlRow(cells) {
+    return '<Row>' + cells.map(function(c) {
+      return '<Cell><Data ss:Type="String">' + esc(c) + '</Data></Cell>';
+    }).join('') + '</Row>';
+  }
+  function xmlSheet(name, rows) {
+    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
+      rows.map(xmlRow).join('') + '</Table></Worksheet>';
+  }
+
+  var hasChange = steps.some(function(s) { return s.change; });
+  var summaryHeaders = ['#', 'Type', 'Category', 'Description'];
+  if (hasChange) summaryHeaders.push('Change');
+  var summaryRows = [summaryHeaders].concat(steps.map(function(s, i) {
+    var r = [i + 1, s.short_type || '', s.category || '', s.description || ''];
+    if (hasChange) r.push(s.change || '');
+    return r;
+  }));
+
+  var inputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'input'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+  var outputRows = [['ID', 'Type', 'Description']].concat(
+    insights.filter(function(d) { return d.role === 'output'; })
+      .map(function(d) { return [d.tool_id || '', d.short_type || '', d.description || '']; })
+  );
+
+  var containers = (function() {
+    var el = document.getElementById('containers-data');
+    return el ? JSON.parse(el.textContent) : [];
+  })();
+  var containerRows = [['#', 'Label']].concat(
+    containers.map(function(c, i) { return [i + 1, c.label || '']; })
+  );
+
+  var sheets = xmlSheet('Summary', summaryRows) +
+    xmlSheet('Input', inputRows) +
+    xmlSheet('Output', outputRows);
+  if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
+
+  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    sheets +
+    '</Workbook>';
+
+  var rawTitle = (document.querySelector('.header-title') || {}).textContent || 'workflow';
+  var baseName = rawTitle.trim().replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+
+  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'summary_' + baseName + '_' + ts + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function copyPanelContent() {
+  var title = document.getElementById('panel-title-text').textContent.trim();
+  var body = document.getElementById('panel-body');
+  var lines = [title, ''];
+  Array.prototype.forEach.call(body.children, function(node) {
+    if (node.classList.contains('cluster-member-header')) {
+      lines.push('── ' + node.textContent.trim() + ' ──');
+      lines.push('');
+    } else if (node.classList.contains('config-row')) {
+      var key = node.querySelector('.config-key');
+      var val = node.querySelector('.config-val');
+      if (key && val) lines.push(key.textContent.trim() + ': ' + val.textContent.trim());
+    } else if (node.classList.contains('config-val')) {
+      lines.push(node.textContent.trim());
+    }
+  });
+  var text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  var btn = document.getElementById('panel-copy-btn');
+  function showFeedback(ok) {
+    if (!btn) return;
+    btn.textContent = ok ? 'Copied!' : 'Failed';
+    btn.style.color = ok ? 'var(--accent)' : '#f87171';
+    setTimeout(function() { btn.textContent = 'Copy'; btn.style.color = ''; }, 1500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      function() { showFeedback(true); },
+      function() { showFeedback(false); }
+    );
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showFeedback(true); }
+    catch(e) { showFeedback(false); }
+    document.body.removeChild(ta);
+  }
+}
+
 document.getElementById('panel-title-text').addEventListener('click', function() {
   if (_panelNodeId !== null && typeof focusNode === 'function') focusNode(_panelNodeId, null);
 });
+document.getElementById('panel-copy-btn').addEventListener('click', copyPanelContent);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {

@@ -251,6 +251,12 @@ _HTML_TEMPLATE = """\
       z-index: 999;
     }
     #config-panel.open ~ #panel-overlay { display: block; }
+    #left-panel-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+    }
     .panel-title {
       font-size: 14px; font-weight: 600;
       margin-bottom: 14px;
@@ -264,6 +270,14 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
+    #panel-copy-btn {
+      float: right; cursor: pointer;
+      font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 7px; margin: 1px 6px 0 0;
+      line-height: 1.5;
+    }
+    #panel-copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #panel-title-text { cursor: pointer; }
     #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
     .config-row { margin: 8px 0; }
@@ -373,6 +387,12 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    #excel-dl-btn {
+      cursor: pointer; font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 7px; line-height: 1.5;
+    }
+    #excel-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
@@ -479,6 +499,7 @@ _HTML_TEMPLATE = """\
       </div>
     </div>
     <div class="header-right">
+      {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
       <div class="search-wrap">
         <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
         <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
@@ -589,10 +610,12 @@ _HTML_TEMPLATE = """\
     <div id="panel-drag-handle"></div>
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
+      <button id="panel-copy-btn">Copy</button>
       <span id="panel-title-text"></span>
     </div>
     <div id="panel-body"></div>
   </div>
+  <div id="left-panel-overlay"></div>
   <div id="panel-overlay"></div>
   <div id="memo-modal-overlay"></div>
   <div id="memo-modal">
@@ -607,6 +630,9 @@ _HTML_TEMPLATE = """\
   <div id="connect-mode-hint">Click a node to connect &mdash; Esc to cancel</div>
   <script>{{ vis_js | safe }}</script>
   <script id="yxray-data" type="application/json">{{ graph_data_json | safe }}</script>
+  {% if workflow_steps %}<script id="summary-data" type="application/json">{{ workflow_steps | tojson }}</script>{% endif %}
+  {% if key_insights %}<script id="insights-data" type="application/json">{{ key_insights | tojson }}</script>{% endif %}
+  {% if containers_for_panel %}<script id="containers-data" type="application/json">{{ containers_for_panel | tojson }}</script>{% endif %}
   <script>
 {{ single_graph_js | safe }}
   </script>
@@ -684,6 +710,10 @@ function _syncPanelBtnState() {
     if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
     if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
     if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
+    var srp = document.getElementById('search-results-panel');
+    var leftOpen = (ip && ip.classList.contains('open')) || (sp && sp.classList.contains('open')) || (cp && cp.classList.contains('open')) || (srp && srp.classList.contains('open'));
+    var ov = document.getElementById('left-panel-overlay');
+    if (ov) ov.style.display = leftOpen ? 'block' : '';
 }
 
 function openSearchResultsPanel(entries) {
@@ -936,6 +966,20 @@ function makeDragResize(panelId, handleId, direction) {
     document.removeEventListener('mouseup', onUp);
   }
 }
+(function() {
+    var ov = document.getElementById('left-panel-overlay');
+    if (!ov) return;
+    ov.addEventListener('click', function() {
+        ['insights-panel', 'summary-panel', 'containers-panel', 'search-results-panel'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('open');
+        });
+        if (typeof _insightsPanelActiveRole !== 'undefined') _insightsPanelActiveRole = null;
+        if (typeof _searchPrevPanel !== 'undefined') _searchPrevPanel = null;
+        if (typeof _searchResultsFocusEl !== 'undefined') _searchResultsFocusEl = null;
+        _syncPanelBtnState();
+    });
+})();
 makeDragResize('config-panel',          'panel-drag-handle',                -1);
 makeDragResize('insights-panel',        'insights-panel-drag-handle',       +1);
 makeDragResize('summary-panel',         'summary-panel-drag-handle',        +1);
