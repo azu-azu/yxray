@@ -1,6 +1,7 @@
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
-from yxray.summarizer import compute_node_layer, summarize
+from yxray.summarizer import summarize
+from yxray.topology import compute_node_layer
 
 
 def node(
