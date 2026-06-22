@@ -226,6 +226,65 @@ app.command("inspect")(_inspect_impl)
 app.command("i", hidden=True)(_inspect_impl)
 
 
+def _cluster_sql_impl(  # noqa: B008
+    workflow: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help=".yxmd or .yxwz workflow file"
+    ),
+    input_json: pathlib.Path = typer.Option(  # noqa: B008
+        ..., "--input", "-i", help="Cluster JSON file downloaded from inspect view"
+    ),
+    output: pathlib.Path | None = typer.Option(  # noqa: B008
+        None,
+        "--output",
+        "-o",
+        help="Write SQL to file instead of stdout",
+    ),
+) -> None:
+    """Convert a downloaded cluster JSON to ANSI SQL-like output.
+
+    Download the cluster JSON from the inspect view (↓ JSON button), then run:
+
+      yxray cluster-to-sql workflow.yxmd --input cluster_Filter_20260622.json
+    """
+    from yxray.models.types import ToolID
+    from yxray.sql import convert_cluster_to_sql
+
+    try:
+        payload = json.loads(input_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        typer.echo(f"Error reading {input_json}: {e}", err=True)
+        raise typer.Exit(code=2) from None
+
+    tool_ids = [ToolID(int(t)) for t in payload.get("tool_ids", [])]
+    if not tool_ids:
+        typer.echo("Error: no tool_ids found in JSON", err=True)
+        raise typer.Exit(code=2)
+
+    try:
+        doc = parse_one(workflow)
+    except MalformedXMLError as e:
+        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+    except ParseError as e:
+        typer.echo(f"Error: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+
+    result = convert_cluster_to_sql(doc, tool_ids)
+
+    if output:
+        output.write_text(result.sql, encoding="utf-8")
+        typer.echo(f"SQL written to {output}", err=True)
+    else:
+        typer.echo(result.sql)
+
+    if result.report.warnings:
+        for w in result.report.warnings:
+            typer.echo(f"warning: {w}", err=True)
+
+
+app.command("cluster-to-sql")(_cluster_sql_impl)
+
+
 def _file_sha256(path: pathlib.Path) -> str:
     """Return 64-char SHA-256 hex digest. Uses hashlib.file_digest (Python 3.11+)."""
     with path.open("rb") as f:

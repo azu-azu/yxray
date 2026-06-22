@@ -1543,6 +1543,12 @@ function _refreshClusterPanel(groupKey) {
     });
   }
   _setPanelBtn('excel');
+  var jsonBtn = document.createElement('button');
+  jsonBtn.className = 'ctrl-btn';
+  jsonBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-top:6px;font-size:13px;';
+  jsonBtn.textContent = '↓ JSON';
+  jsonBtn.onclick = function() { downloadClusterJSON(); };
+  body.appendChild(jsonBtn);
   document.getElementById('config-panel').classList.add('open');
 }
 
@@ -1808,6 +1814,44 @@ function downloadClusterExcel() {
   var a = document.createElement('a');
   a.href = url;
   a.download = 'cluster_' + baseName + '_' + ts + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+
+function downloadClusterJSON() {
+  var groupKey = _panelNodeId;
+  var memberIds = [];
+  var toolType = '';
+  if (AppState.clusterMap[groupKey]) {
+    memberIds = AppState.clusterMap[groupKey].memberIds;
+    toolType = AppState.clusterMap[groupKey].toolType || '';
+  } else if (AppState.groupMembers[groupKey]) {
+    memberIds = AppState.groupMembers[groupKey].memberIds;
+    toolType = AppState.groupMembers[groupKey].toolType || '';
+  }
+  if (memberIds.length === 0) return;
+
+  var payload = JSON.stringify({
+    tool_type: toolType,
+    tool_ids: memberIds.map(Number)
+  }, null, 2);
+
+  var baseName = toolType.replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+
+  var blob = new Blob([payload], {type: 'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'cluster_' + baseName + '_' + ts + '.json';
   document.body.appendChild(a);
   a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
