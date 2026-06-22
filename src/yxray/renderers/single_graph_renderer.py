@@ -251,6 +251,12 @@ _HTML_TEMPLATE = """\
       z-index: 999;
     }
     #config-panel.open ~ #panel-overlay { display: block; }
+    #left-panel-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+    }
     .panel-title {
       font-size: 14px; font-weight: 600;
       margin-bottom: 14px;
@@ -593,6 +599,7 @@ _HTML_TEMPLATE = """\
     </div>
     <div id="panel-body"></div>
   </div>
+  <div id="left-panel-overlay"></div>
   <div id="panel-overlay"></div>
   <div id="memo-modal-overlay"></div>
   <div id="memo-modal">
@@ -684,6 +691,10 @@ function _syncPanelBtnState() {
     if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
     if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
     if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
+    var srp = document.getElementById('search-results-panel');
+    var leftOpen = (ip && ip.classList.contains('open')) || (sp && sp.classList.contains('open')) || (cp && cp.classList.contains('open')) || (srp && srp.classList.contains('open'));
+    var ov = document.getElementById('left-panel-overlay');
+    if (ov) ov.style.display = leftOpen ? 'block' : '';
 }
 
 function openSearchResultsPanel(entries) {
@@ -936,6 +947,20 @@ function makeDragResize(panelId, handleId, direction) {
     document.removeEventListener('mouseup', onUp);
   }
 }
+(function() {
+    var ov = document.getElementById('left-panel-overlay');
+    if (!ov) return;
+    ov.addEventListener('click', function() {
+        ['insights-panel', 'summary-panel', 'containers-panel', 'search-results-panel'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('open');
+        });
+        if (typeof _insightsPanelActiveRole !== 'undefined') _insightsPanelActiveRole = null;
+        if (typeof _searchPrevPanel !== 'undefined') _searchPrevPanel = null;
+        if (typeof _searchResultsFocusEl !== 'undefined') _searchResultsFocusEl = null;
+        _syncPanelBtnState();
+    });
+})();
 makeDragResize('config-panel',          'panel-drag-handle',                -1);
 makeDragResize('insights-panel',        'insights-panel-drag-handle',       +1);
 makeDragResize('summary-panel',         'summary-panel-drag-handle',        +1);

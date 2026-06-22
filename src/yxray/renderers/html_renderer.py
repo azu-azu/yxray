@@ -187,6 +187,12 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
   font-size: 18px; line-height: 1; background: none; border: none;
 }
 #summary-panel .panel-close:hover { color: var(--text); }
+#left-panel-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
 /* ---- Print ---- */
 @media print {
   .ctrl-btn, .theme-toggle { display: none; }
@@ -311,17 +317,26 @@ function openGraph() {
     setTheme(prefersDark !== false ? 'dark' : 'light');
 })();
 
+function _updateLeftPanelOverlay() {
+    var ip = document.getElementById('insights-panel');
+    var sp = document.getElementById('summary-panel');
+    var leftOpen = (ip && ip.classList.contains('open')) || (sp && sp.classList.contains('open'));
+    var ov = document.getElementById('left-panel-overlay');
+    if (ov) ov.style.display = leftOpen ? 'block' : '';
+}
 function openSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     var ip = document.getElementById('insights-panel');
     if (!sp) return;
-    if (sp.classList.contains('open')) { sp.classList.remove('open'); return; }
+    if (sp.classList.contains('open')) { sp.classList.remove('open'); _updateLeftPanelOverlay(); return; }
     if (ip) { ip.classList.remove('open'); _insightsPanelRole = null; }
     sp.classList.add('open');
+    _updateLeftPanelOverlay();
 }
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _updateLeftPanelOverlay();
 }
 // ── Insights panel (input/output/join list) ───────────────────────────────
 var _insightsData = (function() {
@@ -336,6 +351,7 @@ function openInsightsPanel(role) {
   if (panel.classList.contains('open') && _insightsPanelRole === role) {
     panel.classList.remove('open');
     _insightsPanelRole = null;
+    _updateLeftPanelOverlay();
     return;
   }
   if (sp) sp.classList.remove('open');
@@ -364,10 +380,12 @@ function openInsightsPanel(role) {
     });
   }
   panel.classList.add('open');
+  _updateLeftPanelOverlay();
 }
 function closeInsightsPanel() {
   var panel = document.getElementById('insights-panel');
   if (panel) { panel.classList.remove('open'); _insightsPanelRole = null; }
+  _updateLeftPanelOverlay();
 }
 
 var _focusPanelEl = null;
@@ -380,6 +398,18 @@ function focusNode(toolId, clickedEl) {
 }
 
 {{ step_detail_js | safe }}
+
+(function() {
+    var ov = document.getElementById('left-panel-overlay');
+    if (!ov) return;
+    ov.addEventListener('click', function() {
+        var ip = document.getElementById('insights-panel');
+        var sp = document.getElementById('summary-panel');
+        if (ip) { ip.classList.remove('open'); _insightsPanelRole = null; }
+        if (sp) sp.classList.remove('open');
+        _updateLeftPanelOverlay();
+    });
+})();
 </script>
 {{ graph_html | safe }}
 {% if key_insights %}
@@ -420,6 +450,7 @@ function focusNode(toolId, clickedEl) {
   </div>
 </div>
 {% endif %}
+<div id="left-panel-overlay"></div>
 <script>
 // ── Panel drag-resize (runs after panels are in the DOM) ──────────────────
 (function() {
