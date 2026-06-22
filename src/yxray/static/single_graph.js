@@ -1238,7 +1238,7 @@ function initNetwork() {
       expandCluster(nodeId); _refreshClusterPanel(nodeId);
     } else if (AppState.expandedGroups[nodeId]) {
       var _gk = AppState.expandedGroups[nodeId];
-      recollapseGroup(_gk); _refreshClusterPanel(_gk);
+      _refreshClusterPanel(_gk);
     }
   });
   // Persist memo positions after drag
