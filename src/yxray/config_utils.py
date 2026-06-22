@@ -27,7 +27,7 @@ def first_text(config: dict[str, Any], *keys: str) -> str:
     for key in keys:
         if value := get_text(config, key):
             return value
-        for value in _child_values(config, key):
+        for value in child_values(config, key):
             if isinstance(value, str) and value.strip():
                 return value.strip()
             if isinstance(value, dict):
@@ -37,14 +37,14 @@ def first_text(config: dict[str, Any], *keys: str) -> str:
     return ""
 
 
-def _child_values(obj: Any, key: str) -> list[Any]:
+def child_values(obj: Any, key: str) -> list[Any]:
     if isinstance(obj, dict):
         values = as_list(obj[key]) if key in obj else []
         for value in obj.values():
-            values.extend(_child_values(value, key))
+            values.extend(child_values(value, key))
         return values
     if isinstance(obj, list):
-        return [child for value in obj for child in _child_values(value, key)]
+        return [child for value in obj for child in child_values(value, key)]
     return []
 
 
@@ -64,3 +64,24 @@ def select_field_rows(config: dict[str, Any]) -> list[Any]:
     if not isinstance(fields, dict):
         return []
     return as_list(fields.get("SelectField", fields.get("Field", [])))
+
+
+def formula_field_summaries(config: dict[str, Any]) -> list[str]:
+    ffs = config.get("FormulaFields", {})
+    formulas: list[str] = []
+    if not isinstance(ffs, dict):
+        return formulas
+    for item in as_list(ffs.get("FormulaField")):
+        if not isinstance(item, dict):
+            continue
+        expr = (
+            item.get("@expression", "")
+            or item.get("@formula", "")
+            or get_text(item, "Expression")
+        )
+        field = item.get("@field", "") or item.get("@name", "")
+        if field and expr:
+            formulas.append(f"{field} = {expr}")
+        elif expr or field:
+            formulas.append(str(expr or field))
+    return formulas

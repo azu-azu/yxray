@@ -19,6 +19,7 @@ from yxray.config_utils import (
     as_list,
     field_name,
     first_text,
+    formula_field_summaries,
     get_text,
     select_field_rows,
 )
@@ -373,30 +374,8 @@ def _describe_filter(config: dict[str, Any], _members: list[Any] | None) -> str:
     return f"Keeps rows where {expr}" if expr else "Filters rows"
 
 
-def _formula_field_summaries(config: dict[str, Any]) -> list[str]:
-    ffs = config.get("FormulaFields", {})
-    formulas: list[str] = []
-    if not isinstance(ffs, dict):
-        return formulas
-
-    for item in as_list(ffs.get("FormulaField")):
-        if not isinstance(item, dict):
-            continue
-        expr = (
-            item.get("@expression", "")
-            or item.get("@formula", "")
-            or get_text(item, "Expression")
-        )
-        field = item.get("@field", "") or item.get("@name", "")
-        if field and expr:
-            formulas.append(f"{field} = {expr}")
-        elif expr or field:
-            formulas.append(str(expr or field))
-    return formulas
-
-
 def _describe_formula(config: dict[str, Any], _members: list[Any] | None) -> str:
-    formulas = _formula_field_summaries(config)
+    formulas = formula_field_summaries(config)
     if not formulas:
         expr = first_text(config, "Expression", "Formula")
         if expr:
