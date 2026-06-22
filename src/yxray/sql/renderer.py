@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from yxray.sql.ir import (
     AggregateStep,
+    ComputeStep,
     ConversionReport,
     ConversionResult,
     FilterStep,
@@ -22,13 +23,18 @@ def render_sql(
     source = next((step for step in steps if isinstance(step, SourceStep)), None)
     projections = [step for step in steps if isinstance(step, ProjectionStep)]
     filters = [step for step in steps if isinstance(step, FilterStep)]
+    computes = [step for step in steps if isinstance(step, ComputeStep)]
     aggregate = next((step for step in steps if isinstance(step, AggregateStep)), None)
     unsupported = [step for step in steps if isinstance(step, UnsupportedStep)]
     columns = [
         f"{field.name} AS {field.rename}" if field.rename else field.name
         for step in projections
         for field in step.fields
-    ] or ["*"]
+    ]
+    for step in computes:
+        for f in step.formulas:
+            columns.append(f"<raw: {f.expression}> AS {f.field}")
+    columns = columns or ["*"]
     if aggregate:
         columns = list(aggregate.group_by) + [
             f"{field.action.upper()}({field.field})"
@@ -47,6 +53,8 @@ def render_sql(
         lines.append("GROUP BY " + ", ".join(aggregate.group_by))
     warnings = (
         ("unresolved source",) if not source or not source.source_identifier else ()
+    ) + tuple(
+        f"raw Formula expression in node {step.tool_id}" for step in computes
     ) + tuple(
         f"unsupported {step.tool_type} (node {step.tool_id})" for step in unsupported
     )
