@@ -62,6 +62,22 @@ class ComputeStep:
 
 
 @dataclass(frozen=True)
+class JoinCondition:
+    left_field: str
+    right_field: str
+
+
+@dataclass(frozen=True)
+class JoinStep:
+    tool_id: ToolID
+    left_tool_ids: frozenset[int]
+    right_tool_ids: frozenset[int]
+    conditions: tuple[JoinCondition, ...]
+    raw_expression: str
+    join_type: str = "INNER"
+
+
+@dataclass(frozen=True)
 class UnsupportedStep:
     tool_id: ToolID
     tool_type: str
@@ -74,6 +90,7 @@ IRStep = (
     | FilterStep
     | ComputeStep
     | AggregateStep
+    | JoinStep
     | UnsupportedStep
 )
 
