@@ -32,6 +32,8 @@ from yxray.sql.ir import (
 from yxray.topology import compute_node_layer
 
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
+_LEFT_INPUT_ANCHOR = "Left"
+_RIGHT_INPUT_ANCHOR = "Right"
 
 
 def _parse_join_conditions(expression: str) -> tuple[JoinCondition, ...]:
@@ -177,7 +179,7 @@ def build_ir(doc: WorkflowDoc, tool_ids: Collection[ToolID]) -> tuple[IRStep, ..
                         int(c.src_tool)
                         for c in doc.connections
                         if int(c.dst_tool) == int(node.tool_id)
-                        and c.dst_anchor == "Left"
+                        and c.dst_anchor == _LEFT_INPUT_ANCHOR
                     ),
                     None,
                 )
@@ -186,7 +188,7 @@ def build_ir(doc: WorkflowDoc, tool_ids: Collection[ToolID]) -> tuple[IRStep, ..
                         int(c.src_tool)
                         for c in doc.connections
                         if int(c.dst_tool) == int(node.tool_id)
-                        and c.dst_anchor == "Right"
+                        and c.dst_anchor == _RIGHT_INPUT_ANCHOR
                     ),
                     None,
                 )
