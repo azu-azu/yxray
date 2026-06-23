@@ -1865,29 +1865,13 @@ function downloadClusterJSON() {
 }
 
 
-function copyPanelContent() {
-  var title = document.getElementById('panel-title-text').textContent.trim();
-  var body = document.getElementById('panel-body');
-  var lines = [title, ''];
-  Array.prototype.forEach.call(body.children, function(node) {
-    if (node.classList.contains('cluster-member-header')) {
-      lines.push('── ' + node.textContent.trim() + ' ──');
-      lines.push('');
-    } else if (node.classList.contains('config-row')) {
-      var key = node.querySelector('.config-key');
-      var val = node.querySelector('.config-val');
-      if (key && val) lines.push(key.textContent.trim() + ': ' + val.textContent.trim());
-    } else if (node.classList.contains('config-val')) {
-      lines.push(node.textContent.trim());
-    }
-  });
-  var text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  var btn = document.getElementById('panel-copy-btn');
+function _clipboardWrite(text, btn, originalLabel) {
+  var label = originalLabel || btn.textContent.trim();
   function showFeedback(ok) {
     if (!btn) return;
     btn.textContent = ok ? 'Copied!' : 'Failed';
     btn.style.color = ok ? 'var(--accent)' : '#f87171';
-    setTimeout(function() { btn.textContent = 'Copy'; btn.style.color = ''; }, 1500);
+    setTimeout(function() { btn.textContent = label; btn.style.color = ''; }, 1500);
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(
@@ -1904,6 +1888,65 @@ function copyPanelContent() {
     catch(e) { showFeedback(false); }
     document.body.removeChild(ta);
   }
+}
+
+function copyPanelContent() {
+  var body = document.getElementById('panel-body');
+  var rows = ['Key\tValue'];
+  Array.prototype.forEach.call(body.children, function(node) {
+    if (node.classList.contains('cluster-member-header')) {
+      rows.push(node.textContent.trim() + '\t');
+    } else if (node.classList.contains('config-row')) {
+      var key = node.querySelector('.config-key');
+      var val = node.querySelector('.config-val');
+      if (key && val) rows.push(key.textContent.trim() + '\t' + val.textContent.trim().replace(/\t/g, ' ').replace(/\n/g, ' '));
+    } else if (node.classList.contains('config-val')) {
+      rows.push('\t' + node.textContent.trim().replace(/\t/g, ' ').replace(/\n/g, ' '));
+    }
+  });
+  _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy');
+}
+
+function copyInsightsPanel() {
+  var ip = document.getElementById('insights-panel');
+  if (!ip) return;
+  var visible = Array.prototype.filter.call(ip.querySelectorAll('.ki-row'), function(r) {
+    return r.style.display !== 'none';
+  });
+  var rows = ['ID\tRole\tType\tDescription'];
+  visible.forEach(function(r) {
+    var id = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
+    var role = r.dataset.role || '';
+    var type = (r.querySelector('.ki-badge') || {}).textContent.trim();
+    var desc = (r.querySelector('.ki-desc') || {}).textContent.trim();
+    rows.push([id, role, type, desc].join('\t'));
+  });
+  _clipboardWrite(rows.join('\n'), document.getElementById('insights-copy-btn'), 'Copy');
+}
+
+function copySummaryPanel() {
+  var el = document.getElementById('summary-data');
+  var steps = el ? JSON.parse(el.textContent) : [];
+  var hasChange = steps.some(function(s) { return s.change; });
+  var header = ['#', 'ID', 'Type', 'Category', 'Description'];
+  if (hasChange) header.push('Change');
+  var rows = [header.join('\t')];
+  steps.forEach(function(s, i) {
+    var r = [i + 1, s.tool_id || '', s.short_type || '', s.category || '', s.description || ''];
+    if (hasChange) r.push(s.change || '');
+    rows.push(r.join('\t'));
+  });
+  _clipboardWrite(rows.join('\n'), document.getElementById('summary-copy-btn'), 'Copy');
+}
+
+function copyContainersPanel() {
+  var el = document.getElementById('containers-data');
+  var containers = el ? JSON.parse(el.textContent) : [];
+  var rows = ['#\tID\tLabel'];
+  containers.forEach(function(c, i) {
+    rows.push([i + 1, c.tool_id || '', c.label || ''].join('\t'));
+  });
+  _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
 }
 
 document.getElementById('panel-title-text').addEventListener('click', function() {
