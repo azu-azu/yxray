@@ -75,7 +75,11 @@ def test_convert_cluster_to_sql_reports_unsupported_node() -> None:
     )
     result = convert_cluster_to_sql(doc, {ToolID(1)})
     assert result.report.is_partial is True
-    assert result.report.warnings == ("unsupported Join (node 1)",)
+    assert "source unknown: using placeholder 't'" in result.report.warnings
+    assert any(
+        "unsupported Join" in w and "missing-join-expression" in w
+        for w in result.report.warnings
+    )
 
 
 def test_convert_cluster_to_sql_no_source_uses_placeholder_t() -> None:
@@ -93,7 +97,8 @@ def test_convert_cluster_to_sql_no_source_uses_placeholder_t() -> None:
     )
     result = convert_cluster_to_sql(doc, {ToolID(1)})
     assert "FROM t" in result.sql
-    assert result.report.is_partial is False
+    assert result.report.is_partial is True
+    assert result.report.warnings == ("source unknown: using placeholder 't'",)
 
 
 def test_convert_cluster_to_sql_join_generates_cte() -> None:

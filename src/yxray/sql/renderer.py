@@ -45,7 +45,7 @@ def _build_select_cols(
 def _render_branch(steps: tuple[IRStep, ...], placeholder: str) -> str:
     """Render a linear sub-chain as a SQL fragment (no trailing semicolon).
 
-    Used for each side of a JOIN CTE.
+    Used for each side of a JOIN CTE, and for the top-level linear pipeline.
     """
     source = next((s for s in steps if isinstance(s, SourceStep)), None)
     projections = [s for s in steps if isinstance(s, ProjectionStep)]
@@ -133,7 +133,10 @@ def _render_join(
     warnings: tuple[str, ...] = (
         join_warn
         + tuple(f"raw Formula expression in node {s.tool_id}" for s in all_computes)
-        + tuple(f"unsupported {s.tool_type} (node {s.tool_id})" for s in unsupported)
+        + tuple(
+            f"unsupported {s.tool_type} (node {s.tool_id}; reason: {s.reason})"
+            for s in unsupported
+        )
     )
     report = ConversionReport(
         is_partial=bool(warnings),
@@ -152,22 +155,16 @@ def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
         return _render_join(steps, join_step)
 
     source = next((step for step in steps if isinstance(step, SourceStep)), None)
-    projections = [step for step in steps if isinstance(step, ProjectionStep)]
-    filters = [step for step in steps if isinstance(step, FilterStep)]
     computes = [step for step in steps if isinstance(step, ComputeStep)]
     aggregate = next((step for step in steps if isinstance(step, AggregateStep)), None)
     unsupported = [step for step in steps if isinstance(step, UnsupportedStep)]
-    columns = _build_select_cols(projections, computes, aggregate)
-    from_clause = (
-        source.source_identifier
-        if source and source.source_identifier
-        else "t"
+
+    used_placeholder = not source or not source.source_identifier
+    sql = _render_branch(steps, "t") + ";"
+
+    placeholder_warn: tuple[str, ...] = (
+        ("source unknown: using placeholder 't'",) if used_placeholder else ()
     )
-    lines = ["SELECT", "  " + ",\n  ".join(columns), f"FROM {from_clause}"]
-    if filters:
-        lines.append("WHERE " + " AND ".join(step.expression for step in filters))
-    if aggregate and aggregate.group_by:
-        lines.append("GROUP BY " + ", ".join(aggregate.group_by))
     formula_warnings: tuple[str, ...] = (
         tuple(
             f"Formula node {step.tool_id} not included in aggregate output"
@@ -178,8 +175,13 @@ def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
             f"raw Formula expression in node {step.tool_id}" for step in computes
         )
     )
-    warnings = formula_warnings + tuple(
-        f"unsupported {step.tool_type} (node {step.tool_id})" for step in unsupported
+    warnings = (
+        placeholder_warn
+        + formula_warnings
+        + tuple(
+            f"unsupported {step.tool_type} (node {step.tool_id}; reason: {step.reason})"
+            for step in unsupported
+        )
     )
     report = ConversionReport(
         is_partial=bool(warnings),
@@ -191,4 +193,4 @@ def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
         unsupported=tuple(step.tool_type for step in unsupported),
         warnings=warnings,
     )
-    return ConversionResult(steps, "\n".join(lines) + ";", report)
+    return ConversionResult(steps, sql, report)
