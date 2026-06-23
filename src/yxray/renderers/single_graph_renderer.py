@@ -388,6 +388,13 @@ _HTML_TEMPLATE = """\
       display: flex; align-items: center; justify-content: space-between;
     }
     #insights-panel-header span, #summary-panel-title, #search-results-panel-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .panel-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .panel-copy-btn {
+      cursor: pointer; font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 7px; line-height: 1.5;
+    }
+    .panel-copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #excel-dl-btn {
       cursor: pointer; font-size: 11px; color: var(--text-muted);
       background: none; border: 1px solid var(--border);
@@ -541,7 +548,10 @@ _HTML_TEMPLATE = """\
     <div id="insights-panel-drag-handle"></div>
     <div id="insights-panel-header">
       <span id="insights-panel-title">At a Glance</span>
-      <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+      <div class="panel-header-actions">
+        <button class="panel-copy-btn" id="insights-copy-btn" onclick="copyInsightsPanel()">Copy</button>
+        <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
+      </div>
     </div>
     <div id="insights-panel-body">
       {% for insight in key_insights %}
@@ -563,6 +573,9 @@ _HTML_TEMPLATE = """\
     <div id="containers-panel-drag-handle"></div>
     <div id="containers-panel-header">
       <span id="containers-panel-title">Containers ({{ containers_for_panel | length }})</span>
+      <div class="panel-header-actions">
+        <button class="panel-copy-btn" id="containers-copy-btn" onclick="copyContainersPanel()">Copy</button>
+      </div>
     </div>
     <div id="containers-panel-body">
       {% for c in containers_for_panel %}
@@ -580,7 +593,10 @@ _HTML_TEMPLATE = """\
     <div id="summary-panel-drag-handle"></div>
     <div id="summary-panel-header">
       <span id="summary-panel-title">Workflow Steps ({{ workflow_steps | length }})</span>
-      <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+      <div class="panel-header-actions">
+        <button class="panel-copy-btn" id="summary-copy-btn" onclick="copySummaryPanel()">Copy</button>
+        <button class="panel-close" onclick="closeSummaryPanel()">&times;</button>
+      </div>
     </div>
     <div id="summary-panel-body">
       <ol class="summary-steps">
