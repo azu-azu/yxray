@@ -1702,10 +1702,10 @@ function downloadSummaryExcel() {
   }
 
   var hasChange = steps.some(function(s) { return s.change; });
-  var summaryHeaders = ['#', 'Type', 'Category', 'Description'];
+  var summaryHeaders = ['#', 'ID', 'Type', 'Category', 'Description'];
   if (hasChange) summaryHeaders.push('Change');
   var summaryRows = [summaryHeaders].concat(steps.map(function(s, i) {
-    var r = [i + 1, s.short_type || '', s.category || '', s.description || ''];
+    var r = [i + 1, s.tool_id || '', s.short_type || '', s.category || '', s.description || ''];
     if (hasChange) r.push(s.change || '');
     return r;
   }));
@@ -1723,8 +1723,8 @@ function downloadSummaryExcel() {
     var el = document.getElementById('containers-data');
     return el ? JSON.parse(el.textContent) : [];
   })();
-  var containerRows = [['#', 'Label']].concat(
-    containers.map(function(c, i) { return [i + 1, c.label || '']; })
+  var containerRows = [['#', 'ID', 'Label']].concat(
+    containers.map(function(c, i) { return [i + 1, c.tool_id || '', c.label || '']; })
   );
 
   var sheets = xmlSheet('Summary', summaryRows) +
