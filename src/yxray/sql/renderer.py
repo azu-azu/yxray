@@ -12,7 +12,6 @@ from yxray.sql.ir import (
     JoinStep,
     ProjectionStep,
     SourceStep,
-    SqlDialect,
     UnsupportedStep,
 )
 
@@ -57,7 +56,7 @@ def _render_branch(steps: tuple[IRStep, ...], placeholder: str) -> str:
     from_clause = (
         source.source_identifier
         if source and source.source_identifier
-        else (f"<source:node_{source.tool_id}>" if source else placeholder)
+        else placeholder
     )
     lines = ["SELECT", "  " + ",\n  ".join(columns), f"FROM {from_clause}"]
     if filters:
@@ -87,8 +86,8 @@ def _render_join(
         and int(s.tool_id) not in join_step.right_tool_ids
     )
 
-    left_sql = _render_branch(left_steps, "<left_source:unknown>")
-    right_sql = _render_branch(right_steps, "<right_source:unknown>")
+    left_sql = _render_branch(left_steps, "t")
+    right_sql = _render_branch(right_steps, "t2")
 
     on_clause = (
         " AND ".join(
@@ -147,10 +146,7 @@ def _render_join(
     return ConversionResult(steps, "\n".join(lines) + ";", report)
 
 
-def render_sql(
-    steps: tuple[IRStep, ...],
-    dialect: SqlDialect = SqlDialect.ANSI,
-) -> ConversionResult:
+def render_sql(steps: tuple[IRStep, ...]) -> ConversionResult:
     join_step = next((s for s in steps if isinstance(s, JoinStep)), None)
     if join_step:
         return _render_join(steps, join_step)
@@ -165,7 +161,7 @@ def render_sql(
     from_clause = (
         source.source_identifier
         if source and source.source_identifier
-        else f"<source:node_{source.tool_id if source else 'unknown'}>"
+        else "t"
     )
     lines = ["SELECT", "  " + ",\n  ".join(columns), f"FROM {from_clause}"]
     if filters:
@@ -182,9 +178,7 @@ def render_sql(
             f"raw Formula expression in node {step.tool_id}" for step in computes
         )
     )
-    warnings = (
-        ("unresolved source",) if not source or not source.source_identifier else ()
-    ) + formula_warnings + tuple(
+    warnings = formula_warnings + tuple(
         f"unsupported {step.tool_type} (node {step.tool_id})" for step in unsupported
     )
     report = ConversionReport(

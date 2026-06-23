@@ -68,14 +68,32 @@ def test_convert_cluster_to_sql_renders_formula_as_raw_expression() -> None:
     assert result.report.warnings == ("raw Formula expression in node 2",)
 
 
-def test_convert_cluster_to_sql_reports_unsupported_and_unresolved_source() -> None:
+def test_convert_cluster_to_sql_reports_unsupported_node() -> None:
     doc = WorkflowDoc(
         filepath="workflow.yxmd",
         nodes=(AlteryxNode(tool_id=ToolID(1), tool_type="Join", x=0, y=0),),
     )
     result = convert_cluster_to_sql(doc, {ToolID(1)})
     assert result.report.is_partial is True
-    assert result.report.warnings == ("unresolved source", "unsupported Join (node 1)")
+    assert result.report.warnings == ("unsupported Join (node 1)",)
+
+
+def test_convert_cluster_to_sql_no_source_uses_placeholder_t() -> None:
+    doc = WorkflowDoc(
+        filepath="workflow.yxmd",
+        nodes=(
+            AlteryxNode(
+                tool_id=ToolID(1),
+                tool_type="Filter",
+                x=0,
+                y=0,
+                config={"Expression": "x > 0"},
+            ),
+        ),
+    )
+    result = convert_cluster_to_sql(doc, {ToolID(1)})
+    assert "FROM t" in result.sql
+    assert result.report.is_partial is False
 
 
 def test_convert_cluster_to_sql_join_generates_cte() -> None:

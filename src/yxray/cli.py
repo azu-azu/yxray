@@ -230,8 +230,8 @@ def _cluster_sql_impl(  # noqa: B008
     workflow: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help=".yxmd or .yxwz workflow file"
     ),
-    input_json: pathlib.Path = typer.Option(  # noqa: B008
-        ..., "--input", "-i", help="Cluster JSON file downloaded from inspect view"
+    input_json: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help="Cluster JSON file downloaded from inspect view"
     ),
     output: pathlib.Path | None = typer.Option(  # noqa: B008
         None,
@@ -244,7 +244,7 @@ def _cluster_sql_impl(  # noqa: B008
 
     Download the cluster JSON from the inspect view (↓ JSON button), then run:
 
-      yxray cluster-to-sql workflow.yxmd --input cluster_Filter_20260622.json
+      yxray sql workflow.yxmd cluster_Filter_20260622.json
     """
     from yxray.models.types import ToolID
     from yxray.sql import convert_cluster_to_sql
@@ -283,6 +283,7 @@ def _cluster_sql_impl(  # noqa: B008
 
 
 app.command("cluster-to-sql")(_cluster_sql_impl)
+app.command("sql", hidden=True)(_cluster_sql_impl)
 
 
 def _file_sha256(path: pathlib.Path) -> str:
