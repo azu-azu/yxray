@@ -459,6 +459,7 @@ _HTML_TEMPLATE = """\
     .ki-badge-reshape  { background: var(--badge-reshape-bg);   color: var(--badge-reshape-text);   border: 1px solid var(--badge-reshape-border); }
     .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 11px; color: var(--text); white-space: nowrap; }
+    .ki-id { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 28px; }
     .summary-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
     .summary-step { display: flex; flex-direction: column; border-radius: 6px; cursor: pointer; }
     .summary-step:hover { filter: brightness(1.08); }
@@ -548,6 +549,7 @@ _HTML_TEMPLATE = """\
       <div class="ki-summary">{{ insight.description }}</div>
       {% else %}
       <div class="ki-row" data-role="{{ insight.role }}" onclick="focusNode({{ insight.tool_id }}, this)">
+        <span class="ki-id">#{{ insight.tool_id }}</span>
         <span class="ki-badge ki-badge-{{ insight.role }}">{{ insight.short_type }}</span>
         <span class="ki-desc">{{ insight.description or insight.short_type }}</span>
       </div>
@@ -566,6 +568,7 @@ _HTML_TEMPLATE = """\
       {% for c in containers_for_panel %}
       <div class="container-row" draggable="true" data-label="{{ c.label }}" onclick="focusContainer({{ loop.index0 }}, this)">
         {% if c.fill_color %}<span class="container-swatch" style="background:{{ c.fill_color }};"></span>{% endif %}
+        {% if c.tool_id %}<span class="ki-id">#{{ c.tool_id }}</span>{% endif %}
         <span class="container-label">{{ c.label }}</span>
       </div>
       {% endfor %}
@@ -586,6 +589,7 @@ _HTML_TEMPLATE = """\
             onclick="toggleStepDetail(this)">
           <div class="step-row">
             <span class="step-num">{{ loop.index }}.</span>
+            <span class="ki-id">#{{ step.tool_id }}</span>
             <span class="step-badge step-badge-{{ step.category }}" onclick="event.stopPropagation(); focusNode({{ step.tool_id }}, this)">{{ step.short_type }}</span>
             {% if step.description %}<span class="step-desc">{{ step.description }}</span>{% endif %}
             <span class="step-expand-arrow">&#9654;</span>
@@ -771,7 +775,11 @@ function openSearchResultsPanel(entries) {
         var arrow = document.createElement('span');
         arrow.className = 'step-expand-arrow';
         arrow.textContent = '▶';
+        var idSpan = document.createElement('span');
+        idSpan.className = 'ki-id';
+        idSpan.textContent = '#' + entry.id;
         row.appendChild(num);
+        row.appendChild(idSpan);
         row.appendChild(badge);
         row.appendChild(desc);
         row.appendChild(arrow);
@@ -1057,7 +1065,7 @@ class SingleGraphRenderer:
             1 for n in doc.nodes if "ToolContainer" not in n.tool_type
         )
         containers_for_panel = [
-            {"label": c["label"], "fill_color": c.get("fillColor")}
+            {"label": c["label"], "fill_color": c.get("fillColor"), "tool_id": c.get("tool_id")}
             for c in containers_list
         ] or None
 
@@ -1108,6 +1116,7 @@ class SingleGraphRenderer:
                 "h": node.height,
                 "label": self._container_label(node),
                 "fillColor": self._container_fill_color(node),
+                "tool_id": int(node.tool_id),
             }
             for node in doc.nodes
             if "ToolContainer" in node.tool_type and node.width > 0 and node.height > 0
