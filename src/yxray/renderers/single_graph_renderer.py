@@ -19,8 +19,9 @@ from typing import Any
 from jinja2 import Environment
 
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
-from yxray.renderers._graph_builder import load_vis_js
+from yxray.renderers._graph_builder import _safe_json, load_vis_js
 from yxray.renderers._report_assets import STEP_DETAIL_JS
+from yxray.topology import compute_node_layer
 
 
 def _load_single_graph_js() -> str:
@@ -1038,12 +1039,13 @@ class SingleGraphRenderer:
                 i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights
             ]
 
-        graph_data_json = json.dumps(
+        graph_data_json = _safe_json(
             {
                 "nodes": nodes_list,
                 "edges": edges_list,
                 "config_map": config_map,
                 "containers": containers_list,
+                "node_layer": compute_node_layer(doc),
             },
             ensure_ascii=False,
         )

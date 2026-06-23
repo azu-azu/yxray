@@ -4,6 +4,9 @@ var NODES_DATA = __d.nodes;
 var EDGES_DATA = __d.edges;
 var CONFIG_MAP = __d.config_map;
 var CONTAINERS_DATA = __d.containers;
+var NODE_LAYER = __d.node_layer;
+var NODE_POS = {};
+NODES_DATA.forEach(function(n) { NODE_POS[n.id] = {x: n.x, y: n.y}; });
 
 var BROWSE_NODE_IDS = (function() {
   var ids = {};
@@ -92,6 +95,56 @@ var AppState = {
   memoHandles: {},        // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
   resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
 };
+
+function clusterMinLayer(id) {
+  if (typeof id !== 'string' || id.indexOf('cluster:') !== 0) {
+    return NODE_LAYER[id] !== undefined ? NODE_LAYER[id] : Infinity;
+  }
+  var meta = AppState.clusterMap[id];
+  if (!meta) return Infinity;
+  return meta.memberIds.reduce(function(min, memberId) {
+    return Math.min(min, clusterMinLayer(memberId));
+  }, Infinity);
+}
+
+function clusterAnchorPosition(id) {
+  if (typeof id !== 'string' || id.indexOf('cluster:') !== 0) {
+    return NODE_POS[id] || {x: 0, y: 0};
+  }
+  var meta = AppState.clusterMap[id];
+  if (!meta || meta.memberIds.length === 0) return {x: 0, y: 0};
+  var positions = meta.memberIds.map(clusterAnchorPosition);
+  return positions.reduce(function(total, position) {
+    return {x: total.x + position.x, y: total.y + position.y};
+  }, {x: 0, y: 0});
+}
+
+function memberPosition(id) {
+  var position = clusterAnchorPosition(id);
+  if (typeof id !== 'string' || id.indexOf('cluster:') !== 0) return position;
+  var count = AppState.clusterMap[id].memberIds.length;
+  return {x: position.x / count, y: position.y / count};
+}
+
+function compareNumber(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function sortedMemberIds(ids) {
+  return ids.slice().sort(function(a, b) {
+    var layerOrder = compareNumber(clusterMinLayer(a), clusterMinLayer(b));
+    if (layerOrder !== 0) return layerOrder;
+    var aPosition = memberPosition(a);
+    var bPosition = memberPosition(b);
+    var yOrder = compareNumber(aPosition.y, bPosition.y);
+    if (yOrder !== 0) return yOrder;
+    var xOrder = compareNumber(aPosition.x, bPosition.x);
+    if (xOrder !== 0) return xOrder;
+    return String(a).localeCompare(String(b), undefined, {numeric: true});
+  });
+}
 var MEMO_STORAGE_KEY           = 'yxray-memos-'           + (document.title || 'default');
 var CONTAINER_ORDER_KEY        = 'yxray-container-order-' + (document.title || 'default');
 
@@ -279,7 +332,7 @@ function buildClusters(skipSet) {
   // ── Phase 5: store cluster metadata ──────────────────────────────────────
   chains.forEach(function(c) {
     AppState.clusterMap[c.cid] = {
-      memberIds: c.chain,
+      memberIds: sortedMemberIds(c.chain),
       toolType: c.toolType,
       bridgeEdgeIds: clusterBridges[c.cid] ? clusterBridges[c.cid].slice() : [],
     };
@@ -379,7 +432,7 @@ function buildContainerClusters(membership) {
   var memberToCluster = {};
 
   Object.keys(groups).forEach(function(idx) {
-    var memberIds = groups[parseInt(idx)];
+    var memberIds = sortedMemberIds(groups[parseInt(idx)]);
     if (memberIds.length < MIN_CLUSTER_SIZE) return;
     var c = CONTAINERS_DATA[parseInt(idx)];
     var clusterId = 'container:' + (++AppState.clusterCounter);
@@ -1456,6 +1509,13 @@ function _refreshClusterPanel(groupKey) {
     expandBtn.textContent = 'Expand';
     expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(expandBtn);
+    _setPanelBtn('excel');
+    var jsonBtn = document.createElement('button');
+    jsonBtn.className = 'ctrl-btn';
+    jsonBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
+    jsonBtn.textContent = '↓ JSON';
+    jsonBtn.onclick = function() { downloadClusterJSON(); };
+    body.appendChild(jsonBtn);
     // Select the cluster node so vis-network applies the amber highlight color
     if (network) network.selectNodes([groupKey]);
     c.memberIds.forEach(function(mid) {
@@ -1478,6 +1538,13 @@ function _refreshClusterPanel(groupKey) {
     collapseBtn.textContent = 'Collapse';
     collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
     body.appendChild(collapseBtn);
+    _setPanelBtn('excel');
+    var jsonBtn2 = document.createElement('button');
+    jsonBtn2.className = 'ctrl-btn';
+    jsonBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
+    jsonBtn2.textContent = '↓ JSON';
+    jsonBtn2.onclick = function() { downloadClusterJSON(); };
+    body.appendChild(jsonBtn2);
     if (network) network.selectNodes([]);
     group.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
@@ -1489,7 +1556,6 @@ function _refreshClusterPanel(groupKey) {
       renderConfigRows(entry, body);
     });
   }
-  _setPanelBtn('excel');
   document.getElementById('config-panel').classList.add('open');
 }
 
@@ -1755,6 +1821,44 @@ function downloadClusterExcel() {
   var a = document.createElement('a');
   a.href = url;
   a.download = 'cluster_' + baseName + '_' + ts + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+
+function downloadClusterJSON() {
+  var groupKey = _panelNodeId;
+  var memberIds = [];
+  var toolType = '';
+  if (AppState.clusterMap[groupKey]) {
+    memberIds = AppState.clusterMap[groupKey].memberIds;
+    toolType = AppState.clusterMap[groupKey].toolType || '';
+  } else if (AppState.groupMembers[groupKey]) {
+    memberIds = AppState.groupMembers[groupKey].memberIds;
+    toolType = AppState.groupMembers[groupKey].toolType || '';
+  }
+  if (memberIds.length === 0) return;
+
+  var payload = JSON.stringify({
+    tool_type: toolType,
+    tool_ids: memberIds.map(Number)
+  }, null, 2);
+
+  var baseName = toolType.replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+
+  var blob = new Blob([payload], {type: 'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'cluster_' + baseName + '_' + ts + '.json';
   document.body.appendChild(a);
   a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);

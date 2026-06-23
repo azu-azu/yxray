@@ -20,6 +20,7 @@ from yxray.models import DiffResult
 from yxray.models.workflow import AlteryxConnection, AlteryxNode
 from yxray.renderers._companion_window import COMPANION_WINDOW_JS
 from yxray.renderers._graph_builder import (
+    _safe_json,
     build_digraph,
     build_split_node_list,
     canvas_positions,
@@ -1494,10 +1495,10 @@ class DiffGraphRenderer:
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_GRAPH_FRAGMENT_TEMPLATE)
         return template.render(
-            nodes_json=json.dumps(nodes_json),
-            edges_json=json.dumps(edges_json),
-            nodes_old_json=json.dumps(old_vis_nodes),
-            nodes_new_json=json.dumps(new_vis_nodes),
+            nodes_json=_safe_json(nodes_json),
+            edges_json=_safe_json(edges_json),
+            nodes_old_json=_safe_json(old_vis_nodes),
+            nodes_new_json=_safe_json(new_vis_nodes),
             vis_js=vis_js,
         )
 
@@ -1541,7 +1542,7 @@ class DiffGraphRenderer:
         )
 
         diff_data = HTMLRenderer()._build_diff_data(result)
-        diff_data_json = json.dumps(diff_data, ensure_ascii=False)
+        diff_data_json = _safe_json(diff_data, ensure_ascii=False)
 
         title = "Workflow Graph"
         if file_a or file_b:
