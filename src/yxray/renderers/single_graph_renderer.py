@@ -349,6 +349,7 @@ _HTML_TEMPLATE = """\
       transition: opacity 0.15s; font: inherit;
     }
     .io-stat-btn:hover { opacity: 0.75; }
+    .io-stat-btn.io-stat-active { outline: 2px solid currentColor; outline-offset: 1px; }
     .io-stat-input  { color: var(--badge-input-text);     border-color: var(--badge-input-border);     background: var(--badge-input-bg); }
     .io-stat-output { color: var(--badge-output-text);    border-color: var(--badge-output-border);    background: var(--badge-output-bg); }
     .io-stat-join   { color: var(--badge-join-text);      border-color: var(--badge-join-border);      background: var(--badge-join-bg); }
@@ -742,11 +743,18 @@ function _syncPanelBtnState() {
     var ib = document.getElementById('insights-btn');
     var sb = document.getElementById('summary-btn');
     var cb = document.getElementById('containers-btn');
-    if (ib) ib.classList.toggle('ctrl-btn-active', !!(ip && ip.classList.contains('open')));
+    var isInsightsOpen = !!(ip && ip.classList.contains('open'));
+    // "At a Glance" button is active only when the panel is open without a role filter
+    if (ib) ib.classList.toggle('ctrl-btn-active', isInsightsOpen && _insightsPanelActiveRole === null);
     if (sb) sb.classList.toggle('ctrl-btn-active', !!(sp && sp.classList.contains('open')));
     if (cb) cb.classList.toggle('ctrl-btn-active', !!(cp && cp.classList.contains('open')));
+    // io-stat buttons: indicate active filter state
+    ['input', 'output', 'join'].forEach(function(role) {
+        var btn = document.querySelector('.io-stat-' + role);
+        if (btn) btn.classList.toggle('io-stat-active', isInsightsOpen && _insightsPanelActiveRole === role);
+    });
     var srp = document.getElementById('search-results-panel');
-    var leftOpen = (ip && ip.classList.contains('open')) || (sp && sp.classList.contains('open')) || (cp && cp.classList.contains('open')) || (srp && srp.classList.contains('open'));
+    var leftOpen = isInsightsOpen || (sp && sp.classList.contains('open')) || (cp && cp.classList.contains('open')) || (srp && srp.classList.contains('open'));
     var ov = document.getElementById('left-panel-overlay');
     if (ov) ov.style.display = leftOpen ? 'block' : '';
 }
