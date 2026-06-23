@@ -674,6 +674,14 @@ function focusNode(toolId, clickedEl) {
     var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
     if (visibleId === null) return;
 
+    // If the node is inside a cluster, expand it first so the real node becomes visible
+    if (typeof visibleId === 'string' &&
+        (visibleId.indexOf('cluster:') === 0 || visibleId.indexOf('container:') === 0) &&
+        typeof expandCluster === 'function') {
+        expandCluster(visibleId);
+        visibleId = toolId;  // after expansion, the real node is now in the dataset
+    }
+
     // Save original colour then apply vivid amber highlight
     var nodeData = nodesDataset ? nodesDataset.get(visibleId) : null;
     if (nodeData) {
