@@ -244,7 +244,7 @@ def _cluster_sql_impl(  # noqa: B008
 
     Download the cluster JSON from the inspect view (↓ JSON button), then run:
 
-      yxray sql workflow.yxmd cluster_Filter_20260622.json
+      acd sql workflow.yxmd cluster_Filter_20260622.json
     """
     from yxray.models.types import ToolID
     from yxray.sql import convert_cluster_to_sql
