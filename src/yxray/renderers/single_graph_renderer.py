@@ -674,12 +674,15 @@ function focusNode(toolId, clickedEl) {
     var visibleId = (typeof resolveNode === 'function') ? resolveNode(toolId) : toolId;
     if (visibleId === null) return;
 
-    // If the node is inside a cluster, expand it first so the real node becomes visible
+    // If the node is inside a cluster, expand it first so the real node becomes visible.
+    // After expanding, focus without animation to avoid vis.js animation/DataSet conflicts.
+    var _expandedFromCluster = false;
     if (typeof visibleId === 'string' &&
         (visibleId.indexOf('cluster:') === 0 || visibleId.indexOf('container:') === 0) &&
         typeof expandCluster === 'function') {
         expandCluster(visibleId);
         visibleId = toolId;  // after expansion, the real node is now in the dataset
+        _expandedFromCluster = true;
     }
 
     // Save original colour then apply vivid amber highlight
@@ -699,7 +702,10 @@ function focusNode(toolId, clickedEl) {
         });
     }
 
-    network.focus(visibleId, { scale: FOCUS_SCALE, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    var _focusOpts = _expandedFromCluster
+        ? { scale: FOCUS_SCALE, animation: false }
+        : { scale: FOCUS_SCALE, animation: { duration: 400, easingFunction: 'easeInOutQuad' } };
+    network.focus(visibleId, _focusOpts);
     network.selectNodes([visibleId]);
 
     // Highlight the clicked panel element
