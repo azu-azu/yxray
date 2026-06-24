@@ -2023,7 +2023,6 @@ function copyContainersPanel() {
     var membersCell = otherIds.join(', ');
     rows.push([i + 1, c.tool_id || '', c.label || '', ioCell, membersCell].join('\t'));
   });
-  });
   _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
 }
 
