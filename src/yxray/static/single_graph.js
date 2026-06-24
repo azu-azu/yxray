@@ -2007,22 +2007,22 @@ function copyContainersPanel() {
       JSON.parse(summaryEl.textContent).forEach(function(s) { stepMap[s.tool_id] = s; });
     } catch(e) {}
   }
-  var rows = ['#\tID\tLabel\tMembers'];
+  var rows = ['#\tID\tLabel\tI/O\tMembers'];
   containers.forEach(function(c, i) {
     var memberIds = (byIdx[i] || []).slice().sort(function(a, b) { return a - b; });
-    var parts = [];
-    var otherIds = [];
+    var ioParts = [], otherIds = [];
     memberIds.forEach(function(nid) {
       var step = stepMap[nid];
       if (step && (step.category === 'input' || step.category === 'output') && step.description) {
-        parts.push(step.description.replace(/^Uses file:\s*/i, '') || String(nid));
+        ioParts.push(step.description.replace(/^Uses file:\s*/i, '') || String(nid));
       } else {
         otherIds.push(nid);
       }
     });
-    if (otherIds.length > 0) parts.push(otherIds.join(', '));
-    var membersCell = parts.length > 1 ? '"' + parts.join('\n') + '"' : (parts[0] || '');
-    rows.push([i + 1, c.tool_id || '', c.label || '', membersCell].join('\t'));
+    var ioCell = ioParts.length > 1 ? '"' + ioParts.join('\n') + '"' : (ioParts[0] || '');
+    var membersCell = otherIds.join(', ');
+    rows.push([i + 1, c.tool_id || '', c.label || '', ioCell, membersCell].join('\t'));
+  });
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
 }
