@@ -73,6 +73,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "CrossTab": ("Cross Tab", "transform"),
     "AlteryxTranspose": ("Transpose", "transform"),
     "Transpose": ("Transpose", "transform"),
+    "DynamicInput": ("Dynamic Input", "input"),
     "DynamicRename": ("Dynamic Rename", "transform"),
     "RecordID": ("Record ID", "transform"),
     "DateTime": ("Date/Time", "transform"),
@@ -560,6 +561,7 @@ def _insight_role(
 _DESCRIBERS: dict[str, DescribeFn] = {
     "DbFileInput": _describe_file_tool,
     "DbFileOutput": _describe_file_tool,
+    "DynamicInput": _describe_file_tool,
     "InputData": _describe_file_tool,
     "OutputData": _describe_file_tool,
     "TextInput": _describe_text_input,
