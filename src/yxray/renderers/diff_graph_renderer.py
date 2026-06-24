@@ -19,6 +19,7 @@ from jinja2 import Environment
 from yxray.models import DiffResult
 from yxray.models.workflow import AlteryxConnection, AlteryxNode
 from yxray.renderers._companion_window import COMPANION_WINDOW_JS
+from yxray.renderers._report_assets import CONTRAST_COLOR_JS
 from yxray.renderers._graph_builder import (
     _safe_json,
     build_digraph,
@@ -523,16 +524,7 @@ function isDark() {
   return !document.documentElement.classList.contains('light');
 }
 
-// NOTE: identical copy also lives in static/single_graph.js — keep in sync.
-function contrastColor(hex) {
-  if (!hex || hex.length < 7) return '#ffffff';
-  var r = parseInt(hex.slice(1,3), 16) / 255;
-  var g = parseInt(hex.slice(3,5), 16) / 255;
-  var b = parseInt(hex.slice(5,7), 16) / 255;
-  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.179 ? '#000000' : '#ffffff';
-}
+{{ contrast_color_js | safe }}
 
 function applyThemeColors() {
   var palette = isDark() ? DARK_COLORS : LIGHT_COLORS;
@@ -1500,6 +1492,7 @@ class DiffGraphRenderer:
             nodes_old_json=_safe_json(old_vis_nodes),
             nodes_new_json=_safe_json(new_vis_nodes),
             vis_js=vis_js,
+            contrast_color_js=CONTRAST_COLOR_JS,
         )
 
     def render_standalone(
