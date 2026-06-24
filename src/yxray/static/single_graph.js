@@ -2021,7 +2021,8 @@ function copyContainersPanel() {
       }
     });
     if (otherIds.length > 0) parts.push(otherIds.join(', '));
-    rows.push([i + 1, c.tool_id || '', c.label || '', parts.join(' / ')].join('\t'));
+    var membersCell = parts.length > 1 ? '"' + parts.join('\n') + '"' : (parts[0] || '');
+    rows.push([i + 1, c.tool_id || '', c.label || '', membersCell].join('\t'));
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
 }
