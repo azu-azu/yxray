@@ -44,17 +44,6 @@ var MINIMAP_FIT       = 0.92; // scale factor to leave a small margin inside min
 var _focusedContainerIdx   = null; // index into CONTAINERS_DATA, or null
 var _containerBounds       = [];   // [{x1,y1,x2,y2}] updated each beforeDrawing frame
 var _containerDragState    = null; // active container drag, or null
-// Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
-function contrastColor(hex) {
-  if (!hex || hex.length < 7) return '#ffffff';
-  var r = parseInt(hex.slice(1,3), 16) / 255;
-  var g = parseInt(hex.slice(3,5), 16) / 255;
-  var b = parseInt(hex.slice(5,7), 16) / 255;
-  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.179 ? '#000000' : '#ffffff';
-}
-
 // ── Cluster color palette ─────────────────────────────────────────────────
 // type = same-type BFS cluster (purple); container = ToolContainer group (red).
 var CLUSTER_STYLE = {

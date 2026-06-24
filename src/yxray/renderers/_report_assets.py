@@ -2,6 +2,20 @@
 
 from __future__ import annotations
 
+# Canonical source for WCAG contrast helper — injected into every HTML renderer.
+# Any copy in static JS files must be kept in sync with this definition.
+CONTRAST_COLOR_JS = """\
+// Returns '#000000' or '#ffffff' — whichever has higher WCAG contrast against hex.
+function contrastColor(hex) {
+  if (!hex || hex.length < 7) return '#ffffff';
+  var r = parseInt(hex.slice(1,3), 16) / 255;
+  var g = parseInt(hex.slice(3,5), 16) / 255;
+  var b = parseInt(hex.slice(5,7), 16) / 255;
+  function lin(c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? '#000000' : '#ffffff';
+}"""
+
 REPORT_BASE_CSS = """
 :root {
   --bg: #0f172a; --surface: #1e293b; --surface-2: #131f31;

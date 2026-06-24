@@ -399,6 +399,10 @@ def _describe_join(config: dict[str, Any], _members: list[Any] | None) -> str:
     return ""
 
 
+def _get_rename(row: dict[str, Any]) -> str:
+    return row.get("@rename") or row.get("@Rename") or ""
+
+
 def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
     rows = select_field_rows(config)
     selected = [
@@ -408,12 +412,12 @@ def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
         and row.get("@selected", "True") not in ("False", "false")
     ]
     renamed = [
-        f"{field_name(row)} -> {row.get('@rename') or row.get('@Rename')}"
+        f"{field_name(row)} -> {rename}"
         for row in rows
         if isinstance(row, dict)
         and field_name(row)
-        and (row.get("@rename") or row.get("@Rename"))
-        and (row.get("@rename") or row.get("@Rename")) != field_name(row)
+        and (rename := _get_rename(row))
+        and rename != field_name(row)
     ]
     type_changes = [
         field_name(row)
@@ -546,8 +550,8 @@ def _insight_role(
             1 for r in rows
             if isinstance(r, dict)
             and field_name(r)
-            and (r.get("@rename") or r.get("@Rename"))
-            and (r.get("@rename") or r.get("@Rename")) != field_name(r)
+            and (rename := _get_rename(r))
+            and rename != field_name(r)
         )
         dropped = sum(
             1 for r in rows

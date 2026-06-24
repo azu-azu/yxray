@@ -20,7 +20,7 @@ from jinja2 import Environment
 
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers._graph_builder import _safe_json, load_vis_js
-from yxray.renderers._report_assets import STEP_DETAIL_JS
+from yxray.renderers._report_assets import CONTRAST_COLOR_JS, STEP_DETAIL_JS
 from yxray.topology import compute_node_layer
 
 
@@ -656,6 +656,7 @@ _HTML_TEMPLATE = """\
   {% if workflow_steps %}<script id="summary-data" type="application/json">{{ workflow_steps | tojson }}</script>{% endif %}
   {% if key_insights %}<script id="insights-data" type="application/json">{{ key_insights | tojson }}</script>{% endif %}
   {% if containers_for_panel %}<script id="containers-data" type="application/json">{{ containers_for_panel | tojson }}</script>{% endif %}
+  <script>{{ contrast_color_js | safe }}</script>
   <script>
 {{ single_graph_js | safe }}
   </script>
@@ -1116,6 +1117,7 @@ class SingleGraphRenderer:
             vis_js=vis_js,
             single_graph_js=single_graph_js,
             step_detail_js=STEP_DETAIL_JS,
+            contrast_color_js=CONTRAST_COLOR_JS,
             workflow_steps=steps_dicts,
             key_insights=insights_dicts,
             containers_for_panel=containers_for_panel,
