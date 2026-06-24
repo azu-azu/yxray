@@ -1476,6 +1476,7 @@ function initNetwork() {
 try {
   initNetwork();
   loadContainerOrder();
+  populateContainerMembers();
   requestAnimationFrame(function() {
     if (network) { network.redraw(); network.fit({animation: false}); }
   });
@@ -1939,12 +1940,32 @@ function copySummaryPanel() {
   _clipboardWrite(rows.join('\n'), document.getElementById('summary-copy-btn'), 'Copy');
 }
 
+function populateContainerMembers() {
+  var rows = document.querySelectorAll('.container-row[data-container-id]');
+  rows.forEach(function(row) {
+    var containerId = parseInt(row.getAttribute('data-container-id'));
+    var memberIds = NODES_DATA
+      .filter(function(n) { return n.containerId === containerId; })
+      .map(function(n) { return n.id; })
+      .sort(function(a, b) { return a - b; });
+    if (memberIds.length === 0) return;
+    var span = document.createElement('span');
+    span.className = 'container-members';
+    span.textContent = 'Members: ' + memberIds.join(', ');
+    row.appendChild(span);
+  });
+}
+
 function copyContainersPanel() {
   var el = document.getElementById('containers-data');
   var containers = el ? JSON.parse(el.textContent) : [];
-  var rows = ['#\tID\tLabel'];
+  var rows = ['#\tID\tLabel\tMembers'];
   containers.forEach(function(c, i) {
-    rows.push([i + 1, c.tool_id || '', c.label || ''].join('\t'));
+    var memberIds = NODES_DATA
+      .filter(function(n) { return n.containerId === c.tool_id; })
+      .map(function(n) { return n.id; })
+      .sort(function(a, b) { return a - b; });
+    rows.push([i + 1, c.tool_id || '', c.label || '', memberIds.join(', ')].join('\t'));
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
 }
