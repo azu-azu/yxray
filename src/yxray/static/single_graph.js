@@ -1724,19 +1724,56 @@ function downloadSummaryExcel() {
     var el = document.getElementById('containers-data');
     return el ? JSON.parse(el.textContent) : [];
   })();
-  var containerRows = [['#', 'ID', 'Label']].concat(
-    containers.map(function(c, i) { return [i + 1, c.tool_id || '', c.label || '']; })
+
+  var stepMap = {};
+  steps.forEach(function(s) { stepMap[s.tool_id] = s; });
+  var membership = computeContainerMembership();
+  var byIdxC = {};
+  Object.keys(membership).forEach(function(nid) {
+    var idx = membership[parseInt(nid)];
+    if (!byIdxC[idx]) byIdxC[idx] = [];
+    byIdxC[idx].push(parseInt(nid));
+  });
+  var containerRows = [['#', 'ID', 'Label', 'I/O', 'Members']].concat(
+    containers.map(function(c, i) {
+      var memberIds = (byIdxC[i] || []).slice().sort(function(a, b) { return a - b; });
+      var ioParts = [], otherIds = [];
+      memberIds.forEach(function(nid) {
+        var step = stepMap[nid];
+        if (step && (step.category === 'input' || step.category === 'output') && step.description) {
+          ioParts.push(step.description.replace(/^Uses file:\s*/i, '') || String(nid));
+        } else {
+          otherIds.push(nid);
+        }
+      });
+      return [i + 1, c.tool_id || '', c.label || '', ioParts.join('\n'), otherIds.join(', ')];
+    })
   );
 
+  function xmlRowContainers(cells) {
+    return '<Row>' + cells.map(function(c, ci) {
+      var val = esc(c);
+      if (ci === 3 && String(c).indexOf('\n') >= 0) {
+        return '<Cell ss:StyleID="s_wrap"><Data ss:Type="String">' + val + '</Data></Cell>';
+      }
+      return '<Cell><Data ss:Type="String">' + val + '</Data></Cell>';
+    }).join('') + '</Row>';
+  }
+  function xmlSheetContainers(name, rows) {
+    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
+      rows.map(xmlRowContainers).join('') + '</Table></Worksheet>';
+  }
+
+  var styles = '<Styles><Style ss:ID="s_wrap"><Alignment ss:WrapText="1"/></Style></Styles>';
   var sheets = xmlSheet('Summary', summaryRows) +
     xmlSheet('Input', inputRows) +
     xmlSheet('Output', outputRows);
-  if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
+  if (containers.length > 0) sheets += xmlSheetContainers('Containers', containerRows);
 
   var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    sheets +
+    styles + sheets +
     '</Workbook>';
 
   var rawTitle = (document.querySelector('.header-title') || {}).textContent || 'workflow';
