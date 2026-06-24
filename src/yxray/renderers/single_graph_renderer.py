@@ -581,7 +581,7 @@ _HTML_TEMPLATE = """\
     </div>
     <div id="containers-panel-body">
       {% for c in containers_for_panel %}
-      <div class="container-row" draggable="true" data-label="{{ c.label }}" data-container-id="{{ c.tool_id }}" onclick="focusContainer({{ loop.index0 }}, this)">
+      <div class="container-row" draggable="true" data-label="{{ c.label }}" data-container-idx="{{ loop.index0 }}" onclick="focusContainer({{ loop.index0 }}, this)">
         {% if c.fill_color %}<span class="container-swatch" style="background:{{ c.fill_color }};"></span>{% endif %}
         {% if c.tool_id %}<span class="ki-id">#{{ c.tool_id }}</span>{% endif %}
         <span class="container-label">{{ c.label }}</span>

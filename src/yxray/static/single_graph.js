@@ -1941,13 +1941,17 @@ function copySummaryPanel() {
 }
 
 function populateContainerMembers() {
-  var rows = document.querySelectorAll('.container-row[data-container-id]');
+  var membership = computeContainerMembership();
+  var byIdx = {};
+  Object.keys(membership).forEach(function(nid) {
+    var idx = membership[parseInt(nid)];
+    if (!byIdx[idx]) byIdx[idx] = [];
+    byIdx[idx].push(parseInt(nid));
+  });
+  var rows = document.querySelectorAll('.container-row[data-container-idx]');
   rows.forEach(function(row) {
-    var containerId = parseInt(row.getAttribute('data-container-id'));
-    var memberIds = NODES_DATA
-      .filter(function(n) { return n.containerId === containerId; })
-      .map(function(n) { return n.id; })
-      .sort(function(a, b) { return a - b; });
+    var idx = parseInt(row.getAttribute('data-container-idx'));
+    var memberIds = (byIdx[idx] || []).slice().sort(function(a, b) { return a - b; });
     if (memberIds.length === 0) return;
     var span = document.createElement('span');
     span.className = 'container-members';
@@ -1959,12 +1963,16 @@ function populateContainerMembers() {
 function copyContainersPanel() {
   var el = document.getElementById('containers-data');
   var containers = el ? JSON.parse(el.textContent) : [];
+  var membership = computeContainerMembership();
+  var byIdx = {};
+  Object.keys(membership).forEach(function(nid) {
+    var idx = membership[parseInt(nid)];
+    if (!byIdx[idx]) byIdx[idx] = [];
+    byIdx[idx].push(parseInt(nid));
+  });
   var rows = ['#\tID\tLabel\tMembers'];
   containers.forEach(function(c, i) {
-    var memberIds = NODES_DATA
-      .filter(function(n) { return n.containerId === c.tool_id; })
-      .map(function(n) { return n.id; })
-      .sort(function(a, b) { return a - b; });
+    var memberIds = (byIdx[i] || []).slice().sort(function(a, b) { return a - b; });
     rows.push([i + 1, c.tool_id || '', c.label || '', memberIds.join(', ')].join('\t'));
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('containers-copy-btn'), 'Copy');
