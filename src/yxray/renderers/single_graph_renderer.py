@@ -12,7 +12,6 @@ Same-type BFS clusters (purple) and ToolContainer dashed borders are drawn.
 from __future__ import annotations
 
 import importlib.resources as pkg_resources
-import json
 import pathlib
 from typing import Any
 
