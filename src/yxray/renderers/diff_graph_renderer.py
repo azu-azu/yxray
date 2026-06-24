@@ -11,7 +11,6 @@ Physics is disabled; positions are pre-computed in Python.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from jinja2 import Environment
@@ -19,7 +18,6 @@ from jinja2 import Environment
 from yxray.models import DiffResult
 from yxray.models.workflow import AlteryxConnection, AlteryxNode
 from yxray.renderers._companion_window import COMPANION_WINDOW_JS
-from yxray.renderers._report_assets import CONTRAST_COLOR_JS
 from yxray.renderers._graph_builder import (
     _safe_json,
     build_digraph,
@@ -28,6 +26,7 @@ from yxray.renderers._graph_builder import (
     hierarchical_positions,
     load_vis_js,
 )
+from yxray.renderers._report_assets import CONTRAST_COLOR_JS
 
 _GRAPH_FRAGMENT_TEMPLATE = """<section id="graph-section">
 <h2>Workflow Graph</h2>
