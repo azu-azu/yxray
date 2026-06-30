@@ -436,7 +436,7 @@ function downloadSummaryExcel() {
     xmlSheet('Input', inputRows) +
     xmlSheet('Output', outputRows);
   if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
-  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+  var xml = '<?xml version="1.0"?>\\n<?mso-application progid="Excel.Sheet"?>\\n' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
     sheets +
