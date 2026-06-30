@@ -2133,16 +2133,18 @@ function copyPanelJSON() {
 function copyInsightsPanel() {
   var ip = document.getElementById('insights-panel');
   if (!ip) return;
+  var rawTitle = (document.querySelector('.header-title') || {}).textContent || '';
+  var wf = rawTitle.trim().replace(/\.[^.]+$/, '');
   var visible = Array.prototype.filter.call(ip.querySelectorAll('.ki-row'), function(r) {
     return r.style.display !== 'none';
   });
-  var rows = ['ID\tRole\tType\tDescription'];
+  var rows = ['WF\tID\tRole\tType\tDescription'];
   visible.forEach(function(r) {
     var id = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
     var role = r.dataset.role || '';
     var type = (r.querySelector('.ki-badge') || {}).textContent.trim();
     var desc = (r.querySelector('.ki-desc') || {}).textContent.trim();
-    rows.push([id, role, type, desc].join('\t'));
+    rows.push([wf, id, role, type, desc].join('\t'));
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('insights-copy-btn'), 'Copy');
 }
