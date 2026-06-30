@@ -1122,6 +1122,16 @@ class SingleGraphRenderer:
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
         )
+
+        # Inject python_hint into each config_map entry from the explain engine.
+        from yxray.explain import explain as _explain
+
+        for step in _explain(doc):
+            entry = config_map.get(str(step.tool_id))
+            if entry is not None:
+                entry["python_hint"] = step.python_hint
+                entry["supported"] = step.supported
+
         vis_js = load_vis_js()
         single_graph_js = _load_single_graph_js()
         title = pathlib.Path(doc.filepath).name
