@@ -27,7 +27,6 @@ _TEMPLATE = """<!DOCTYPE html>
 /* ---- Summary stat cards ---- */
 :root { --accent-join: #c4b5fd; --accent-join-bg: #1e0937; --accent-join-border: #4c1d95; }
 html.light { --accent-join: #7c3aed; --accent-join-bg: #f5f3ff; --accent-join-border: #ddd6fe; }
-#summary { padding: 16px 32px 0; }
 .stat-cards { display: flex; gap: 12px; margin-bottom: 0; align-items: stretch; }
 .stat-card-group {
   display: flex; gap: 8px;
@@ -223,45 +222,45 @@ button.stat-card:hover { opacity: 0.85; }
         </button>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
-      <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
-      <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
+        <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
+        <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+      </div>
+      <div class="stat-cards" style="flex-shrink:0;">
+        <div class="stat-card stat-card-added">
+          <div class="stat-card-top"><span class="stat-label">Added</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.added }}</div>
+        </div>
+        <div class="stat-card stat-card-modified">
+          <div class="stat-card-top"><span class="stat-label">Modified</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.modified }}</div>
+        </div>
+        <div class="stat-card stat-card-removed">
+          <div class="stat-card-top"><span class="stat-label">Removed</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.removed }}</div>
+        </div>
+        {% if summary.inputs or summary.outputs or summary.joins %}
+        <div class="stat-card-group">
+          {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
+            <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.inputs }}</div>
+          </button>{% endif %}
+          {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
+            <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.outputs }}</div>
+          </button>{% endif %}
+          {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
+            <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.joins }}</div>
+          </button>{% endif %}
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </header>
-<section id="summary">
-  <div class="stat-cards">
-    <div class="stat-card stat-card-added">
-      <div class="stat-card-top"><span class="stat-label">Added</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.added }}</div>
-    </div>
-    <div class="stat-card stat-card-modified">
-      <div class="stat-card-top"><span class="stat-label">Modified</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.modified }}</div>
-    </div>
-    <div class="stat-card stat-card-removed">
-      <div class="stat-card-top"><span class="stat-label">Removed</span><span class="stat-dot"></span></div>
-      <div class="stat-count">{{ summary.removed }}</div>
-    </div>
-    {% if summary.inputs or summary.outputs or summary.joins %}
-    <div class="stat-card-group">
-      {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
-        <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.inputs }}</div>
-      </button>{% endif %}
-      {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
-        <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.outputs }}</div>
-      </button>{% endif %}
-      {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
-        <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.joins }}</div>
-      </button>{% endif %}
-    </div>
-    {% endif %}
-  </div>
-</section>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
 {% if workflow_steps %}
 <script type="application/json" id="summary-data">{{ workflow_steps | tojson }}</script>
