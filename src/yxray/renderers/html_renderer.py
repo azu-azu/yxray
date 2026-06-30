@@ -21,10 +21,12 @@ _TEMPLATE = """<!DOCTYPE html>
 <style>
 {{ report_base_css | safe }}
 .site-header { position: sticky; top: 0; z-index: 100; }
+.header-inner { max-width: none; }
 .theme-toggle { line-height: 1; }
 .theme-toggle svg { display: block; }
 /* ---- Summary stat cards ---- */
-#summary { max-width: 960px; margin: 0 auto; padding: 16px 32px 0; }
+:root { --accent-join: #c4b5fd; --accent-join-bg: #1e0937; --accent-join-border: #4c1d95; }
+html.light { --accent-join: #7c3aed; --accent-join-bg: #f5f3ff; --accent-join-border: #ddd6fe; }
 .stat-cards { display: flex; gap: 12px; margin-bottom: 0; align-items: stretch; }
 .stat-card-group {
   display: flex; gap: 8px;
@@ -34,36 +36,27 @@ _TEMPLATE = """<!DOCTYPE html>
   background: var(--surface);
 }
 .stat-card {
-  flex: 1; border-radius: 8px; padding: 16px; cursor: pointer;
+  flex: 1; border-radius: 8px; padding: 16px;
   border: 1px solid; transition: opacity 0.15s ease; text-decoration: none;
 }
-.stat-card:hover { opacity: 0.85; }
 .stat-card-added { background: var(--accent-added-bg); border-color: var(--accent-added-border); }
 .stat-card-removed { background: var(--accent-removed-bg); border-color: var(--accent-removed-border); }
 .stat-card-modified { background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
-.stat-card-conn { background: var(--accent-conn-bg); border-color: var(--accent-conn-border); }
 .stat-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.stat-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
-}
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
 .stat-card-added .stat-label { color: var(--accent-added); opacity: 0.8; }
 .stat-card-removed .stat-label { color: var(--accent-removed); opacity: 0.8; }
 .stat-card-modified .stat-label { color: var(--accent-modified); opacity: 0.8; }
-.stat-card-conn .stat-label { color: var(--accent-conn); opacity: 0.8; }
 .stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .stat-card-added .stat-dot { background: var(--accent-added); }
 .stat-card-removed .stat-dot { background: var(--accent-removed); }
 .stat-card-modified .stat-dot { background: var(--accent-modified); }
-.stat-card-conn .stat-dot { background: var(--accent-conn); }
 .stat-count { font-size: 32px; font-weight: 700; line-height: 1; }
 .stat-card-added .stat-count { color: var(--accent-added); }
 .stat-card-removed .stat-count { color: var(--accent-removed); }
 .stat-card-modified .stat-count { color: var(--accent-modified); }
-.stat-card-conn .stat-count { color: var(--accent-conn); }
-/* Input/Output/Join stat card variants */
-:root { --accent-join: #c4b5fd; --accent-join-bg: #1e0937; --accent-join-border: #4c1d95; }
-html.light { --accent-join: #7c3aed; --accent-join-bg: #f5f3ff; --accent-join-border: #ddd6fe; }
 button.stat-card { font: inherit; text-align: left; cursor: pointer; }
+button.stat-card:hover { opacity: 0.85; }
 .stat-card-input  { background: var(--accent-conn-bg);  border-color: var(--accent-conn-border); }
 .stat-card-output { background: var(--accent-added-bg); border-color: var(--accent-added-border); }
 .stat-card-join   { background: var(--accent-join-bg);  border-color: var(--accent-join-border); }
@@ -122,6 +115,10 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
 .ki-badge-join   { background: var(--badge-join-bg);   color: var(--badge-join-text);   border-color: var(--badge-join-border); }
 .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+/* ---- Compact stat cards inside the sticky header ---- */
+.header-inner .stat-card { padding: 6px 12px; }
+.header-inner .stat-card-top { margin-bottom: 3px; }
+.header-inner .stat-count { font-size: 20px; }
 .ctrl-btn {
   background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
   border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
@@ -229,58 +226,46 @@ button.stat-card { font: inherit; text-align: left; cursor: pointer; }
         </button>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
-      <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
-      <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
+        <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
+        <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+      </div>
+      <div class="stat-cards" style="flex-shrink:0;">
+        <div class="stat-card stat-card-added">
+          <div class="stat-card-top"><span class="stat-label">Added</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.added }}</div>
+        </div>
+        <div class="stat-card stat-card-modified">
+          <div class="stat-card-top"><span class="stat-label">Modified</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.modified }}</div>
+        </div>
+        <div class="stat-card stat-card-removed">
+          <div class="stat-card-top"><span class="stat-label">Removed</span><span class="stat-dot"></span></div>
+          <div class="stat-count">{{ summary.removed }}</div>
+        </div>
+        {% if summary.inputs or summary.outputs or summary.joins %}
+        <div class="stat-card-group">
+          {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
+            <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.inputs }}</div>
+          </button>{% endif %}
+          {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
+            <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.outputs }}</div>
+          </button>{% endif %}
+          {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
+            <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
+            <div class="stat-count">{{ summary.joins }}</div>
+          </button>{% endif %}
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </header>
-<section id="summary">
-  <div class="stat-cards">
-    <div class="stat-card stat-card-added">
-      <div class="stat-card-top">
-        <span class="stat-label">Added</span>
-        <span class="stat-dot"></span>
-      </div>
-      <div class="stat-count">{{ summary.added }}</div>
-    </div>
-    <div class="stat-card stat-card-modified">
-      <div class="stat-card-top">
-        <span class="stat-label">Modified</span>
-        <span class="stat-dot"></span>
-      </div>
-      <div class="stat-count">{{ summary.modified }}</div>
-    </div>
-    <div class="stat-card stat-card-removed">
-      <div class="stat-card-top">
-        <span class="stat-label">Removed</span>
-        <span class="stat-dot"></span>
-      </div>
-      <div class="stat-count">{{ summary.removed }}</div>
-    </div>
-    {% if summary.inputs or summary.outputs or summary.joins %}
-    <div class="stat-card-group">
-      {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
-        <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.inputs }}</div>
-      </button>{% endif %}
-      {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
-        <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.outputs }}</div>
-      </button>{% endif %}
-      {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
-        <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
-        <div class="stat-count">{{ summary.joins }}</div>
-      </button>{% endif %}
-    </div>
-    {% endif %}
-  </div>
-</section>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
-{% if key_insights %}
-<script type="application/json" id="insights-data">{{ key_insights | tojson }}</script>
-{% endif %}
 {% if workflow_steps %}
 <script type="application/json" id="summary-data">{{ workflow_steps | tojson }}</script>
 {% endif %}
@@ -349,10 +334,6 @@ function closeSummaryPanel() {
     _updateLeftPanelOverlay();
 }
 // ── Insights panel (input/output/join list) ───────────────────────────────
-var _insightsData = (function() {
-  var el = document.getElementById('insights-data');
-  return el ? JSON.parse(el.textContent) : [];
-})();
 var _insightsPanelRole = null;
 function openInsightsPanel(role) {
   var panel = document.getElementById('insights-panel');
@@ -366,29 +347,14 @@ function openInsightsPanel(role) {
   }
   if (sp) sp.classList.remove('open');
   _insightsPanelRole = role;
-  var items = _insightsData.filter(function(d) { return d.role === role; });
+  var rows = panel.querySelectorAll('.ki-row');
+  var count = 0;
+  rows.forEach(function(row) {
+    if (row.dataset.role === role) { row.style.display = ''; count++; }
+    else { row.style.display = 'none'; }
+  });
   var titleEl = document.getElementById('insights-panel-title');
-  if (titleEl) titleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1) + 's (' + items.length + ')';
-  var body = document.getElementById('insights-panel-body');
-  if (body) {
-    body.innerHTML = '';
-    items.forEach(function(d) {
-      var row = document.createElement('div');
-      row.className = 'ki-row';
-      var badge = document.createElement('span');
-      badge.className = 'ki-badge ki-badge-' + d.role;
-      badge.textContent = d.short_type;
-      var desc = document.createElement('span');
-      desc.className = 'ki-desc';
-      desc.textContent = d.description || d.short_type;
-      row.appendChild(badge);
-      row.appendChild(desc);
-      (function(toolId, rowEl) {
-        rowEl.addEventListener('click', function() { focusNode(toolId, rowEl); });
-      })(d.tool_id, row);
-      body.appendChild(row);
-    });
-  }
+  if (titleEl) titleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1) + 's (' + count + ')';
   panel.classList.add('open');
   _updateLeftPanelOverlay();
 }
@@ -415,8 +381,19 @@ function downloadSummaryExcel() {
     return el ? JSON.parse(el.textContent) : [];
   })();
   var insights = (function() {
-    var el = document.getElementById('insights-data');
-    return el ? JSON.parse(el.textContent) : [];
+    var rows = document.querySelectorAll('#insights-panel-body .ki-row');
+    var result = [];
+    rows.forEach(function(row) {
+      var badge = row.querySelector('.ki-badge');
+      var desc = row.querySelector('.ki-desc');
+      result.push({
+        role: row.dataset.role || '',
+        tool_id: row.dataset.toolId || '',
+        short_type: badge ? badge.textContent : '',
+        description: desc ? desc.textContent : '',
+      });
+    });
+    return result;
   })();
   function esc(s) {
     return String(s == null ? '' : s)
@@ -459,7 +436,7 @@ function downloadSummaryExcel() {
     xmlSheet('Input', inputRows) +
     xmlSheet('Output', outputRows);
   if (containers.length > 0) sheets += xmlSheet('Containers', containerRows);
-  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+  var xml = '<?xml version="1.0"?>\\n<?mso-application progid="Excel.Sheet"?>\\n' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
     'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
     sheets +
@@ -501,7 +478,14 @@ function downloadSummaryExcel() {
     <span id="insights-panel-title"></span>
     <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
   </div>
-  <div id="insights-panel-body"></div>
+  <div id="insights-panel-body">
+    {% for ki in key_insights %}
+    <div class="ki-row" data-role="{{ ki.role }}" data-tool-id="{{ ki.tool_id }}" onclick="focusNode({{ ki.tool_id }}, this)" style="display:none">
+      <span class="ki-badge ki-badge-{{ ki.role }}">{{ ki.short_type }}</span>
+      <span class="ki-desc">{{ ki.description if ki.description else ki.short_type }}</span>
+    </div>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 {% if workflow_steps %}
