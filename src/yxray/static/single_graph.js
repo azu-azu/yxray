@@ -1934,6 +1934,11 @@ function copyPanelContent() {
   _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy');
 }
 
+function copyPanelId() {
+  if (_panelNodeId === null) return;
+  _clipboardWrite(String(_panelNodeId), document.getElementById('panel-copy-id-btn'), 'Copy ID');
+}
+
 function copyInsightsPanel() {
   var ip = document.getElementById('insights-panel');
   if (!ip) return;
@@ -2060,6 +2065,7 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
   if (btn && btn.dataset.mode === 'excel') downloadClusterExcel();
   else copyPanelContent();
 });
+document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
