@@ -144,7 +144,7 @@ var options = {
     borderWidth: 1,
     borderWidthSelected: 2,
     margin: {top: 8, right: 12, bottom: 8, left: 12},
-    font: {size: 16, face: 'system-ui,-apple-system,sans-serif'},
+    font: {size: 13, face: 'system-ui,-apple-system,sans-serif'},
     shapeProperties: {borderRadius: 6}
   },
   edges: {
@@ -280,7 +280,7 @@ function buildClusters(skipSet) {
         highlight: {background: '#92400e', border: '#f59e0b'},
         hover: {background: '#5b21b6', border: '#7c3aed'}
       },
-      font: {color: contrastColor('#4c1d95'), size: 16}
+      font: {color: contrastColor('#4c1d95'), size: 13}
     });
   });
 
@@ -449,7 +449,7 @@ function buildContainerClusters(membership) {
       shape: 'box', borderDashes: [5, 3],
       x: pos.x, y: pos.y,
       color: ns.color,
-      font: {color: ns.fontColor, size: 16}
+      font: {color: ns.fontColor, size: 13}
     });
   });
 
@@ -538,7 +538,7 @@ function recollapseGroup(groupKey) {
     borderDashes: [5, 3],
     x: cPos.x, y: cPos.y,
     color: ns.color,
-    font: {color: ns.fontColor, size: 16}
+    font: {color: ns.fontColor, size: 13}
   });
 
   // Re-derive bridge edges from EDGES_DATA (same logic as expandCluster edge step)
@@ -706,7 +706,7 @@ function _memoNodeDef(id, text, x, y, w, h) {
       highlight: {background: '#fef08a', border: '#a16207'},
       hover:     {background: '#fef08a', border: '#a16207'}
     },
-    font: {color: '#000000', size: 16},
+    font: {color: '#000000', size: 13},
     borderWidth: 2,
     shapeProperties: {borderRadius: 4}
   };
@@ -1372,7 +1372,7 @@ function initNetwork() {
       var text = sepIdx >= 0 ? nd.subtitle.slice(sepIdx + 1) : nd.subtitle;
       if (text.length > 30) text = '…' + text.slice(-27);
       ctx.save();
-      ctx.font = '10px system-ui,-apple-system,sans-serif';
+      ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
       ctx.fillStyle = isDark ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)';
       ctx.textAlign = 'center';
       ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
