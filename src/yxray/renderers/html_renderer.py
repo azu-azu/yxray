@@ -115,6 +115,10 @@ button.stat-card:hover { opacity: 0.85; }
 .ki-badge-join   { background: var(--badge-join-bg);   color: var(--badge-join-text);   border-color: var(--badge-join-border); }
 .ki-desc { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+/* ---- Compact stat cards inside the sticky header ---- */
+.header-inner .stat-card { padding: 6px 12px; }
+.header-inner .stat-card-top { margin-bottom: 3px; }
+.header-inner .stat-count { font-size: 20px; }
 .ctrl-btn {
   background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
   border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
