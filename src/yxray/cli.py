@@ -282,6 +282,50 @@ app.command("explain")(_explain_impl)
 app.command("ex", hidden=True)(_explain_impl)
 
 
+def _scaffold_impl(  # noqa: B008
+    workflow: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help=".yxmd or .yxwz workflow file"
+    ),
+    output: pathlib.Path | None = typer.Option(  # noqa: B008
+        None,
+        "--output",
+        "-o",
+        help="Write Python scaffold to file instead of stdout",
+    ),
+) -> None:
+    """Generate a Python/pandas scaffold from an Alteryx workflow.
+
+    Produces a .py skeleton with one code block per tool in topological
+    order. Supported tools get semi-concrete pandas code; unsupported
+    tools get a TODO comment.
+
+      acd scaffold workflow.yxmd
+      acd scaffold workflow.yxmd -o workflow.py
+    """
+    from yxray.scaffold import scaffold
+
+    try:
+        doc = parse_one(workflow)
+    except MalformedXMLError as e:
+        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+    except ParseError as e:
+        typer.echo(f"Error: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+
+    code = scaffold(doc)
+
+    if output:
+        output.write_text(code, encoding="utf-8")
+        typer.echo(f"Scaffold written to {output}", err=True)
+    else:
+        typer.echo(code)
+
+
+app.command("scaffold")(_scaffold_impl)
+app.command("sc", hidden=True)(_scaffold_impl)
+
+
 def _file_sha256(path: pathlib.Path) -> str:
     """Return 64-char SHA-256 hex digest. Uses hashlib.file_digest (Python 3.11+)."""
     with path.open("rb") as f:
