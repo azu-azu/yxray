@@ -1372,10 +1372,10 @@ function initNetwork() {
       var text = sepIdx >= 0 ? nd.subtitle.slice(sepIdx + 1) : nd.subtitle;
       if (text.length > 30) text = '…' + text.slice(-27);
       ctx.save();
-      ctx.font = 'bold 11px system-ui,-apple-system,sans-serif';
+      ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
       ctx.fillStyle = isDark ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)';
       ctx.textAlign = 'center';
-      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
+      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 28);
       ctx.restore();
     });
 
