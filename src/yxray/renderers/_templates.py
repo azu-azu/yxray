@@ -14,6 +14,6 @@ def load_template(name: str) -> str:
             .joinpath(name)
             .read_text(encoding="utf-8")
         )
-    except (FileNotFoundError, ModuleNotFoundError, TypeError):
+    except (FileNotFoundError, ModuleNotFoundError):
         path = pathlib.Path(__file__).parent.parent / "templates" / name
         return path.read_text(encoding="utf-8")
