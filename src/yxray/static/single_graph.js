@@ -1939,6 +1939,28 @@ function copyPanelId() {
   _clipboardWrite(String(_panelNodeId), document.getElementById('panel-copy-id-btn'), 'Copy ID');
 }
 
+function copyPanelJSON() {
+  if (_panelNodeId === null) return;
+  var data;
+  var cluster = AppState.clusterMap[_panelNodeId];
+  var group = AppState.groupMembers[_panelNodeId];
+  if (cluster) {
+    data = cluster.memberIds.map(function(mid) {
+      var e = CONFIG_MAP[String(mid)];
+      return e ? { id: mid, label: e.label, config: e.config } : { id: mid };
+    });
+  } else if (group) {
+    data = group.memberIds.map(function(mid) {
+      var e = CONFIG_MAP[String(mid)];
+      return e ? { id: mid, label: e.label, config: e.config } : { id: mid };
+    });
+  } else {
+    var entry = CONFIG_MAP[String(_panelNodeId)];
+    data = entry ? entry.config : {};
+  }
+  _clipboardWrite(JSON.stringify(data, null, 2), document.getElementById('panel-copy-json-btn'), 'Copy JSON');
+}
+
 function copyInsightsPanel() {
   var ip = document.getElementById('insights-panel');
   if (!ip) return;
@@ -2065,6 +2087,7 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
   if (btn && btn.dataset.mode === 'excel') downloadClusterExcel();
   else copyPanelContent();
 });
+document.getElementById('panel-copy-json-btn').addEventListener('click', copyPanelJSON);
 document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
