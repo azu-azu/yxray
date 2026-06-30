@@ -1583,7 +1583,7 @@ function _setPanelBtn(mode) {
     btn.textContent = '↓ Excel';
     btn.dataset.mode = 'excel';
   } else {
-    btn.textContent = 'Copy';
+    btn.textContent = 'Copy for Excel';
     btn.dataset.mode = 'copy';
   }
 }
@@ -1931,7 +1931,7 @@ function copyPanelContent() {
       rows.push('\t' + node.textContent.trim().replace(/\t/g, ' ').replace(/\n/g, ' '));
     }
   });
-  _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy');
+  _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy for Excel');
 }
 
 function copyPanelId() {
