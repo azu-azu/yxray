@@ -1372,10 +1372,10 @@ function initNetwork() {
       var text = sepIdx >= 0 ? nd.subtitle.slice(sepIdx + 1) : nd.subtitle;
       if (text.length > 30) text = '…' + text.slice(-27);
       ctx.save();
-      ctx.font = '10px system-ui,-apple-system,sans-serif';
+      ctx.font = 'bold 24px system-ui,-apple-system,sans-serif';
       ctx.fillStyle = isDark ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)';
       ctx.textAlign = 'center';
-      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 16);
+      ctx.fillText(text, (bb.left + bb.right) / 2, bb.bottom + 28);
       ctx.restore();
     });
 
@@ -1515,7 +1515,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      renderConfigRows(entry, body);
+      _renderPanelEntry(entry, body);
     });
   } else if (AppState.groupMembers[groupKey]) {
     // Expanded state → show Collapse button
@@ -1543,7 +1543,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      renderConfigRows(entry, body);
+      _renderPanelEntry(entry, body);
     });
   }
   document.getElementById('config-panel').classList.add('open');
@@ -1574,6 +1574,142 @@ function renderConfigRows(entry, container) {
   });
 }
 
+function _cellText(c) {
+  if (c == null) return '';
+  if (typeof c === 'object') return c['#text'] != null ? String(c['#text']) : '';
+  return String(c);
+}
+
+function _buildPanelTable(headers, rows, container) {
+  if (rows.length === 0 && headers.length === 0) {
+    var empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--text-muted);font-size:13px;';
+    empty.textContent = 'No data.';
+    container.appendChild(empty);
+    return;
+  }
+  var wrapper = document.createElement('div');
+  wrapper.id = 'panel-table-wrapper';
+  var table = document.createElement('table');
+  table.id = 'panel-data-table';
+
+  var thead = document.createElement('thead');
+  var hrow = document.createElement('tr');
+  headers.forEach(function(h) {
+    var th = document.createElement('th');
+    th.textContent = h;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  var tbody = document.createElement('tbody');
+  rows.forEach(function(row) {
+    var tr = document.createElement('tr');
+    row.forEach(function(cell) {
+      var td = document.createElement('td');
+      td.textContent = cell;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  wrapper.appendChild(table);
+  container.appendChild(wrapper);
+}
+
+function renderTextInputTable(entry, container) {
+  var cfg = entry.config;
+  var fieldsObj = cfg.Fields || {};
+  var fieldList = fieldsObj.Field || [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+  var colNames = fieldList.map(function(f) { return f['@name'] || ''; });
+
+  var dataObj = cfg.Data || {};
+  var rowList = dataObj.r || [];
+  if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
+
+  var rows = rowList.map(function(r, i) {
+    var cells = r.c != null ? r.c : [];
+    if (!Array.isArray(cells)) cells = [cells];
+    return [String(i + 1)].concat(colNames.map(function(_, ci) {
+      return _cellText(cells[ci]);
+    }));
+  });
+
+  _buildPanelTable(['#'].concat(colNames), rows, container);
+}
+
+function renderSelectTable(entry, container) {
+  var cfg = entry.config;
+  var fields = cfg.SelectFields || cfg.Fields || {};
+  var fieldList = (typeof fields === 'object') ? (fields.SelectField || fields.Field || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), '', '', '', ''];
+    var name = f['@field'] || f['@name'] || f['@Field'] || f['@Name'] || '';
+    var selected = (f['@selected'] || f['@Selected'] || 'True').toLowerCase() !== 'false' ? '✓' : '✗';
+    var rename = f['@rename'] || f['@Rename'] || '';
+    var type = f['@type'] || f['@Type'] || '';
+    var size = f['@size'] || f['@Size'] || '';
+    return [String(i + 1), name, selected, rename, type, size];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Selected', 'Rename', 'Type', 'Size'], rows, container);
+}
+
+function renderFormulaTable(entry, container) {
+  var cfg = entry.config;
+  var ffs = cfg.FormulaFields || {};
+  var fieldList = (typeof ffs === 'object') ? (ffs.FormulaField || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), '', String(f), ''];
+    var field = f['@field'] || f['@name'] || '';
+    var expr = f['@expression'] || f['@formula'] || '';
+    if (!expr && f.Expression) expr = _cellText(f.Expression);
+    var type = f['@type'] || '';
+    return [String(i + 1), field, expr, type];
+  });
+
+  _buildPanelTable(['#', 'Output Field', 'Expression', 'Type'], rows, container);
+}
+
+function renderSummarizeTable(entry, container) {
+  var cfg = entry.config;
+  var sf = cfg.SummarizeFields || {};
+  var fieldList = (typeof sf === 'object') ? (sf.SummarizeField || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), '', ''];
+    var field = f['@field'] || '';
+    var action = f['@action'] || '';
+    var rename = f['@rename'] || '';
+    return [String(i + 1), field, action, rename];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Action', 'Output Name'], rows, container);
+}
+
+function renderSortTable(entry, container) {
+  var cfg = entry.config;
+  var sortInfo = cfg.SortInfo || [];
+  if (!Array.isArray(sortInfo)) sortInfo = sortInfo ? [sortInfo] : [];
+
+  var rows = sortInfo.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), ''];
+    var field = f['@field'] || '';
+    var order = f['@order'] || '';
+    return [String(i + 1), field, order];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Order'], rows, container);
+}
+
 var _panelNodeId = null;
 
 function _setPanelBtn(mode) {
@@ -1583,7 +1719,7 @@ function _setPanelBtn(mode) {
     btn.textContent = '↓ Excel';
     btn.dataset.mode = 'excel';
   } else {
-    btn.textContent = 'Copy';
+    btn.textContent = 'Copy for Excel';
     btn.dataset.mode = 'copy';
   }
 }
@@ -1649,7 +1785,7 @@ function openPanel(nodeId) {
     collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
-    if (_entry) renderConfigRows(_entry, body);
+    if (_entry) _renderPanelEntry(_entry, body);
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -1657,13 +1793,182 @@ function openPanel(nodeId) {
   var entry = CONFIG_MAP[String(nodeId)];
   if (!entry) return;
   document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
-  renderConfigRows(entry, body);
+  _renderPanelEntry(entry, body);
   document.getElementById('config-panel').classList.add('open');
+}
+
+var _TABLE_RENDERERS = {
+  'TextInput':        renderTextInputTable,
+  'AlteryxSelect':    renderSelectTable,
+  'Select':           renderSelectTable,
+  'AlteryxFormula':   renderFormulaTable,
+  'Formula':          renderFormulaTable,
+  'MultiFieldFormula': renderFormulaTable,
+  'AlteryxSummarize': renderSummarizeTable,
+  'Summarize':        renderSummarizeTable,
+  'AlteryxSort':      renderSortTable,
+  'Sort':             renderSortTable,
+};
+
+function _renderPanelEntry(entry, container) {
+  var renderer = _TABLE_RENDERERS[entry.tool_type];
+  if (renderer) {
+    renderer(entry, container);
+  } else {
+    renderConfigRows(entry, container);
+  }
 }
 
 function closePanel() {
   document.getElementById('config-panel').classList.remove('open');
   _panelNodeId = null;
+}
+
+// Generates a valid .xlsx binary (OOXML ZIP) from an array of sheet descriptors.
+// Each sheet: { name: string, rows: string[][], wrapCols: {colIndex: true} }
+function _makeXlsx(sheets) {
+  var enc = new TextEncoder();
+  function b(s) { return enc.encode(s); }
+  var _crc = (function() {
+    var t = new Uint32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var c = i;
+      for (var j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = _crc[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function cat() {
+    var arr = Array.prototype.slice.call(arguments);
+    var n = arr.reduce(function(s, a) { return s + a.length; }, 0);
+    var r = new Uint8Array(n); var off = 0;
+    arr.forEach(function(a) { r.set(a, off); off += a.length; });
+    return r;
+  }
+  function u16(n) { return new Uint8Array([n & 0xFF, (n >> 8) & 0xFF]); }
+  function u32(n) { return new Uint8Array([n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF]); }
+  function colRef(ci) {
+    var s = ''; ci++;
+    while (ci > 0) { ci--; s = String.fromCharCode(65 + (ci % 26)) + s; ci = Math.floor(ci / 26); }
+    return s;
+  }
+  function xesc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function sheetXml(rows, wrapCols) {
+    var rowsXml = rows.map(function(row, ri) {
+      return '<row r="' + (ri + 1) + '">' + row.map(function(cell, ci) {
+        var v = String(cell == null ? '' : cell);
+        var wrap = wrapCols && wrapCols[ci] && v.indexOf('\n') >= 0;
+        return '<c r="' + colRef(ci) + (ri + 1) + '" t="inlineStr"' + (wrap ? ' s="1"' : '') +
+          '><is><t xml:space="preserve">' + xesc(v).replace(/\n/g, '&#10;') + '</t></is></c>';
+      }).join('') + '</row>';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<sheetData>' + rowsXml + '</sheetData></worksheet>';
+  }
+  var ns = sheets.length;
+  var files = [
+    { n: '[Content_Types].xml', d: b(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      sheets.map(function(s,i){return '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';}).join('') +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '</Types>'
+    )},
+    { n: '_rels/.rels', d: b(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>'
+    )},
+    { n: 'xl/workbook.xml', d: b(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets>' + sheets.map(function(s,i){return '<sheet name="'+xesc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>';}).join('') + '</sheets>' +
+      '</workbook>'
+    )},
+    { n: 'xl/_rels/workbook.xml.rels', d: b(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map(function(s,i){return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>';}).join('') +
+      '<Relationship Id="rId'+(ns+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '</Relationships>'
+    )},
+    { n: 'xl/styles.xml', d: b(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="2">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1"/></xf>' +
+      '</cellXfs>' +
+      '</styleSheet>'
+    )},
+  ];
+  sheets.forEach(function(s, i) {
+    files.push({ n: 'xl/worksheets/sheet' + (i + 1) + '.xml', d: b(sheetXml(s.rows, s.wrapCols)) });
+  });
+
+  var offsets = []; var pos = 0;
+  var localParts = [];
+  files.forEach(function(f) {
+    offsets.push(pos);
+    var nb = b(f.n);
+    var hdr = cat(new Uint8Array([0x50,0x4B,0x03,0x04]),
+      u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc32(f.d)), u32(f.d.length), u32(f.d.length), u16(nb.length), u16(0));
+    localParts.push(hdr, nb, f.d);
+    pos += hdr.length + nb.length + f.d.length;
+  });
+
+  var cdParts = [];
+  files.forEach(function(f, i) {
+    var nb = b(f.n);
+    var entry = cat(new Uint8Array([0x50,0x4B,0x01,0x02]),
+      u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc32(f.d)), u32(f.d.length), u32(f.d.length),
+      u16(nb.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offsets[i]));
+    cdParts.push(entry, nb);
+  });
+  var cdSize = cdParts.reduce(function(s, p) { return s + p.length; }, 0);
+  var eocd = cat(new Uint8Array([0x50,0x4B,0x05,0x06]),
+    u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(pos), u16(0));
+
+  return cat.apply(null, localParts.concat(cdParts).concat([eocd]));
+}
+
+function _xlsxDownload(bytes, filename) {
+  var blob = new Blob([bytes], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function _xlsxTimestamp() {
+  var now = new Date();
+  return now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
 }
 
 function downloadSummaryExcel() {
@@ -1675,21 +1980,6 @@ function downloadSummaryExcel() {
     var el = document.getElementById('insights-data');
     return el ? JSON.parse(el.textContent) : [];
   })();
-
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function xmlRow(cells) {
-    return '<Row>' + cells.map(function(c) {
-      return '<Cell><Data ss:Type="String">' + esc(c) + '</Data></Cell>';
-    }).join('') + '</Row>';
-  }
-  function xmlSheet(name, rows) {
-    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
-      rows.map(xmlRow).join('') + '</Table></Worksheet>';
-  }
 
   var hasChange = steps.some(function(s) { return s.change; });
   var summaryHeaders = ['#', 'ID', 'Type', 'Category', 'Description'];
@@ -1739,49 +2029,16 @@ function downloadSummaryExcel() {
     })
   );
 
-  function xmlRowContainers(cells) {
-    return '<Row>' + cells.map(function(c, ci) {
-      var val = esc(c);
-      if (ci === 3 && String(c).indexOf('\n') >= 0) {
-        return '<Cell ss:StyleID="s_wrap"><Data ss:Type="String">' + val + '</Data></Cell>';
-      }
-      return '<Cell><Data ss:Type="String">' + val + '</Data></Cell>';
-    }).join('') + '</Row>';
-  }
-  function xmlSheetContainers(name, rows) {
-    return '<Worksheet ss:Name="' + esc(name) + '"><Table>' +
-      rows.map(xmlRowContainers).join('') + '</Table></Worksheet>';
-  }
-
-  var styles = '<Styles><Style ss:ID="s_wrap"><Alignment ss:WrapText="1"/></Style></Styles>';
-  var sheets = xmlSheet('Summary', summaryRows) +
-    xmlSheet('Input', inputRows) +
-    xmlSheet('Output', outputRows);
-  if (containers.length > 0) sheets += xmlSheetContainers('Containers', containerRows);
-
-  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
-    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    styles + sheets +
-    '</Workbook>';
+  var xlSheets = [
+    { name: 'Summary', rows: summaryRows },
+    { name: 'Input', rows: inputRows },
+    { name: 'Output', rows: outputRows },
+  ];
+  if (containers.length > 0) xlSheets.push({ name: 'Containers', rows: containerRows, wrapCols: {3: true} });
 
   var rawTitle = (document.querySelector('.header-title') || {}).textContent || 'workflow';
   var baseName = rawTitle.trim().replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-.]/g, '_');
-  var now = new Date();
-  var ts = now.getFullYear().toString() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') + '_' +
-    String(now.getHours()).padStart(2, '0') +
-    String(now.getMinutes()).padStart(2, '0') +
-    String(now.getSeconds()).padStart(2, '0');
-
-  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = 'summary_' + baseName + '_' + ts + '.xls';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  _xlsxDownload(_makeXlsx(xlSheets), 'summary_' + baseName + '_' + _xlsxTimestamp() + '.xlsx');
 }
 
 function downloadClusterExcel() {
@@ -1813,44 +2070,14 @@ function downloadClusterExcel() {
   var maxLen = columns.reduce(function(m, c) { return Math.max(m, c.length); }, 0);
   columns.forEach(function(c) { while (c.length < maxLen) c.push(''); });
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  var rowsXml = '';
+  var rows = [];
   for (var r = 0; r < maxLen; r++) {
-    rowsXml += '<Row' + (r === 0 ? ' ss:Index="2"' : '') + '>';
-    columns.forEach(function(col, c) {
-      rowsXml += '<Cell' + (c === 0 ? ' ss:Index="2"' : '') + '><Data ss:Type="String">' + esc(col[r]) + '</Data></Cell>';
-    });
-    rowsXml += '</Row>';
+    rows.push(columns.map(function(col) { return col[r]; }));
   }
-
-  var xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
-    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    '<Worksheet ss:Name="Cluster"><Table>' + rowsXml + '</Table></Worksheet>' +
-    '</Workbook>';
 
   var baseName = toolType.replace(/[^A-Za-z0-9_\-.]/g, '_');
-  var now = new Date();
-  var ts = now.getFullYear().toString() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') + '_' +
-    String(now.getHours()).padStart(2, '0') +
-    String(now.getMinutes()).padStart(2, '0') +
-    String(now.getSeconds()).padStart(2, '0');
-
-  var blob = new Blob([xml], {type: 'application/vnd.ms-excel'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = 'cluster_' + baseName + '_' + ts + '.xls';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  _xlsxDownload(_makeXlsx([{ name: 'Cluster', rows: rows }]),
+    'cluster_' + baseName + '_' + _xlsxTimestamp() + '.xlsx');
 }
 
 
@@ -1918,6 +2145,17 @@ function _clipboardWrite(text, btn, originalLabel) {
 }
 
 function copyPanelContent() {
+  var table = document.getElementById('panel-data-table');
+  if (table) {
+    var rows = [];
+    var ths = table.querySelectorAll('thead tr th');
+    rows.push(Array.prototype.map.call(ths, function(th) { return th.textContent.trim(); }).join('\t'));
+    Array.prototype.forEach.call(table.querySelectorAll('tbody tr'), function(tr) {
+      rows.push(Array.prototype.map.call(tr.querySelectorAll('td'), function(td) { return td.textContent.trim(); }).join('\t'));
+    });
+    _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy for Excel');
+    return;
+  }
   var body = document.getElementById('panel-body');
   var rows = ['Key\tValue'];
   Array.prototype.forEach.call(body.children, function(node) {
@@ -1931,24 +2169,105 @@ function copyPanelContent() {
       rows.push('\t' + node.textContent.trim().replace(/\t/g, ' ').replace(/\n/g, ' '));
     }
   });
-  _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy');
+  _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy for Excel');
+}
+
+function copyPanelId() {
+  if (_panelNodeId === null) return;
+  _clipboardWrite(String(_panelNodeId), document.getElementById('panel-copy-id-btn'), 'Copy ID');
+}
+
+function copyPanelJSON() {
+  if (_panelNodeId === null) return;
+  var data;
+  var cluster = AppState.clusterMap[_panelNodeId];
+  var group = AppState.groupMembers[_panelNodeId];
+  if (cluster) {
+    data = cluster.memberIds.map(function(mid) {
+      var e = CONFIG_MAP[String(mid)];
+      return e ? { id: mid, label: e.label, config: e.config } : { id: mid };
+    });
+  } else if (group) {
+    data = group.memberIds.map(function(mid) {
+      var e = CONFIG_MAP[String(mid)];
+      return e ? { id: mid, label: e.label, config: e.config } : { id: mid };
+    });
+  } else {
+    var entry = CONFIG_MAP[String(_panelNodeId)];
+    data = entry ? entry.config : {};
+  }
+  _clipboardWrite(JSON.stringify(data, null, 2), document.getElementById('panel-copy-json-btn'), 'Copy JSON');
 }
 
 function copyInsightsPanel() {
   var ip = document.getElementById('insights-panel');
   if (!ip) return;
+  var rawTitle = (document.querySelector('.header-title') || {}).textContent || '';
+  var wf = rawTitle.trim().replace(/\.[^.]+$/, '');
   var visible = Array.prototype.filter.call(ip.querySelectorAll('.ki-row'), function(r) {
     return r.style.display !== 'none';
   });
-  var rows = ['ID\tRole\tType\tDescription'];
+  var rows = ['WF\tID\tRole\tType\tDescription'];
   visible.forEach(function(r) {
     var id = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
     var role = r.dataset.role || '';
     var type = (r.querySelector('.ki-badge') || {}).textContent.trim();
     var desc = (r.querySelector('.ki-desc') || {}).textContent.trim();
-    rows.push([id, role, type, desc].join('\t'));
+    rows.push([wf, id, role, type, desc].join('\t'));
   });
   _clipboardWrite(rows.join('\n'), document.getElementById('insights-copy-btn'), 'Copy');
+}
+
+function downloadInsightsExcel() {
+  var ip = document.getElementById('insights-panel');
+  if (!ip) return;
+  var rawTitle = (document.querySelector('.header-title') || {}).textContent || '';
+  var wf = rawTitle.trim().replace(/\.[^.]+$/, '');
+  var baseName = wf.replace(/[^A-Za-z0-9_\-.]/g, '_');
+
+  var visible = Array.prototype.filter.call(ip.querySelectorAll('.ki-row'), function(r) {
+    return r.style.display !== 'none';
+  });
+
+  var inputRows = visible.map(function(r) {
+    var id = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
+    var role = r.dataset.role || '';
+    var type = (r.querySelector('.ki-badge') || {}).textContent.trim();
+    var desc = (r.querySelector('.ki-desc') || {}).textContent.trim();
+    return [wf, id, role, type, desc];
+  });
+
+  var xlSheets = [{ name: 'Input', rows: [['WF', 'ID', 'Role', 'Type', 'Description']].concat(inputRows) }];
+
+  visible.forEach(function(r) {
+    var idText = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
+    var nodeId = parseInt(idText);
+    if (isNaN(nodeId)) return;
+    var entry = CONFIG_MAP[String(nodeId)];
+    if (!entry || entry.tool_type !== 'TextInput') return;
+
+    var cfg = entry.config;
+    var fieldsObj = cfg.Fields || {};
+    var fieldList = fieldsObj.Field || [];
+    if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+    var colNames = fieldList.map(function(f) { return f['@name'] || ''; });
+
+    var dataObj = cfg.Data || {};
+    var rowList = dataObj.r || [];
+    if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
+
+    var rows = rowList.map(function(row, i) {
+      var cells = row.c != null ? row.c : [];
+      if (!Array.isArray(cells)) cells = [cells];
+      return [String(i + 1)].concat(colNames.map(function(_, ci) {
+        return _cellText(cells[ci]);
+      }));
+    });
+
+    xlSheets.push({ name: String(nodeId), rows: [['#'].concat(colNames)].concat(rows) });
+  });
+
+  _xlsxDownload(_makeXlsx(xlSheets), 'inputs_' + baseName + '_' + _xlsxTimestamp() + '.xlsx');
 }
 
 function copySummaryPanel() {
@@ -2060,6 +2379,8 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
   if (btn && btn.dataset.mode === 'excel') downloadClusterExcel();
   else copyPanelContent();
 });
+document.getElementById('panel-copy-json-btn').addEventListener('click', copyPanelJSON);
+document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {

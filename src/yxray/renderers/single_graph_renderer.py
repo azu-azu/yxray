@@ -259,7 +259,7 @@ _HTML_TEMPLATE = """\
     }
     .panel-title {
       font-size: 14px; font-weight: 600;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
       color: var(--text);
@@ -270,16 +270,18 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
-    #panel-copy-btn {
-      float: right; cursor: pointer;
-      font-size: 11px; color: var(--text-muted);
-      background: none; border: 1px solid var(--border);
-      border-radius: 3px; padding: 1px 7px; margin: 1px 6px 0 0;
-      line-height: 1.5;
-    }
-    #panel-copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #panel-title-text { cursor: pointer; }
     #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
+    #panel-action-bar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .panel-action-btn {
+      cursor: pointer; font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 2px 8px; line-height: 1.5;
+    }
+    .panel-action-btn:hover { color: var(--text); border-color: var(--text-muted); }
     .config-row { margin: 8px 0; }
     .config-key {
       font-size: 11px; font-weight: 600;
@@ -297,6 +299,39 @@ _HTML_TEMPLATE = """\
       font-size: 12px; font-weight: 600; color: var(--accent);
       margin: 10px 0 4px; padding-top: 8px;
       border-top: 1px solid var(--border-subtle);
+    }
+    #panel-table-wrapper {
+      overflow: auto;
+      max-height: calc(100vh - 220px);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    #panel-data-table {
+      border-collapse: collapse;
+      font-size: 12px;
+      width: 100%;
+    }
+    #panel-data-table thead th {
+      text-align: left; padding: 5px 8px;
+      border-bottom: 2px solid var(--border);
+      font-size: 11px; font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      position: sticky; top: 0;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+    #panel-data-table tbody td {
+      padding: 3px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: nowrap; color: var(--text);
+    }
+    #panel-data-table tbody tr:hover td { background: var(--surface-2); }
+    #panel-data-table thead th:first-child,
+    #panel-data-table tbody td:first-child {
+      color: var(--text-muted); text-align: right;
+      padding-right: 10px; min-width: 24px; width: 24px;
     }
     /* Memo feature */
     #memo-modal-overlay {
@@ -550,6 +585,7 @@ _HTML_TEMPLATE = """\
     <div id="insights-panel-header">
       <span id="insights-panel-title">At a Glance</span>
       <div class="panel-header-actions">
+        <button class="panel-copy-btn" id="insights-excel-btn" onclick="downloadInsightsExcel()">&#8595; Excel</button>
         <button class="panel-copy-btn" id="insights-copy-btn" onclick="copyInsightsPanel()">Copy</button>
         <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
       </div>
@@ -632,8 +668,12 @@ _HTML_TEMPLATE = """\
     <div id="panel-drag-handle"></div>
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
-      <button id="panel-copy-btn">Copy</button>
       <span id="panel-title-text"></span>
+    </div>
+    <div id="panel-action-bar">
+      <button class="panel-action-btn" id="panel-copy-id-btn">Copy ID</button>
+      <button class="panel-action-btn" id="panel-copy-btn">Copy for Excel</button>
+      <button class="panel-action-btn" id="panel-copy-json-btn">Copy JSON</button>
     </div>
     <div id="panel-body"></div>
   </div>
@@ -899,9 +939,22 @@ function openInsightsPanelFiltered(role) {
     ip.classList.add('open');
     _syncPanelBtnState();
 }
+function _clearPanelFocus() {
+    if (_focusHighlightPanelEl) { _focusHighlightPanelEl.classList.remove('focused'); _focusHighlightPanelEl = null; }
+    if (_focusHighlightId !== null && typeof nodesDataset !== 'undefined' && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var _r = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(_r);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+    if (typeof network !== 'undefined' && network) network.selectNodes([]);
+}
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    _clearPanelFocus();
     _syncPanelBtnState();
 }
 function openSummaryPanel() {
@@ -918,6 +971,7 @@ function openSummaryPanel() {
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _clearPanelFocus();
     _syncPanelBtnState();
 }
 function openContainersPanel() {
@@ -1025,6 +1079,7 @@ function makeDragResize(panelId, handleId, direction) {
         if (typeof _insightsPanelActiveRole !== 'undefined') _insightsPanelActiveRole = null;
         if (typeof _searchPrevPanel !== 'undefined') _searchPrevPanel = null;
         if (typeof _searchResultsFocusEl !== 'undefined') _searchResultsFocusEl = null;
+        _clearPanelFocus();
         _syncPanelBtnState();
     });
 })();
@@ -1143,6 +1198,7 @@ class SingleGraphRenderer:
         config_map: dict[str, Any] = {
             str(int(node.tool_id)): {
                 "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
+                "tool_type": node.tool_type.split(".")[-1],
                 "config": self._clean_config(node),
             }
             for node in data_nodes
