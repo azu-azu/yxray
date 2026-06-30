@@ -233,39 +233,26 @@ app.command("inspect")(_inspect_impl)
 app.command("i", hidden=True)(_inspect_impl)
 
 
-def _cluster_sql_impl(  # noqa: B008
+def _explain_impl(  # noqa: B008
     workflow: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help=".yxmd or .yxwz workflow file"
     ),
-    input_json: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help="Cluster JSON file downloaded from inspect view"
-    ),
-    output: pathlib.Path | None = typer.Option(  # noqa: B008
-        None,
-        "--output",
-        "-o",
-        help="Write SQL to file instead of stdout",
+    json_output: bool = typer.Option(  # noqa: B008
+        False,
+        "--json",
+        help="Write JSON to stdout instead of plain text",
     ),
 ) -> None:
-    """Convert a downloaded cluster JSON to ANSI SQL-like output.
+    """Show each tool's Python/pandas equivalent in topological order.
 
-    Download the cluster JSON from the inspect view (↓ JSON button), then run:
+    Outputs a plain-text report (or JSON with --json) mapping every
+    Alteryx tool to its nearest pandas equivalent.  Unsupported tools
+    are flagged with a TODO comment.
 
-      acd sql workflow.yxmd cluster_Filter_20260622.json
+      acd explain workflow.yxmd
+      acd explain workflow.yxmd --json
     """
-    from yxray.models.types import ToolID
-    from yxray.sql import convert_cluster_to_sql
-
-    try:
-        payload = json.loads(input_json.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        typer.echo(f"Error reading {input_json}: {e}", err=True)
-        raise typer.Exit(code=2) from None
-
-    tool_ids = [ToolID(int(t)) for t in payload.get("tool_ids", [])]
-    if not tool_ids:
-        typer.echo("Error: no tool_ids found in JSON", err=True)
-        raise typer.Exit(code=2)
+    from yxray.explain import explain
 
     try:
         doc = parse_one(workflow)
@@ -276,21 +263,23 @@ def _cluster_sql_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
-    result = convert_cluster_to_sql(doc, tool_ids)
+    steps = explain(doc)
 
-    if output:
-        output.write_text(result.sql, encoding="utf-8")
-        typer.echo(f"SQL written to {output}", err=True)
-    else:
-        typer.echo(result.sql)
+    if json_output:
+        typer.echo(json.dumps([s.to_dict() for s in steps], indent=2, ensure_ascii=False))
+        return
 
-    if result.report.warnings:
-        for w in result.report.warnings:
-            typer.echo(f"warning: {w}", err=True)
+    for step in steps:
+        tag = " [unsupported]" if not step.supported else ""
+        typer.echo(f"ToolID {step.tool_id}: {step.short_type}{tag}")
+        if step.description:
+            typer.echo(f"  description: {step.description}")
+        typer.echo(f"  python_hint: {step.python_hint}")
+        typer.echo("")
 
 
-app.command("cluster-to-sql")(_cluster_sql_impl)
-app.command("sql", hidden=True)(_cluster_sql_impl)
+app.command("explain")(_explain_impl)
+app.command("ex", hidden=True)(_explain_impl)
 
 
 def _file_sha256(path: pathlib.Path) -> str:
