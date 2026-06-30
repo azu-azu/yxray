@@ -551,7 +551,7 @@ function downloadSummaryExcel() {
     { name: 'Output', rows: outputRows },
   ];
   if (containers.length > 0) xlSheets.push({ name: 'Containers', rows: containerRows });
-  var baseName = {{ file_b | tojson }}.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var baseName = {{ file_b | tojson }}.replace(/\\.[^.]+$/, '').replace(/[^A-Za-z0-9_\\-.]/g, '_');
   var now = new Date();
   var ts = now.getFullYear().toString() +
     String(now.getMonth() + 1).padStart(2, '0') +
