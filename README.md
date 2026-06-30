@@ -26,7 +26,7 @@ Visualize a single workflow as a standalone HTML report:
 
 ```bash
 acd inspect workflow.yxmd
-# → output/workflow.html
+# → output/workflow_report.html
 ```
 
 Custom output path:
@@ -168,18 +168,23 @@ scaffold → Scaffold generator → .py skeleton
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
 
 # Tests
-pytest
+python -m pytest
 
 # Type checking
-mypy src/
+python -m mypy src/yxray
 
 # Lint / format
-ruff check src/ tests/
-ruff format src/ tests/
+python -m ruff check .
+python -m ruff format src tests
 ```
+
+CI runs the same lint, type-check, and test suite on Python 3.11, 3.12, and
+3.13.
 
 ---
 
