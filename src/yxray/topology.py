@@ -8,6 +8,39 @@ from typing import Any
 from yxray.models.workflow import WorkflowDoc
 
 
+def topo_order(doc: WorkflowDoc) -> list[int]:
+    """Return tool IDs in topological order (Kahn's algorithm, sources first).
+
+    ToolContainer nodes are excluded — they carry no data-flow information
+    and would otherwise appear as spurious sources (in_degree == 0).
+    Any remaining nodes after cycle detection are appended in original order.
+    """
+    node_ids = [
+        int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type
+    ]
+    in_degree: dict[int, int] = {nid: 0 for nid in node_ids}
+    successors: dict[int, list[int]] = {nid: [] for nid in node_ids}
+    for edge in doc.connections:
+        s, d = int(edge.src_tool), int(edge.dst_tool)
+        if s in successors and d in in_degree:
+            successors[s].append(d)
+            in_degree[d] += 1
+    queue: deque[int] = deque(nid for nid in node_ids if in_degree[nid] == 0)
+    result: list[int] = []
+    while queue:
+        nid = queue.popleft()
+        result.append(nid)
+        for s in successors[nid]:
+            in_degree[s] -= 1
+            if in_degree[s] == 0:
+                queue.append(s)
+    visited = set(result)
+    for nid in node_ids:
+        if nid not in visited:
+            result.append(nid)
+    return result
+
+
 def compute_node_layer(doc: WorkflowDoc) -> dict[int, int]:
     node_ids = [
         node.tool_id for node in doc.nodes if "ToolContainer" not in node.tool_type
