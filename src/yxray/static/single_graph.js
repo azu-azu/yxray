@@ -2555,11 +2555,26 @@ function makeSearchTester(query) {
 }
 
 function focusSearchMatch(nodeId, animationDuration) {
-  if (!network || nodeId === null || nodesDataset.get(nodeId) === null) return false;
-  network.focus(nodeId, {
+  if (!network || nodeId === null) return false;
+
+  var visibleId = (typeof resolveNode === 'function') ? resolveNode(nodeId) : nodeId;
+  if (visibleId === null) return false;
+
+  var expandedFromCluster = false;
+  if (typeof visibleId === 'string' &&
+      (visibleId.indexOf('cluster:') === 0 || visibleId.indexOf('container:') === 0) &&
+      typeof expandCluster === 'function') {
+    expandCluster(visibleId);
+    visibleId = nodeId;
+    expandedFromCluster = true;
+  }
+
+  if (nodesDataset.get(visibleId) === null) return false;
+  network.focus(visibleId, {
     scale: FOCUS_SCALE,
-    animation: {duration: animationDuration, easingFunction: 'easeInOutQuad'}
+    animation: expandedFromCluster ? false : {duration: animationDuration, easingFunction: 'easeInOutQuad'}
   });
+  network.selectNodes([visibleId]);
   return true;
 }
 

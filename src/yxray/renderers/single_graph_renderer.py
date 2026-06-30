@@ -837,9 +837,11 @@ function openSearchResultsPanel(entries) {
             return function(e) {
                 e.stopPropagation();
                 if (_searchResultsFocusEl) _searchResultsFocusEl.classList.remove('focused');
-                badgeEl.classList.add('focused');
                 _searchResultsFocusEl = badgeEl;
-                if (typeof network !== 'undefined' && network) {
+                if (typeof focusNode === 'function') {
+                    focusNode(id, badgeEl);
+                } else if (typeof network !== 'undefined' && network) {
+                    badgeEl.classList.add('focused');
                     var visId = (typeof resolveNode === 'function') ? resolveNode(id) : id;
                     if (visId !== null) {
                         network.selectNodes([visId]);
