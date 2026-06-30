@@ -199,25 +199,25 @@ def _tree_to_workflow(
             _element_to_dict(config_elem) if config_elem is not None else {}
         )
 
-        engine_settings: etree._Element | None = node_elem.find(
-            "Properties/EngineSettings"
-        )
+        # ToolContainerID lives under Properties/EngineSettings (regular tools).
+        props_engine: etree._Element | None = node_elem.find("Properties/EngineSettings")
         container_id_str = (
-            engine_settings.get("ToolContainerID")
-            if engine_settings is not None
-            else None
+            props_engine.get("ToolContainerID") if props_engine is not None else None
         )
         container_id: int | None = (
             int(container_id_str) if container_id_str is not None else None
         )
 
-        # When GuiSettings/Plugin is absent, fall back to EngineSettings/@Macro.
-        # e.g. <EngineSettings Macro="CountRecords.yxmc" /> → "Macro.CountRecords"
-        if not plugin and engine_settings is not None:
-            macro_path = engine_settings.get("Macro", "")
-            if macro_path:
-                plugin = "Macro." + pathlib.Path(macro_path).stem
-                config = {**config, "@Macro": macro_path}
+        # Macro tools place <EngineSettings Macro="..." /> directly under <Node>,
+        # not inside <Properties>.  When GuiSettings/Plugin is absent, use the
+        # macro filename stem as a fallback tool_type.
+        if not plugin:
+            node_engine: etree._Element | None = node_elem.find("EngineSettings")
+            if node_engine is not None:
+                macro_path = node_engine.get("Macro", "")
+                if macro_path:
+                    plugin = "Macro." + pathlib.Path(macro_path).stem
+                    config = {**config, "@Macro": macro_path}
 
         nodes_list.append(
             AlteryxNode(
