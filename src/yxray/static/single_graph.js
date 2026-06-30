@@ -1609,6 +1609,12 @@ function renderTextInputTable(entry, container) {
   thead.appendChild(hrow);
   table.appendChild(thead);
 
+  function _cellText(c) {
+    if (c == null) return '';
+    if (typeof c === 'object') return c['#text'] != null ? String(c['#text']) : '';
+    return String(c);
+  }
+
   var tbody = document.createElement('tbody');
   rowList.forEach(function(r) {
     var cells = r.c != null ? r.c : [];
@@ -1616,7 +1622,7 @@ function renderTextInputTable(entry, container) {
     var tr = document.createElement('tr');
     headers.forEach(function(_, ci) {
       var td = document.createElement('td');
-      td.textContent = cells[ci] != null ? String(cells[ci]) : '';
+      td.textContent = _cellText(cells[ci]);
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
