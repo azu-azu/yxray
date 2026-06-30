@@ -178,7 +178,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     ),
 }
 
-JOIN_SEGMENTS = frozenset({"AlteryxJoin", "Join", "AlteryxAppend", "Append"})
+JOIN_TOOL_SEGMENTS = frozenset({"AlteryxJoin", "Join"})
+APPEND_SEGMENTS = frozenset({"AlteryxAppend", "Append"})
+JOIN_SEGMENTS = JOIN_TOOL_SEGMENTS | APPEND_SEGMENTS
 UNION_SEGMENTS = frozenset({"AlteryxUnion", "Union"})
 AGGREGATE_SEGMENTS = frozenset(
     {
@@ -196,13 +198,11 @@ SELECT_SEGMENTS = frozenset({"AlteryxSelect", "Select"})
 
 SCAFFOLD_INPUT_SEGMENTS = frozenset({"DbFileInput", "InputData", "TextInput"})
 SCAFFOLD_OUTPUT_SEGMENTS = frozenset({"DbFileOutput", "OutputData"})
-SCAFFOLD_FILTER_SEGMENTS = frozenset({"AlteryxFilter", "Filter"})
-SCAFFOLD_SELECT_SEGMENTS = frozenset({"AlteryxSelect", "Select"})
-SCAFFOLD_FORMULA_SEGMENTS = frozenset({"AlteryxFormula", "Formula"})
-SCAFFOLD_JOIN_SEGMENTS = frozenset({"AlteryxJoin", "Join"})
-SCAFFOLD_UNION_SEGMENTS = frozenset(
-    {"AlteryxUnion", "Union", "AlteryxAppend", "Append"}
-)
+SCAFFOLD_FILTER_SEGMENTS = FILTER_SEGMENTS
+SCAFFOLD_SELECT_SEGMENTS = SELECT_SEGMENTS
+SCAFFOLD_FORMULA_SEGMENTS = FORMULA_SEGMENTS - {"MultiFieldFormula"}
+SCAFFOLD_JOIN_SEGMENTS = JOIN_TOOL_SEGMENTS
+SCAFFOLD_UNION_SEGMENTS = UNION_SEGMENTS | APPEND_SEGMENTS
 SCAFFOLD_SUMMARIZE_SEGMENTS = frozenset({"AlteryxSummarize", "Summarize"})
 SCAFFOLD_SORT_SEGMENTS = frozenset({"AlteryxSort", "Sort"})
 SCAFFOLD_SAMPLE_SEGMENTS = frozenset({"AlteryxSample", "Sample"})
