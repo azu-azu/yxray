@@ -137,11 +137,11 @@ def explain(doc: WorkflowDoc) -> list[ExplainStep]:
     Each step carries the tool description from summarize() plus a
     python_hint string showing the nearest pandas/Python equivalent.
     """
-    node_map = {n.tool_id: n for n in doc.nodes}
+    node_map = {int(n.tool_id): n for n in doc.nodes}
     steps = summarize(doc)
     result: list[ExplainStep] = []
     for step in steps:
-        node = node_map.get(step.tool_id)  # type: ignore[call-overload]
+        node = node_map.get(step.tool_id)
         segment = node.tool_type.split(".")[-1] if node else ""
         hint, supported = _HINTS.get(segment, (_UNSUPPORTED_HINT, False))
         result.append(
