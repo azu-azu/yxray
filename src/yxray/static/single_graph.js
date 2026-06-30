@@ -1515,7 +1515,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      renderConfigRows(entry, body);
+      _renderPanelEntry(entry, body);
     });
   } else if (AppState.groupMembers[groupKey]) {
     // Expanded state → show Collapse button
@@ -1543,7 +1543,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      renderConfigRows(entry, body);
+      _renderPanelEntry(entry, body);
     });
   }
   document.getElementById('config-panel').classList.add('open');
@@ -1572,6 +1572,59 @@ function renderConfigRows(entry, container) {
     row.appendChild(valEl);
     container.appendChild(row);
   });
+}
+
+function renderTextInputTable(entry, container) {
+  var cfg = entry.config;
+  var fieldsObj = cfg.Fields || {};
+  var fieldList = fieldsObj.Field || [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+  var headers = fieldList.map(function(f) { return f['@name'] || ''; });
+
+  var dataObj = cfg.Data || {};
+  var rowList = dataObj.r || [];
+  if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
+
+  if (headers.length === 0) {
+    var empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--text-muted);font-size:13px;';
+    empty.textContent = 'No data.';
+    container.appendChild(empty);
+    return;
+  }
+
+  var wrapper = document.createElement('div');
+  wrapper.id = 'panel-table-wrapper';
+
+  var table = document.createElement('table');
+  table.id = 'panel-data-table';
+
+  var thead = document.createElement('thead');
+  var hrow = document.createElement('tr');
+  headers.forEach(function(h) {
+    var th = document.createElement('th');
+    th.textContent = h;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  var tbody = document.createElement('tbody');
+  rowList.forEach(function(r) {
+    var cells = r.c != null ? r.c : [];
+    if (!Array.isArray(cells)) cells = [cells];
+    var tr = document.createElement('tr');
+    headers.forEach(function(_, ci) {
+      var td = document.createElement('td');
+      td.textContent = cells[ci] != null ? String(cells[ci]) : '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  wrapper.appendChild(table);
+  container.appendChild(wrapper);
 }
 
 var _panelNodeId = null;
@@ -1649,7 +1702,7 @@ function openPanel(nodeId) {
     collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
-    if (_entry) renderConfigRows(_entry, body);
+    if (_entry) _renderPanelEntry(_entry, body);
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -1657,8 +1710,16 @@ function openPanel(nodeId) {
   var entry = CONFIG_MAP[String(nodeId)];
   if (!entry) return;
   document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
-  renderConfigRows(entry, body);
+  _renderPanelEntry(entry, body);
   document.getElementById('config-panel').classList.add('open');
+}
+
+function _renderPanelEntry(entry, container) {
+  if (entry.tool_type === 'TextInput') {
+    renderTextInputTable(entry, container);
+  } else {
+    renderConfigRows(entry, container);
+  }
 }
 
 function closePanel() {
@@ -1918,6 +1979,17 @@ function _clipboardWrite(text, btn, originalLabel) {
 }
 
 function copyPanelContent() {
+  var table = document.getElementById('panel-data-table');
+  if (table) {
+    var rows = [];
+    var ths = table.querySelectorAll('thead tr th');
+    rows.push(Array.prototype.map.call(ths, function(th) { return th.textContent.trim(); }).join('\t'));
+    Array.prototype.forEach.call(table.querySelectorAll('tbody tr'), function(tr) {
+      rows.push(Array.prototype.map.call(tr.querySelectorAll('td'), function(td) { return td.textContent.trim(); }).join('\t'));
+    });
+    _clipboardWrite(rows.join('\n'), document.getElementById('panel-copy-btn'), 'Copy for Excel');
+    return;
+  }
   var body = document.getElementById('panel-body');
   var rows = ['Key\tValue'];
   Array.prototype.forEach.call(body.children, function(node) {

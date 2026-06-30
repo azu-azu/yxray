@@ -300,6 +300,34 @@ _HTML_TEMPLATE = """\
       margin: 10px 0 4px; padding-top: 8px;
       border-top: 1px solid var(--border-subtle);
     }
+    #panel-table-wrapper {
+      overflow: auto;
+      max-height: calc(100vh - 220px);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    #panel-data-table {
+      border-collapse: collapse;
+      font-size: 12px;
+      width: 100%;
+    }
+    #panel-data-table thead th {
+      text-align: left; padding: 5px 8px;
+      border-bottom: 2px solid var(--border);
+      font-size: 11px; font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      position: sticky; top: 0;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+    #panel-data-table tbody td {
+      padding: 3px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: nowrap; color: var(--text);
+    }
+    #panel-data-table tbody tr:hover td { background: var(--surface-2); }
     /* Memo feature */
     #memo-modal-overlay {
       display: none; position: fixed; inset: 0;
@@ -1149,6 +1177,7 @@ class SingleGraphRenderer:
         config_map: dict[str, Any] = {
             str(int(node.tool_id)): {
                 "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
+                "tool_type": node.tool_type.split(".")[-1],
                 "config": self._clean_config(node),
             }
             for node in data_nodes
