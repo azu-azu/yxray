@@ -24,24 +24,52 @@ _TEMPLATE = """<!DOCTYPE html>
 .header-inner { max-width: none; }
 .theme-toggle { line-height: 1; }
 .theme-toggle svg { display: block; }
-/* ---- Join accent variables (also used by insights panel badges) ---- */
+/* ---- Summary stat cards ---- */
 :root { --accent-join: #c4b5fd; --accent-join-bg: #1e0937; --accent-join-border: #4c1d95; }
 html.light { --accent-join: #7c3aed; --accent-join-bg: #f5f3ff; --accent-join-border: #ddd6fe; }
-/* ---- Header diff chips ---- */
-.diff-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.diff-chip {
-  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-  border: 1px solid; white-space: nowrap; line-height: 1.6;
+#summary { padding: 16px 32px 0; }
+.stat-cards { display: flex; gap: 12px; margin-bottom: 0; align-items: stretch; }
+.stat-card-group {
+  display: flex; gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
 }
-.diff-chip-added    { background: var(--accent-added-bg);    border-color: var(--accent-added-border);    color: var(--accent-added); }
-.diff-chip-modified { background: var(--accent-modified-bg); border-color: var(--accent-modified-border); color: var(--accent-modified); }
-.diff-chip-removed  { background: var(--accent-removed-bg);  border-color: var(--accent-removed-border);  color: var(--accent-removed); }
-.diff-chip-input    { background: var(--accent-conn-bg);     border-color: var(--accent-conn-border);     color: var(--accent-conn); }
-.diff-chip-output   { background: var(--accent-added-bg);    border-color: var(--accent-added-border);    color: var(--accent-added); }
-.diff-chip-join     { background: var(--accent-join-bg);     border-color: var(--accent-join-border);     color: var(--accent-join); }
-button.diff-chip { font: inherit; cursor: pointer; }
-button.diff-chip:hover { opacity: 0.8; }
-.diff-chips-sep { color: var(--border); font-size: 14px; }
+.stat-card {
+  flex: 1; border-radius: 8px; padding: 16px;
+  border: 1px solid; transition: opacity 0.15s ease; text-decoration: none;
+}
+.stat-card-added { background: var(--accent-added-bg); border-color: var(--accent-added-border); }
+.stat-card-removed { background: var(--accent-removed-bg); border-color: var(--accent-removed-border); }
+.stat-card-modified { background: var(--accent-modified-bg); border-color: var(--accent-modified-border); }
+.stat-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.stat-card-added .stat-label { color: var(--accent-added); opacity: 0.8; }
+.stat-card-removed .stat-label { color: var(--accent-removed); opacity: 0.8; }
+.stat-card-modified .stat-label { color: var(--accent-modified); opacity: 0.8; }
+.stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.stat-card-added .stat-dot { background: var(--accent-added); }
+.stat-card-removed .stat-dot { background: var(--accent-removed); }
+.stat-card-modified .stat-dot { background: var(--accent-modified); }
+.stat-count { font-size: 32px; font-weight: 700; line-height: 1; }
+.stat-card-added .stat-count { color: var(--accent-added); }
+.stat-card-removed .stat-count { color: var(--accent-removed); }
+.stat-card-modified .stat-count { color: var(--accent-modified); }
+button.stat-card { font: inherit; text-align: left; cursor: pointer; }
+button.stat-card:hover { opacity: 0.85; }
+.stat-card-input  { background: var(--accent-conn-bg);  border-color: var(--accent-conn-border); }
+.stat-card-output { background: var(--accent-added-bg); border-color: var(--accent-added-border); }
+.stat-card-join   { background: var(--accent-join-bg);  border-color: var(--accent-join-border); }
+.stat-card-input  .stat-label { color: var(--accent-conn);  opacity: 0.8; }
+.stat-card-output .stat-label { color: var(--accent-added); opacity: 0.8; }
+.stat-card-join   .stat-label { color: var(--accent-join);  opacity: 0.8; }
+.stat-card-input  .stat-dot   { background: var(--accent-conn); }
+.stat-card-output .stat-dot   { background: var(--accent-added); }
+.stat-card-join   .stat-dot   { background: var(--accent-join); }
+.stat-card-input  .stat-count { color: var(--accent-conn); }
+.stat-card-output .stat-count { color: var(--accent-added); }
+.stat-card-join   .stat-count { color: var(--accent-join); }
 /* Insights panel (input/output/join list) */
 #insights-panel {
   position: fixed; top: 0; left: 0;
@@ -195,26 +223,45 @@ button.diff-chip:hover { opacity: 0.8; }
         </button>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-      <div style="display:flex;flex-direction:column;gap:2px;">
-        <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
-        <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
-        <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
-      </div>
-      <div class="diff-chips" style="flex-shrink:0;padding-top:2px;">
-        <span class="diff-chip diff-chip-added">+{{ summary.added }} Added</span>
-        <span class="diff-chip diff-chip-modified">~{{ summary.modified }} Modified</span>
-        <span class="diff-chip diff-chip-removed">-{{ summary.removed }} Removed</span>
-        {% if summary.inputs or summary.outputs or summary.joins %}
-        <span class="diff-chips-sep">|</span>
-        {% if summary.inputs %}<button class="diff-chip diff-chip-input" onclick="openInsightsPanel('input')">{{ summary.inputs }} Input</button>{% endif %}
-        {% if summary.outputs %}<button class="diff-chip diff-chip-output" onclick="openInsightsPanel('output')">{{ summary.outputs }} Output</button>{% endif %}
-        {% if summary.joins %}<button class="diff-chip diff-chip-join" onclick="openInsightsPanel('join')">{{ summary.joins }} Join</button>{% endif %}
-        {% endif %}
-      </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
+      <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
+      <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
     </div>
   </div>
 </header>
+<section id="summary">
+  <div class="stat-cards">
+    <div class="stat-card stat-card-added">
+      <div class="stat-card-top"><span class="stat-label">Added</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.added }}</div>
+    </div>
+    <div class="stat-card stat-card-modified">
+      <div class="stat-card-top"><span class="stat-label">Modified</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.modified }}</div>
+    </div>
+    <div class="stat-card stat-card-removed">
+      <div class="stat-card-top"><span class="stat-label">Removed</span><span class="stat-dot"></span></div>
+      <div class="stat-count">{{ summary.removed }}</div>
+    </div>
+    {% if summary.inputs or summary.outputs or summary.joins %}
+    <div class="stat-card-group">
+      {% if summary.inputs %}<button onclick="openInsightsPanel('input')" class="stat-card stat-card-input">
+        <div class="stat-card-top"><span class="stat-label">Input</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.inputs }}</div>
+      </button>{% endif %}
+      {% if summary.outputs %}<button onclick="openInsightsPanel('output')" class="stat-card stat-card-output">
+        <div class="stat-card-top"><span class="stat-label">Output</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.outputs }}</div>
+      </button>{% endif %}
+      {% if summary.joins %}<button onclick="openInsightsPanel('join')" class="stat-card stat-card-join">
+        <div class="stat-card-top"><span class="stat-label">Join</span><span class="stat-dot"></span></div>
+        <div class="stat-count">{{ summary.joins }}</div>
+      </button>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
 <script type="application/json" id="diff-data">{{ diff_data | tojson }}</script>
 {% if workflow_steps %}
 <script type="application/json" id="summary-data">{{ workflow_steps | tojson }}</script>
