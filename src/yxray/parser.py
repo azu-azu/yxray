@@ -211,6 +211,14 @@ def _tree_to_workflow(
             int(container_id_str) if container_id_str is not None else None
         )
 
+        # When GuiSettings/Plugin is absent, fall back to EngineSettings/@Macro.
+        # e.g. <EngineSettings Macro="CountRecords.yxmc" /> → "Macro.CountRecords"
+        if not plugin and engine_settings is not None:
+            macro_path = engine_settings.get("Macro", "")
+            if macro_path:
+                plugin = "Macro." + pathlib.Path(macro_path).stem
+                config = {**config, "@Macro": macro_path}
+
         nodes_list.append(
             AlteryxNode(
                 tool_id=tool_id,
