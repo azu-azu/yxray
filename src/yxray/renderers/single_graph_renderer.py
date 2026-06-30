@@ -328,6 +328,11 @@ _HTML_TEMPLATE = """\
       white-space: nowrap; color: var(--text);
     }
     #panel-data-table tbody tr:hover td { background: var(--surface-2); }
+    #panel-data-table thead th:first-child,
+    #panel-data-table tbody td:first-child {
+      color: var(--text-muted); text-align: right;
+      padding-right: 10px; min-width: 24px; width: 24px;
+    }
     /* Memo feature */
     #memo-modal-overlay {
       display: none; position: fixed; inset: 0;
