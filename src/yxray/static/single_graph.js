@@ -1574,28 +1574,22 @@ function renderConfigRows(entry, container) {
   });
 }
 
-function renderTextInputTable(entry, container) {
-  var cfg = entry.config;
-  var fieldsObj = cfg.Fields || {};
-  var fieldList = fieldsObj.Field || [];
-  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
-  var headers = fieldList.map(function(f) { return f['@name'] || ''; });
+function _cellText(c) {
+  if (c == null) return '';
+  if (typeof c === 'object') return c['#text'] != null ? String(c['#text']) : '';
+  return String(c);
+}
 
-  var dataObj = cfg.Data || {};
-  var rowList = dataObj.r || [];
-  if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
-
-  if (headers.length === 0) {
+function _buildPanelTable(headers, rows, container) {
+  if (rows.length === 0 && headers.length === 0) {
     var empty = document.createElement('div');
     empty.style.cssText = 'color:var(--text-muted);font-size:13px;';
     empty.textContent = 'No data.';
     container.appendChild(empty);
     return;
   }
-
   var wrapper = document.createElement('div');
   wrapper.id = 'panel-table-wrapper';
-
   var table = document.createElement('table');
   table.id = 'panel-data-table';
 
@@ -1609,20 +1603,12 @@ function renderTextInputTable(entry, container) {
   thead.appendChild(hrow);
   table.appendChild(thead);
 
-  function _cellText(c) {
-    if (c == null) return '';
-    if (typeof c === 'object') return c['#text'] != null ? String(c['#text']) : '';
-    return String(c);
-  }
-
   var tbody = document.createElement('tbody');
-  rowList.forEach(function(r) {
-    var cells = r.c != null ? r.c : [];
-    if (!Array.isArray(cells)) cells = [cells];
+  rows.forEach(function(row) {
     var tr = document.createElement('tr');
-    headers.forEach(function(_, ci) {
+    row.forEach(function(cell) {
       var td = document.createElement('td');
-      td.textContent = _cellText(cells[ci]);
+      td.textContent = cell;
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -1631,6 +1617,97 @@ function renderTextInputTable(entry, container) {
 
   wrapper.appendChild(table);
   container.appendChild(wrapper);
+}
+
+function renderTextInputTable(entry, container) {
+  var cfg = entry.config;
+  var fieldsObj = cfg.Fields || {};
+  var fieldList = fieldsObj.Field || [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+  var colNames = fieldList.map(function(f) { return f['@name'] || ''; });
+
+  var dataObj = cfg.Data || {};
+  var rowList = dataObj.r || [];
+  if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
+
+  var rows = rowList.map(function(r, i) {
+    var cells = r.c != null ? r.c : [];
+    if (!Array.isArray(cells)) cells = [cells];
+    return [String(i + 1)].concat(colNames.map(function(_, ci) {
+      return _cellText(cells[ci]);
+    }));
+  });
+
+  _buildPanelTable(['#'].concat(colNames), rows, container);
+}
+
+function renderSelectTable(entry, container) {
+  var cfg = entry.config;
+  var fields = cfg.SelectFields || cfg.Fields || {};
+  var fieldList = (typeof fields === 'object') ? (fields.SelectField || fields.Field || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), '', '', '', ''];
+    var name = f['@field'] || f['@name'] || f['@Field'] || f['@Name'] || '';
+    var selected = (f['@selected'] || f['@Selected'] || 'True').toLowerCase() !== 'false' ? '✓' : '✗';
+    var rename = f['@rename'] || f['@Rename'] || '';
+    var type = f['@type'] || f['@Type'] || '';
+    var size = f['@size'] || f['@Size'] || '';
+    return [String(i + 1), name, selected, rename, type, size];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Selected', 'Rename', 'Type', 'Size'], rows, container);
+}
+
+function renderFormulaTable(entry, container) {
+  var cfg = entry.config;
+  var ffs = cfg.FormulaFields || {};
+  var fieldList = (typeof ffs === 'object') ? (ffs.FormulaField || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), '', String(f), ''];
+    var field = f['@field'] || f['@name'] || '';
+    var expr = f['@expression'] || f['@formula'] || '';
+    if (!expr && f.Expression) expr = _cellText(f.Expression);
+    var type = f['@type'] || '';
+    return [String(i + 1), field, expr, type];
+  });
+
+  _buildPanelTable(['#', 'Output Field', 'Expression', 'Type'], rows, container);
+}
+
+function renderSummarizeTable(entry, container) {
+  var cfg = entry.config;
+  var sf = cfg.SummarizeFields || {};
+  var fieldList = (typeof sf === 'object') ? (sf.SummarizeField || []) : [];
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+
+  var rows = fieldList.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), '', ''];
+    var field = f['@field'] || '';
+    var action = f['@action'] || '';
+    var rename = f['@rename'] || '';
+    return [String(i + 1), field, action, rename];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Action', 'Output Name'], rows, container);
+}
+
+function renderSortTable(entry, container) {
+  var cfg = entry.config;
+  var sortInfo = cfg.SortInfo || [];
+  if (!Array.isArray(sortInfo)) sortInfo = sortInfo ? [sortInfo] : [];
+
+  var rows = sortInfo.map(function(f, i) {
+    if (typeof f !== 'object') return [String(i + 1), String(f), ''];
+    var field = f['@field'] || '';
+    var order = f['@order'] || '';
+    return [String(i + 1), field, order];
+  });
+
+  _buildPanelTable(['#', 'Field', 'Order'], rows, container);
 }
 
 var _panelNodeId = null;
@@ -1720,9 +1797,23 @@ function openPanel(nodeId) {
   document.getElementById('config-panel').classList.add('open');
 }
 
+var _TABLE_RENDERERS = {
+  'TextInput':        renderTextInputTable,
+  'AlteryxSelect':    renderSelectTable,
+  'Select':           renderSelectTable,
+  'AlteryxFormula':   renderFormulaTable,
+  'Formula':          renderFormulaTable,
+  'MultiFieldFormula': renderFormulaTable,
+  'AlteryxSummarize': renderSummarizeTable,
+  'Summarize':        renderSummarizeTable,
+  'AlteryxSort':      renderSortTable,
+  'Sort':             renderSortTable,
+};
+
 function _renderPanelEntry(entry, container) {
-  if (entry.tool_type === 'TextInput') {
-    renderTextInputTable(entry, container);
+  var renderer = _TABLE_RENDERERS[entry.tool_type];
+  if (renderer) {
+    renderer(entry, container);
   } else {
     renderConfigRows(entry, container);
   }
