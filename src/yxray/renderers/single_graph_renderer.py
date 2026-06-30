@@ -270,14 +270,14 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
-    #panel-copy-btn {
+    #panel-copy-btn, #panel-copy-id-btn {
       float: right; cursor: pointer;
       font-size: 11px; color: var(--text-muted);
       background: none; border: 1px solid var(--border);
       border-radius: 3px; padding: 1px 7px; margin: 1px 6px 0 0;
       line-height: 1.5;
     }
-    #panel-copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+    #panel-copy-btn:hover, #panel-copy-id-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #panel-title-text { cursor: pointer; }
     #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
     .config-row { margin: 8px 0; }
@@ -633,6 +633,7 @@ _HTML_TEMPLATE = """\
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
       <button id="panel-copy-btn">Copy</button>
+      <button id="panel-copy-id-btn">Copy ID</button>
       <span id="panel-title-text"></span>
     </div>
     <div id="panel-body"></div>
