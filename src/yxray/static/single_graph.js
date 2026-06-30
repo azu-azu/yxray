@@ -1,3 +1,6 @@
+// contrastColor() is injected by SingleGraphRenderer via CONTRAST_COLOR_JS
+// (see renderers/_report_assets.py). Do NOT define it here.
+
 // Chrome logs "Unsafe attempt to load URL file://..." for any file:// page —
 // this is browser-internal behaviour unrelated to yxray. Safe to ignore.
 if (location.protocol === 'file:') {

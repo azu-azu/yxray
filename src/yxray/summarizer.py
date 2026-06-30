@@ -10,7 +10,6 @@ types fall back to the short class name from the plugin string.
 from __future__ import annotations
 
 import pathlib
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -24,13 +23,12 @@ from yxray.config_utils import (
     select_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.topology import compute_node_layer
+from yxray.topology import compute_node_layer, topo_order
 
 __all__ = [
     "WorkflowStep",
     "KeyInsight",
     "classify",
-    "compute_node_layer",
     "summarize",
     "extract_key_insights",
 ]
@@ -87,6 +85,12 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "ToolContainer": ("Container", "unknown"),
     "CountRecords": ("Count Records", "transform"),
 }
+
+# Trunk detection thresholds for extract_key_insights:
+# a Filter/Formula is considered a "trunk" node when its downstream reach
+# is at least _TRUNK_MIN_DOWNSTREAM and at least 1/_TRUNK_RATIO_DIVISOR of all nodes.
+_TRUNK_MIN_DOWNSTREAM = 3
+_TRUNK_RATIO_DIVISOR = 5
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +165,7 @@ def summarize(
         Tool IDs that were modified (diff mode only).  Marked with change="modified".
     """
     node_map = {n.tool_id: n for n in doc.nodes}
-    order = _topo_sort(doc)
+    order = topo_order(doc)
     members_by_container: dict[int, list[Any]] = {}
     for node in doc.nodes:
         if node.container_id is not None:
@@ -215,21 +219,19 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         if c.dst_tool in node_ids:
             predecessors[c.dst_tool].append(c.src_tool)
 
-    def _downstream_count(tid: Any) -> int:
-        visited: set[Any] = set()
-        stack = list(successors.get(tid, []))
-        while stack:
-            n = stack.pop()
-            if n not in visited:
-                visited.add(n)
-                stack.extend(successors.get(n, []))
-        return len(visited)
-
     total = max(len(doc.nodes), 1)
-    trunk_threshold = max(3, total // 5)
+    trunk_threshold = max(_TRUNK_MIN_DOWNSTREAM, total // _TRUNK_RATIO_DIVISOR)
 
     node_map = {n.tool_id: n for n in doc.nodes}
-    order = _topo_sort(doc)
+    order = topo_order(doc)
+
+    # Pre-compute downstream reach in O(n + e) using sum approximation.
+    # May overcount in diamond (converging) patterns, but that is acceptable
+    # for the trunk detection heuristic.
+    downstream: dict[Any, int] = {nid: 0 for nid in order}
+    for _tid in reversed(order):
+        for _s in successors.get(_tid, []):
+            downstream[_tid] += 1 + downstream.get(_s, 0)
 
     insights: list[KeyInsight] = []
     input_count = 0
@@ -242,7 +244,7 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
             continue
         short_type, category = classify(node.tool_type)
         segment = node.tool_type.split(".")[-1]
-        dc = _downstream_count(tid)
+        dc = downstream.get(tid, 0)
         role = _insight_role(
             segment, category, node.config,
             successors.get(tid, []),
@@ -286,44 +288,6 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         ))
 
     return insights
-
-
-# ---------------------------------------------------------------------------
-# Topological sort (Kahn's algorithm — safe against cycles)
-# ---------------------------------------------------------------------------
-
-
-def _topo_sort(doc: WorkflowDoc) -> list[Any]:
-    """Return tool IDs in topological order (sources first).
-
-    ToolContainer nodes are excluded — they carry no data-flow information
-    and would otherwise appear as spurious sources (in_degree == 0).
-    """
-    node_ids = [n.tool_id for n in doc.nodes if "ToolContainer" not in n.tool_type]
-    in_degree: dict[Any, int] = {nid: 0 for nid in node_ids}
-    successors: dict[Any, list[Any]] = {nid: [] for nid in node_ids}
-
-    for c in doc.connections:
-        if c.src_tool in successors and c.dst_tool in in_degree:
-            successors[c.src_tool].append(c.dst_tool)
-            in_degree[c.dst_tool] += 1
-
-    queue: deque[Any] = deque(nid for nid in node_ids if in_degree[nid] == 0)
-    result: list[Any] = []
-    while queue:
-        nid = queue.popleft()
-        result.append(nid)
-        for s in successors.get(nid, []):
-            in_degree[s] -= 1
-            if in_degree[s] == 0:
-                queue.append(s)
-
-    # Append any remaining nodes (cycles / disconnected)
-    visited = set(result)
-    for nid in node_ids:
-        if nid not in visited:
-            result.append(nid)
-    return result
 
 
 # ---------------------------------------------------------------------------

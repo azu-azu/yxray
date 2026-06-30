@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import pathlib
 import re
-from collections import deque
 from typing import Any
 
 from yxray.config_utils import as_list, field_name, first_text, select_field_rows
 from yxray.models.workflow import WorkflowDoc
+from yxray.topology import topo_order
 
 __all__ = ["scaffold"]
 
@@ -43,34 +43,6 @@ def _file_write(path: str, df_var: str) -> str:
     if ext in (".xlsx", ".xlsm", ".xls"):
         return f'{df_var}.to_excel("{path}", index=False)'
     return f'{df_var}.to_csv("{path}", index=False)'
-
-
-# ── Topo sort (same algorithm as summarizer, local copy to avoid coupling) ─
-
-
-def _topo_sort(doc: WorkflowDoc) -> list[int]:
-    node_ids = [int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type]
-    in_degree: dict[int, int] = {nid: 0 for nid in node_ids}
-    successors: dict[int, list[int]] = {nid: [] for nid in node_ids}
-    for c in doc.connections:
-        s, d = int(c.src_tool), int(c.dst_tool)
-        if s in successors and d in in_degree:
-            successors[s].append(d)
-            in_degree[d] += 1
-    queue: deque[int] = deque(nid for nid in node_ids if in_degree[nid] == 0)
-    result: list[int] = []
-    while queue:
-        nid = queue.popleft()
-        result.append(nid)
-        for s in successors.get(nid, []):
-            in_degree[s] -= 1
-            if in_degree[s] == 0:
-                queue.append(s)
-    visited = set(result)
-    for nid in node_ids:
-        if nid not in visited:
-            result.append(nid)
-    return result
 
 
 # ── Connection helpers ─────────────────────────────────────────────────────
@@ -434,7 +406,7 @@ def scaffold(doc: WorkflowDoc) -> str:
     node_map = {int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type}
     pred_map = _build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
-    order = _topo_sort(doc)
+    order = topo_order(doc)
 
     source = pathlib.Path(doc.filepath).name
     lines: list[str] = [
