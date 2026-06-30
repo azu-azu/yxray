@@ -21,6 +21,7 @@ _TEMPLATE = """<!DOCTYPE html>
 <style>
 {{ report_base_css | safe }}
 .site-header { position: sticky; top: 0; z-index: 100; }
+.header-inner { max-width: none; }
 .theme-toggle { line-height: 1; }
 .theme-toggle svg { display: block; }
 /* ---- Join accent variables (also used by insights panel badges) ---- */
