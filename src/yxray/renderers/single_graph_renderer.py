@@ -637,9 +637,9 @@ _HTML_TEMPLATE = """\
       <span id="panel-title-text"></span>
     </div>
     <div id="panel-action-bar">
+      <button class="panel-action-btn" id="panel-copy-id-btn">Copy ID</button>
       <button class="panel-action-btn" id="panel-copy-btn">Copy for Excel</button>
       <button class="panel-action-btn" id="panel-copy-json-btn">Copy JSON</button>
-      <button class="panel-action-btn" id="panel-copy-id-btn">Copy ID</button>
     </div>
     <div id="panel-body"></div>
   </div>
