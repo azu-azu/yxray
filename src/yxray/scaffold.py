@@ -98,10 +98,6 @@ def _dvar(tool_id: int) -> str:
     return f"df_{tool_id}"
 
 
-def _primary_pred(tool_id: int, preds: dict[int, list[int]]) -> int | None:
-    return preds[tool_id][0] if preds.get(tool_id) else None
-
-
 # ── Per-tool code generators ───────────────────────────────────────────────
 
 
@@ -360,7 +356,7 @@ def _gen_sort(
         ]
         if fields:
             col_str = "[" + ", ".join(f'"{f}"' for f in fields if f) + "]"
-            asc_str = str([a for a, _ in zip(orders, fields)])
+            asc_str = str([a for a, f in zip(orders, fields) if f])
             return f"{df_out} = {df_in}.sort_values({col_str}, ascending={asc_str})"
     return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
 
@@ -424,9 +420,6 @@ _GENERATORS: dict[str, Any] = {
     "Sample": _gen_sample,
     "Unique": _gen_unique,
 }
-
-_OUTPUT_SEGMENTS = frozenset({"DbFileOutput", "OutputData", "BrowseV2", "Browse"})
-
 
 # ── Public API ─────────────────────────────────────────────────────────────
 

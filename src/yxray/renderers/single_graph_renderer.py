@@ -17,6 +17,7 @@ from typing import Any
 
 from jinja2 import Environment
 
+from yxray.explain import explain as _explain_workflow
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers._graph_builder import _safe_json, load_vis_js
 from yxray.renderers._report_assets import CONTRAST_COLOR_JS, STEP_DETAIL_JS
@@ -1124,9 +1125,7 @@ class SingleGraphRenderer:
         )
 
         # Inject python_hint into each config_map entry from the explain engine.
-        from yxray.explain import explain as _explain
-
-        for step in _explain(doc):
+        for step in _explain_workflow(doc):
             entry = config_map.get(str(step.tool_id))
             if entry is not None:
                 entry["python_hint"] = step.python_hint
