@@ -3,16 +3,18 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-Alteryx workflow inspector and diff tool. Reads `.yxmd` files as structured data and produces interactive HTML reports.
+Alteryx workflow inspector and diff tool. Reads `.yxmd` files as structured data and produces interactive HTML reports, diffs, and Python scaffolds.
 
 ---
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `acd inspect <workflow.yxmd>` | Visualize a single workflow as an interactive HTML graph |
-| `acd diff <a.yxmd> <b.yxmd>` | Compare two workflows and report field-level differences |
+| Command | Alias | Description |
+|---|---|---|
+| `acd inspect <workflow.yxmd>` | `i` | Visualize a single workflow as an interactive HTML graph |
+| `acd diff <a.yxmd> <b.yxmd>` | `d` | Compare two workflows and report field-level differences |
+| `acd explain <workflow.yxmd>` | `ex` | Show each tool's Python/pandas equivalent in topological order |
+| `acd scaffold <workflow.yxmd>` | `sc` | Generate a Python/pandas skeleton from a workflow |
 
 ---
 
@@ -24,7 +26,7 @@ Visualize a single workflow as a standalone HTML report:
 
 ```bash
 acd inspect workflow.yxmd
-# → workflow_report.html
+# → output/workflow.html
 ```
 
 Custom output path:
@@ -39,7 +41,7 @@ Include `AlteryxGuiToolkit.*` UI nodes (filtered by default):
 acd inspect workflow.yxmd --no-filter-ui-tools
 ```
 
-The report contains an interactive vis-network graph. Click any node to view its configuration. Supports light/dark theme, zoom, pan, and fullscreen.
+The report contains an interactive vis-network graph. Click any node to view its configuration and Python/pandas equivalent. Supports light/dark theme, zoom, pan, and fullscreen.
 
 ---
 
@@ -49,7 +51,7 @@ Compare two workflows and generate a diff report:
 
 ```bash
 acd diff workflow_v1.yxmd workflow_v2.yxmd
-# → diff_report.html
+# → output/diff_report.html
 ```
 
 Custom output path:
@@ -86,6 +88,44 @@ echo $?   # 0 = no diff, 1 = diff found, 2 = error
 
 ---
 
+### explain
+
+Show each tool's nearest Python/pandas equivalent in topological order:
+
+```bash
+acd explain workflow.yxmd
+```
+
+JSON output:
+
+```bash
+acd explain workflow.yxmd --json
+acd explain workflow.yxmd --json | jq '.[].python_hint'
+```
+
+Unsupported tools are flagged with a `# TODO` comment.
+
+---
+
+### scaffold
+
+Generate a Python/pandas skeleton from a workflow:
+
+```bash
+acd scaffold workflow.yxmd
+# → prints scaffold to stdout
+```
+
+Write to a file:
+
+```bash
+acd scaffold workflow.yxmd -o workflow.py
+```
+
+Each tool becomes one annotated code block in topological order. Supported tools get semi-concrete pandas code; unsupported tools get a `# TODO` comment.
+
+---
+
 ## Exit Codes (diff)
 
 | Code | Meaning |
@@ -109,13 +149,19 @@ WorkflowDoc
   nodes: (tool_id, tool_type, config, x, y)
   connections: (src_tool, dst_tool)
   ↓
-inspect → SingleGraphRenderer → standalone HTML
-diff    → Normalizer → Matcher → Differ → HTML / JSON
+inspect  → Summarizer → SingleGraphRenderer → standalone HTML
+diff     → Normalizer → Matcher → Differ → HTMLRenderer / JSONRenderer
+explain  → Explain engine → plain text / JSON
+scaffold → Scaffold generator → .py skeleton
 ```
 
 **Normalization** strips Alteryx XML noise (attribute reordering, GUIDs, timestamps, TempFile paths) before comparing, eliminating false positives.
 
 **Matching** uses exact ToolID lookup first, with a Hungarian algorithm fallback for workflows where Alteryx regenerated all ToolIDs on save.
+
+**Explain** maps each tool type to its nearest pandas/Python equivalent and embeds the hint directly into the inspect HTML node panel.
+
+**Scaffold** generates executable Python code in topological order. Supported tools produce real (if partial) pandas code; unsupported tools get a `# TODO` placeholder.
 
 ---
 
@@ -142,16 +188,21 @@ ruff format src/ tests/
 ```
 yxray/
 ├── src/
-│   └── alteryx_git_companion/
-│       ├── cli.py              # Typer CLI (acd inspect / acd diff)
+│   └── yxray/
+│       ├── cli.py              # Typer CLI (acd inspect / diff / explain / scaffold)
 │       ├── parser.py           # lxml-based .yxmd loader
 │       ├── exceptions.py       # ParseError hierarchy
+│       ├── config_utils.py     # XML config helpers (as_list, get_text, ...)
+│       ├── topology.py         # Graph helpers (topo_order, compute_node_layer)
+│       ├── summarizer.py       # Rule-based tool descriptions + key insights
+│       ├── explain.py          # Alteryx → Python/pandas hint engine
+│       ├── scaffold.py         # Python/pandas skeleton generator
 │       ├── models/             # Frozen dataclasses (WorkflowDoc, DiffResult, ...)
 │       ├── normalizer/         # C14N, GUID stripping, config hashing
 │       ├── matcher/            # ToolID + Hungarian matcher
 │       ├── differ/             # DeepDiff-based node + edge differ
 │       ├── pipeline/           # pipeline.run() facade
-│       ├── renderers/          # HTMLRenderer, GraphRenderer, JSONRenderer, SingleGraphRenderer
+│       ├── renderers/          # SingleGraphRenderer, DiffGraphRenderer, HTMLRenderer, JSONRenderer
 │       └── static/             # vis-network UMD bundle (vendored, zero CDN)
 └── tests/
 ```
@@ -160,4 +211,4 @@ yxray/
 
 ## License
 
-MIT © 2026 Laxmikant Mukkawar, azu-azu — see [LICENSE](LICENSE) for details.
+MIT © 2026 azu-azu — see [LICENSE](LICENSE) for details.
