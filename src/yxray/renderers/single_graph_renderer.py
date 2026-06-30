@@ -938,9 +938,22 @@ function openInsightsPanelFiltered(role) {
     ip.classList.add('open');
     _syncPanelBtnState();
 }
+function _clearPanelFocus() {
+    if (_focusHighlightPanelEl) { _focusHighlightPanelEl.classList.remove('focused'); _focusHighlightPanelEl = null; }
+    if (_focusHighlightId !== null && typeof nodesDataset !== 'undefined' && nodesDataset && nodesDataset.get(_focusHighlightId) !== null) {
+        var _r = _focusHighlightOrigColor !== null
+            ? {id: _focusHighlightId, color: _focusHighlightOrigColor, shadow: false}
+            : {id: _focusHighlightId, color: null, shadow: false};
+        nodesDataset.update(_r);
+    }
+    _focusHighlightId = null;
+    _focusHighlightOrigColor = null;
+    if (typeof network !== 'undefined' && network) network.selectNodes([]);
+}
 function closeInsightsPanel() {
     var ip = document.getElementById('insights-panel');
     if (ip) { ip.classList.remove('open'); _insightsPanelActiveRole = null; }
+    _clearPanelFocus();
     _syncPanelBtnState();
 }
 function openSummaryPanel() {
@@ -957,6 +970,7 @@ function openSummaryPanel() {
 function closeSummaryPanel() {
     var sp = document.getElementById('summary-panel');
     if (sp) sp.classList.remove('open');
+    _clearPanelFocus();
     _syncPanelBtnState();
 }
 function openContainersPanel() {
@@ -1064,6 +1078,7 @@ function makeDragResize(panelId, handleId, direction) {
         if (typeof _insightsPanelActiveRole !== 'undefined') _insightsPanelActiveRole = null;
         if (typeof _searchPrevPanel !== 'undefined') _searchPrevPanel = null;
         if (typeof _searchResultsFocusEl !== 'undefined') _searchResultsFocusEl = null;
+        _clearPanelFocus();
         _syncPanelBtnState();
     });
 })();
