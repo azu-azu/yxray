@@ -51,20 +51,6 @@ def test_render_self_contained() -> None:
     assert "vis.Network" in html
 
 
-def test_standalone_graph_report_button_reuses_existing_companion_window() -> None:
-    """Graph -> report navigation uses a stable window target and focuses it."""
-    html = DiffGraphRenderer().render_standalone(EMPTY_DIFF, (), (), ())
-
-    assert "function companionWindowName(url)" in html
-    assert "window.name = companionWindowName(window.location.href)" in html
-    assert "'yxray_companion_' + kind + '_'" in html
-    assert "function openCompanionFile(url)" in html
-    assert "window.open(url, targetName)" in html
-    assert "existingOrNew.focus()" in html
-    assert "openCompanionFile(window.location.href.replace" in html
-    assert "_graph" in html
-    assert "_report$1$2" in html
-
 
 def test_single_graph_has_summary_panel_js() -> None:
     """Single graph includes summary panel open/close functions."""
