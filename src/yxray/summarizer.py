@@ -85,6 +85,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "Random": ("Random Sample", "transform"),
     "RunCommand": ("Run Command", "transform"),
     "ToolContainer": ("Container", "unknown"),
+    "CountRecords": ("Count Records", "transform"),
 }
 
 
@@ -562,6 +563,10 @@ def _insight_role(
     return None
 
 
+def _describe_count_records(config: dict[str, Any], _members: list[Any] | None) -> str:
+    return "Counts records"
+
+
 _DESCRIBERS: dict[str, DescribeFn] = {
     "DbFileInput": _describe_file_tool,
     "DbFileOutput": _describe_file_tool,
@@ -588,6 +593,7 @@ _DESCRIBERS: dict[str, DescribeFn] = {
     "Sample": _describe_sample,
     "RunCommand": _describe_run_command,
     "ToolContainer": _describe_container,
+    "CountRecords": _describe_count_records,
 }
 
 
