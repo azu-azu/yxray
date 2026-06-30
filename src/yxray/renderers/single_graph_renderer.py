@@ -259,7 +259,7 @@ _HTML_TEMPLATE = """\
     }
     .panel-title {
       font-size: 14px; font-weight: 600;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
       color: var(--text);
@@ -270,16 +270,18 @@ _HTML_TEMPLATE = """\
       background: none; border: none;
     }
     .panel-close:hover { color: var(--text); }
-    #panel-copy-btn, #panel-copy-id-btn {
-      float: right; cursor: pointer;
-      font-size: 11px; color: var(--text-muted);
-      background: none; border: 1px solid var(--border);
-      border-radius: 3px; padding: 1px 7px; margin: 1px 6px 0 0;
-      line-height: 1.5;
-    }
-    #panel-copy-btn:hover, #panel-copy-id-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #panel-title-text { cursor: pointer; }
     #panel-title-text:hover { color: var(--accent); text-decoration: underline; }
+    #panel-action-bar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .panel-action-btn {
+      cursor: pointer; font-size: 11px; color: var(--text-muted);
+      background: none; border: 1px solid var(--border);
+      border-radius: 3px; padding: 2px 8px; line-height: 1.5;
+    }
+    .panel-action-btn:hover { color: var(--text); border-color: var(--text-muted); }
     .config-row { margin: 8px 0; }
     .config-key {
       font-size: 11px; font-weight: 600;
@@ -632,9 +634,12 @@ _HTML_TEMPLATE = """\
     <div id="panel-drag-handle"></div>
     <div class="panel-title">
       <button class="panel-close" id="panel-close-btn">&times;</button>
-      <button id="panel-copy-btn">Copy</button>
-      <button id="panel-copy-id-btn">Copy ID</button>
       <span id="panel-title-text"></span>
+    </div>
+    <div id="panel-action-bar">
+      <button class="panel-action-btn" id="panel-copy-btn">Copy</button>
+      <button class="panel-action-btn" id="panel-copy-json-btn">Copy JSON</button>
+      <button class="panel-action-btn" id="panel-copy-id-btn">Copy ID</button>
     </div>
     <div id="panel-body"></div>
   </div>
