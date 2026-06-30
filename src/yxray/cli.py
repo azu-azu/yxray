@@ -26,6 +26,12 @@ app = typer.Typer(no_args_is_help=True)
 _err_console = Console(stderr=True)
 
 
+def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Path:
+    out = path if path is not None else pathlib.Path("output") / default_name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
 def _diff_impl(  # noqa: B008
     workflow_a: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help="Baseline .yxmd or .yxwz file (quote paths that contain spaces)"
@@ -33,11 +39,11 @@ def _diff_impl(  # noqa: B008
     workflow_b: pathlib.Path = typer.Argument(  # noqa: B008
         ..., help="Changed .yxmd or .yxwz file (quote paths that contain spaces)"
     ),
-    output: pathlib.Path = typer.Option(  # noqa: B008
-        pathlib.Path("diff_report.html"),
+    output: pathlib.Path | None = typer.Option(  # noqa: B008
+        None,
         "--output",
         "-o",
-        help="Output path for the HTML report (ignored when --json is set)",
+        help="Output path for the HTML report (default: output/diff_report.html; ignored when --json is set)",
     ),
     include_positions: bool = typer.Option(  # noqa: B008
         False,
@@ -152,8 +158,9 @@ def _diff_impl(  # noqa: B008
             workflow_steps=steps,
             key_insights=insights,
         )
-        output.write_text(html, encoding="utf-8")
-        webbrowser.open(output.resolve().as_uri())
+        out_path = _resolve_output(output, "diff_report.html")
+        out_path.write_text(html, encoding="utf-8")
+        webbrowser.open(out_path.resolve().as_uri())
         if not quiet:
             change_count = (
                 len(result.added_nodes)
@@ -162,7 +169,7 @@ def _diff_impl(  # noqa: B008
                 + len(result.edge_diffs)
             )
             typer.echo(
-                f"Report written to {output} ({change_count} changes detected)",
+                f"Report written to {out_path} ({change_count} changes detected)",
                 err=True,
             )
 
@@ -181,7 +188,7 @@ def _inspect_impl(  # noqa: B008
         None,
         "--output",
         "-o",
-        help="Output path for the HTML report (default: <workflow>_report.html)",
+        help="Output path for the HTML report (default: output/<workflow>_report.html)",
     ),
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
@@ -207,7 +214,7 @@ def _inspect_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
-    out_path = output or pathlib.Path(workflow.stem + "_report.html")
+    out_path = _resolve_output(output, workflow.stem + "_report.html")
     steps = summarize(doc)
     insights = extract_key_insights(doc)
     html = SingleGraphRenderer().render(
