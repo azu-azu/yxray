@@ -3,7 +3,10 @@ from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import scaffold
 
 
-def _doc(*nodes: AlteryxNode, connections: tuple[AlteryxConnection, ...] = ()) -> WorkflowDoc:
+def _doc(
+    *nodes: AlteryxNode,
+    connections: tuple[AlteryxConnection, ...] = (),
+) -> WorkflowDoc:
     return WorkflowDoc(filepath="test.yxmd", nodes=nodes, connections=connections)
 
 
@@ -49,8 +52,20 @@ def test_scaffold_input_csv() -> None:
 
 def test_scaffold_output_csv() -> None:
     doc = _doc(
-        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0, config={"File": "a.csv"}),
-        AlteryxNode(tool_id=ToolID(2), tool_type="OutputData", x=10, y=0, config={"File": "out.csv"}),
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
+            config={"File": "a.csv"},
+        ),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="OutputData",
+            x=10,
+            y=0,
+            config={"File": "out.csv"},
+        ),
         connections=(
             AlteryxConnection(
                 src_tool=ToolID(1), src_anchor=AnchorName("Output"),
@@ -123,7 +138,11 @@ def test_scaffold_select_with_rename() -> None:
             config={
                 "SelectFields": {
                     "SelectField": [
-                        {"@field": "old_col", "@selected": "True", "@rename": "new_col"},
+                        {
+                            "@field": "old_col",
+                            "@selected": "True",
+                            "@rename": "new_col",
+                        },
                     ]
                 }
             },

@@ -200,7 +200,9 @@ def _tree_to_workflow(
         )
 
         # ToolContainerID lives under Properties/EngineSettings (regular tools).
-        props_engine: etree._Element | None = node_elem.find("Properties/EngineSettings")
+        props_engine: etree._Element | None = node_elem.find(
+            "Properties/EngineSettings"
+        )
         container_id_str = (
             props_engine.get("ToolContainerID") if props_engine is not None else None
         )

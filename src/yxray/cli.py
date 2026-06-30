@@ -43,7 +43,10 @@ def _diff_impl(  # noqa: B008
         None,
         "--output",
         "-o",
-        help="Output path for the HTML report (default: output/diff_report.html; ignored when --json is set)",
+        help=(
+            "Output path for the HTML report "
+            "(default: output/diff_report.html; ignored when --json is set)"
+        ),
     ),
     include_positions: bool = typer.Option(  # noqa: B008
         False,
@@ -266,7 +269,9 @@ def _explain_impl(  # noqa: B008
     steps = explain(doc)
 
     if json_output:
-        typer.echo(json.dumps([s.to_dict() for s in steps], indent=2, ensure_ascii=False))
+        typer.echo(
+            json.dumps([s.to_dict() for s in steps], indent=2, ensure_ascii=False)
+        )
         return
 
     for step in steps:
