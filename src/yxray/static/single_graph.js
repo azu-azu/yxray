@@ -2218,6 +2218,58 @@ function copyInsightsPanel() {
   _clipboardWrite(rows.join('\n'), document.getElementById('insights-copy-btn'), 'Copy');
 }
 
+function downloadInsightsExcel() {
+  var ip = document.getElementById('insights-panel');
+  if (!ip) return;
+  var rawTitle = (document.querySelector('.header-title') || {}).textContent || '';
+  var wf = rawTitle.trim().replace(/\.[^.]+$/, '');
+  var baseName = wf.replace(/[^A-Za-z0-9_\-.]/g, '_');
+
+  var visible = Array.prototype.filter.call(ip.querySelectorAll('.ki-row'), function(r) {
+    return r.style.display !== 'none';
+  });
+
+  var inputRows = visible.map(function(r) {
+    var id = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
+    var role = r.dataset.role || '';
+    var type = (r.querySelector('.ki-badge') || {}).textContent.trim();
+    var desc = (r.querySelector('.ki-desc') || {}).textContent.trim();
+    return [wf, id, role, type, desc];
+  });
+
+  var xlSheets = [{ name: 'Input', rows: [['WF', 'ID', 'Role', 'Type', 'Description']].concat(inputRows) }];
+
+  visible.forEach(function(r) {
+    var idText = (r.querySelector('.ki-id') || {}).textContent.replace('#', '').trim();
+    var nodeId = parseInt(idText);
+    if (isNaN(nodeId)) return;
+    var entry = CONFIG_MAP[String(nodeId)];
+    if (!entry || entry.tool_type !== 'TextInput') return;
+
+    var cfg = entry.config;
+    var fieldsObj = cfg.Fields || {};
+    var fieldList = fieldsObj.Field || [];
+    if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
+    var colNames = fieldList.map(function(f) { return f['@name'] || ''; });
+
+    var dataObj = cfg.Data || {};
+    var rowList = dataObj.r || [];
+    if (!Array.isArray(rowList)) rowList = rowList ? [rowList] : [];
+
+    var rows = rowList.map(function(row, i) {
+      var cells = row.c != null ? row.c : [];
+      if (!Array.isArray(cells)) cells = [cells];
+      return [String(i + 1)].concat(colNames.map(function(_, ci) {
+        return _cellText(cells[ci]);
+      }));
+    });
+
+    xlSheets.push({ name: String(nodeId), rows: [['#'].concat(colNames)].concat(rows) });
+  });
+
+  _xlsxDownload(_makeXlsx(xlSheets), 'inputs_' + baseName + '_' + _xlsxTimestamp() + '.xlsx');
+}
+
 function copySummaryPanel() {
   var el = document.getElementById('summary-data');
   var steps = el ? JSON.parse(el.textContent) : [];

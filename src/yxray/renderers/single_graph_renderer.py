@@ -585,6 +585,7 @@ _HTML_TEMPLATE = """\
     <div id="insights-panel-header">
       <span id="insights-panel-title">At a Glance</span>
       <div class="panel-header-actions">
+        <button class="panel-copy-btn" id="insights-excel-btn" onclick="downloadInsightsExcel()">&#8595; Excel</button>
         <button class="panel-copy-btn" id="insights-copy-btn" onclick="copyInsightsPanel()">Copy</button>
         <button class="panel-close" onclick="closeInsightsPanel()">&times;</button>
       </div>
