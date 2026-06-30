@@ -194,21 +194,23 @@ button.diff-chip:hover { opacity: 0.8; }
         </button>
       </div>
     </div>
-    <div class="diff-chips">
-      <span class="diff-chip diff-chip-added">+{{ summary.added }} Added</span>
-      <span class="diff-chip diff-chip-modified">~{{ summary.modified }} Modified</span>
-      <span class="diff-chip diff-chip-removed">-{{ summary.removed }} Removed</span>
-      {% if summary.inputs or summary.outputs or summary.joins %}
-      <span class="diff-chips-sep">|</span>
-      {% if summary.inputs %}<button class="diff-chip diff-chip-input" onclick="openInsightsPanel('input')">{{ summary.inputs }} Input</button>{% endif %}
-      {% if summary.outputs %}<button class="diff-chip diff-chip-output" onclick="openInsightsPanel('output')">{{ summary.outputs }} Output</button>{% endif %}
-      {% if summary.joins %}<button class="diff-chip diff-chip-join" onclick="openInsightsPanel('join')">{{ summary.joins }} Join</button>{% endif %}
-      {% endif %}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
-      <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
-      <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <p class="header-meta"><span class="header-meta-label">Before:</span> {{ file_a }}</p>
+        <p class="header-meta"><span class="header-meta-label">After:</span> {{ file_b }}</p>
+        <p class="header-meta header-meta-generated">Generated: {{ timestamp }}</p>
+      </div>
+      <div class="diff-chips" style="flex-shrink:0;padding-top:2px;">
+        <span class="diff-chip diff-chip-added">+{{ summary.added }} Added</span>
+        <span class="diff-chip diff-chip-modified">~{{ summary.modified }} Modified</span>
+        <span class="diff-chip diff-chip-removed">-{{ summary.removed }} Removed</span>
+        {% if summary.inputs or summary.outputs or summary.joins %}
+        <span class="diff-chips-sep">|</span>
+        {% if summary.inputs %}<button class="diff-chip diff-chip-input" onclick="openInsightsPanel('input')">{{ summary.inputs }} Input</button>{% endif %}
+        {% if summary.outputs %}<button class="diff-chip diff-chip-output" onclick="openInsightsPanel('output')">{{ summary.outputs }} Output</button>{% endif %}
+        {% if summary.joins %}<button class="diff-chip diff-chip-join" onclick="openInsightsPanel('join')">{{ summary.joins }} Join</button>{% endif %}
+        {% endif %}
+      </div>
     </div>
   </div>
 </header>
