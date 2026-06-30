@@ -1279,37 +1279,63 @@ class DiffGraphRenderer:
             An HTML fragment string (no <html>/<head>/<body> tags) containing
             a <section id="graph-section"> with the interactive vis-network graph.
         """
-        # Deduplicate nodes: old first, new overrides (adds/modified take new position)
+        all_nodes_tuple = self._merged_nodes(nodes_old, nodes_new)
+        graph = build_digraph(result, all_connections, all_nodes_tuple)
+        positions = self._positions(graph, nodes_old, nodes_new, canvas_layout)
+        nodes_json = self._overlay_nodes(result, graph, positions)
+        edges_json = self._overlay_edges(result, graph)
+        old_vis_nodes, new_vis_nodes = build_split_node_list(
+            result, nodes_old, nodes_new
+        )
+
+        return self._render_template(
+            nodes_json=nodes_json,
+            edges_json=edges_json,
+            old_vis_nodes=old_vis_nodes,
+            new_vis_nodes=new_vis_nodes,
+        )
+
+    def _merged_nodes(
+        self,
+        nodes_old: tuple[AlteryxNode, ...],
+        nodes_new: tuple[AlteryxNode, ...],
+    ) -> tuple[AlteryxNode, ...]:
         nodes_map: dict[int, AlteryxNode] = {}
         for n in nodes_old:
             nodes_map[int(n.tool_id)] = n
         for n in nodes_new:
             nodes_map[int(n.tool_id)] = n
-        all_nodes_tuple = tuple(nodes_map.values())
+        return tuple(nodes_map.values())
 
-        # Build directed graph with diff status attributes
-        G = build_digraph(result, all_connections, all_nodes_tuple)
-
-        # Compute layout positions
+    def _positions(
+        self,
+        graph: Any,
+        nodes_old: tuple[AlteryxNode, ...],
+        nodes_new: tuple[AlteryxNode, ...],
+        canvas_layout: bool,
+    ) -> dict[int, tuple[float, float]]:
         if canvas_layout:
-            positions = canvas_positions(nodes_old, nodes_new)
-        else:
-            cy: dict[int, float] = {}
-            for n in nodes_old:
-                cy[int(n.tool_id)] = n.y
-            for n in nodes_new:
-                cy[int(n.tool_id)] = n.y
-            positions = hierarchical_positions(G, canvas_y=cy)
+            return canvas_positions(nodes_old, nodes_new)
+        canvas_y: dict[int, float] = {}
+        for n in nodes_old:
+            canvas_y[int(n.tool_id)] = n.y
+        for n in nodes_new:
+            canvas_y[int(n.tool_id)] = n.y
+        return hierarchical_positions(graph, canvas_y=canvas_y)
 
-        # Build field counts for modified node tooltips
+    def _overlay_nodes(
+        self,
+        result: DiffResult,
+        graph: Any,
+        positions: dict[int, tuple[float, float]],
+    ) -> list[dict[str, Any]]:
         field_counts: dict[int, int] = {
             int(nd.tool_id): len(nd.field_diffs) for nd in result.modified_nodes
         }
 
-        # Build nodes list with pre-computed positions
         nodes_json: list[dict[str, Any]] = []
         for node_id, (px, py) in positions.items():
-            attrs = G.nodes[node_id]
+            attrs = graph.nodes[node_id]
             label: str = attrs["label"]
             status: str = attrs["status"]
             title: str = attrs["title"]
@@ -1325,15 +1351,17 @@ class DiffGraphRenderer:
             }
             nodes_json.append(entry)
 
-        # Enrich tooltip for modified nodes with field change count
         for entry in nodes_json:
             if entry["status"] == "modified":
                 count = field_counts.get(int(entry["id"]), 0)
                 entry["title"] = (
                     f"{entry['label']} | modified | {count} field(s) changed"
                 )
+        return nodes_json
 
-        # Build edges list — color connection-diff edges (removed=red, added=green)
+    def _overlay_edges(
+        self, result: DiffResult, graph: Any
+    ) -> list[dict[str, Any]]:
         edge_removed_set = {
             (int(e.src_tool), int(e.dst_tool))
             for e in result.edge_diffs
@@ -1345,7 +1373,7 @@ class DiffGraphRenderer:
             if e.change_type == "added"
         }
         edges_json: list[dict[str, Any]] = []
-        for src, dst in G.edges():
+        for src, dst in graph.edges():
             edge: dict[str, Any] = {"id": f"{src}-{dst}", "from": src, "to": dst}
             if (src, dst) in edge_removed_set:
                 edge["color"] = {"color": "#fca5a5", "highlight": "#dc2626", "hover": "#dc2626"}
@@ -1358,16 +1386,16 @@ class DiffGraphRenderer:
             else:
                 edge["status"] = "unchanged"
             edges_json.append(edge)
+        return edges_json
 
-        # Build split view node lists
-        old_vis_nodes, new_vis_nodes = build_split_node_list(
-            result, nodes_old, nodes_new
-        )
-
-        # Load vendored vis-network JS
-        vis_js = load_vis_js()
-
-        # Render fragment via Jinja2 — nodes/edges passed as pre-serialized JSON strings
+    def _render_template(
+        self,
+        *,
+        nodes_json: list[dict[str, Any]],
+        edges_json: list[dict[str, Any]],
+        old_vis_nodes: list[dict[str, Any]],
+        new_vis_nodes: list[dict[str, Any]],
+    ) -> str:
         env = Environment(autoescape=True)  # noqa: S701
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_GRAPH_FRAGMENT_TEMPLATE)
@@ -1376,7 +1404,6 @@ class DiffGraphRenderer:
             edges_json=_safe_json(edges_json),
             nodes_old_json=_safe_json(old_vis_nodes),
             nodes_new_json=_safe_json(new_vis_nodes),
-            vis_js=vis_js,
+            vis_js=load_vis_js(),
             contrast_color_js=CONTRAST_COLOR_JS,
         )
-

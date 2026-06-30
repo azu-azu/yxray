@@ -303,7 +303,10 @@ def _gen_summarize(
             f"    .reset_index()\n"
             f")"
         )
-    return f"{df_out} = {df_in}.groupby({group_str}).agg({{...}})  # TODO: set aggregations"
+    return (
+        f"{df_out} = {df_in}.groupby({group_str}).agg({{...}}) "
+        "# TODO: set aggregations"
+    )
 
 
 def _gen_sort(
@@ -328,7 +331,7 @@ def _gen_sort(
         ]
         if fields:
             col_str = "[" + ", ".join(f'"{f}"' for f in fields if f) + "]"
-            asc_str = str([a for a, f in zip(orders, fields) if f])
+            asc_str = str([a for a, f in zip(orders, fields, strict=True) if f])
             return f"{df_out} = {df_in}.sort_values({col_str}, ascending={asc_str})"
     return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
 
@@ -403,7 +406,11 @@ def scaffold(doc: WorkflowDoc) -> str:
     Supported tools get semi-concrete pandas code; unsupported tools get
     a TODO comment block.
     """
-    node_map = {int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type}
+    node_map = {
+        int(n.tool_id): n
+        for n in doc.nodes
+        if "ToolContainer" not in n.tool_type
+    }
     pred_map = _build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
@@ -430,7 +437,7 @@ def scaffold(doc: WorkflowDoc) -> str:
 
         gen = _GENERATORS.get(segment)
         if gen is None:
-            lines.append(f"# TODO: unsupported tool type — review manually")
+            lines.append("# TODO: unsupported tool type — review manually")
             lines.append(f"# {_dvar(tool_id)} = ...")
             lines.append("")
             continue

@@ -1123,36 +1123,55 @@ class SingleGraphRenderer:
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
         )
+        self._add_python_hints(doc, config_map)
 
-        # Inject python_hint into each config_map entry from the explain engine.
+        # Sort containers by canvas position (x, y) to match the left-to-right visual flow.
+        if containers_list:
+            containers_list = sorted(containers_list, key=lambda c: (c["x"], c["y"]))
+
+        return self._render_template(
+            doc=doc,
+            graph_data_json=self._graph_data_json(
+                doc, nodes_list, edges_list, config_map, containers_list
+            ),
+            workflow_steps=self._workflow_steps_to_dicts(workflow_steps),
+            key_insights=self._key_insights_to_dicts(key_insights),
+            containers_for_panel=self._containers_for_panel(containers_list),
+        )
+
+    def _add_python_hints(self, doc: WorkflowDoc, config_map: dict[str, Any]) -> None:
         for step in _explain_workflow(doc):
             entry = config_map.get(str(step.tool_id))
             if entry is not None:
                 entry["python_hint"] = step.python_hint
                 entry["supported"] = step.supported
 
-        vis_js = load_vis_js()
-        single_graph_js = _load_single_graph_js()
-        title = pathlib.Path(doc.filepath).name
+    def _workflow_steps_to_dicts(
+        self, workflow_steps: list[Any] | None
+    ) -> list[Any] | None:
+        if not workflow_steps:
+            return None
+        return [
+            s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
+            for s in workflow_steps
+        ]
 
-        steps_dicts: list[Any] | None = None
-        if workflow_steps:
-            steps_dicts = [
-                s.to_dict(include_change=False) if hasattr(s, "to_dict") else s
-                for s in workflow_steps
-            ]
+    def _key_insights_to_dicts(
+        self, key_insights: list[Any] | None
+    ) -> list[Any] | None:
+        if not key_insights:
+            return None
+        return [i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights]
 
-        # Sort containers by canvas position (x, y) to match the left-to-right visual flow.
-        if containers_list:
-            containers_list = sorted(containers_list, key=lambda c: (c["x"], c["y"]))
-
-        insights_dicts: list[Any] | None = None
-        if key_insights:
-            insights_dicts = [
-                i.to_dict() if hasattr(i, "to_dict") else i for i in key_insights
-            ]
-
-        graph_data_json = _safe_json(
+    def _graph_data_json(
+        self,
+        doc: WorkflowDoc,
+        nodes_list: list[dict[str, Any]],
+        edges_list: list[dict[str, Any]],
+        config_map: dict[str, Any],
+        containers_list: list[dict[str, Any]],
+    ) -> str:
+        return _safe_json(
             {
                 "nodes": nodes_list,
                 "edges": edges_list,
@@ -1163,28 +1182,44 @@ class SingleGraphRenderer:
             ensure_ascii=False,
         )
 
+    def _containers_for_panel(
+        self, containers_list: list[dict[str, Any]]
+    ) -> list[dict[str, Any]] | None:
+        return [
+            {
+                "label": c["label"],
+                "fill_color": c.get("fillColor"),
+                "tool_id": c.get("tool_id"),
+            }
+            for c in containers_list
+        ] or None
+
+    def _render_template(
+        self,
+        *,
+        doc: WorkflowDoc,
+        graph_data_json: str,
+        workflow_steps: list[Any] | None,
+        key_insights: list[Any] | None,
+        containers_for_panel: list[dict[str, Any]] | None,
+    ) -> str:
         env = Environment(autoescape=True)  # noqa: S701
         env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
         template = env.from_string(_HTML_TEMPLATE)
         data_node_count = sum(
             1 for n in doc.nodes if "ToolContainer" not in n.tool_type
         )
-        containers_for_panel = [
-            {"label": c["label"], "fill_color": c.get("fillColor"), "tool_id": c.get("tool_id")}
-            for c in containers_list
-        ] or None
-
         return template.render(
-            title=title,
+            title=pathlib.Path(doc.filepath).name,
             node_count=data_node_count,
             edge_count=len(doc.connections),
             graph_data_json=graph_data_json,
-            vis_js=vis_js,
-            single_graph_js=single_graph_js,
+            vis_js=load_vis_js(),
+            single_graph_js=_load_single_graph_js(),
             step_detail_js=STEP_DETAIL_JS,
             contrast_color_js=CONTRAST_COLOR_JS,
-            workflow_steps=steps_dicts,
-            key_insights=insights_dicts,
+            workflow_steps=workflow_steps,
+            key_insights=key_insights,
             containers_for_panel=containers_for_panel,
         )
 

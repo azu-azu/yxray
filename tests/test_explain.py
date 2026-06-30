@@ -3,7 +3,10 @@ from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 
 
-def _doc(*nodes: AlteryxNode, connections: tuple[AlteryxConnection, ...] = ()) -> WorkflowDoc:
+def _doc(
+    *nodes: AlteryxNode,
+    connections: tuple[AlteryxConnection, ...] = (),
+) -> WorkflowDoc:
     return WorkflowDoc(filepath="test.yxmd", nodes=nodes, connections=connections)
 
 
@@ -89,7 +92,14 @@ def test_explain_topo_order() -> None:
 def test_explain_to_dict_keys() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
     d = explain(doc)[0].to_dict()
-    assert set(d.keys()) == {"tool_id", "short_type", "category", "description", "python_hint", "supported"}
+    assert set(d.keys()) == {
+        "tool_id",
+        "short_type",
+        "category",
+        "description",
+        "python_hint",
+        "supported",
+    }
 
 
 def test_explain_union_hint() -> None:

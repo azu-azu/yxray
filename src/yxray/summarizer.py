@@ -23,7 +23,7 @@ from yxray.config_utils import (
     select_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.topology import compute_node_layer, topo_order
+from yxray.topology import topo_order
 
 __all__ = [
     "WorkflowStep",
@@ -164,7 +164,7 @@ def summarize(
     modified_ids:
         Tool IDs that were modified (diff mode only).  Marked with change="modified".
     """
-    node_map = {n.tool_id: n for n in doc.nodes}
+    node_map = {int(n.tool_id): n for n in doc.nodes}
     order = topo_order(doc)
     members_by_container: dict[int, list[Any]] = {}
     for node in doc.nodes:
@@ -210,25 +210,27 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
     - Filter/Formula: only when they feed >= 20% of total nodes downstream
     - Select: only when they rename >= 2 or drop >= 3 fields
     """
-    node_ids = {n.tool_id for n in doc.nodes}
-    successors: dict[Any, list[Any]] = {n.tool_id: [] for n in doc.nodes}
-    predecessors: dict[Any, list[Any]] = {n.tool_id: [] for n in doc.nodes}
+    node_ids = {int(n.tool_id) for n in doc.nodes}
+    successors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
+    predecessors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
     for c in doc.connections:
-        if c.src_tool in node_ids:
-            successors[c.src_tool].append(c.dst_tool)
-        if c.dst_tool in node_ids:
-            predecessors[c.dst_tool].append(c.src_tool)
+        src_tool = int(c.src_tool)
+        dst_tool = int(c.dst_tool)
+        if src_tool in node_ids:
+            successors[src_tool].append(dst_tool)
+        if dst_tool in node_ids:
+            predecessors[dst_tool].append(src_tool)
 
     total = max(len(doc.nodes), 1)
     trunk_threshold = max(_TRUNK_MIN_DOWNSTREAM, total // _TRUNK_RATIO_DIVISOR)
 
-    node_map = {n.tool_id: n for n in doc.nodes}
+    node_map = {int(n.tool_id): n for n in doc.nodes}
     order = topo_order(doc)
 
     # Pre-compute downstream reach in O(n + e) using sum approximation.
     # May overcount in diamond (converging) patterns, but that is acceptable
     # for the trunk detection heuristic.
-    downstream: dict[Any, int] = {nid: 0 for nid in order}
+    downstream: dict[int, int] = {nid: 0 for nid in order}
     for _tid in reversed(order):
         for _s in successors.get(_tid, []):
             downstream[_tid] += 1 + downstream.get(_s, 0)
