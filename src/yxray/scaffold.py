@@ -15,6 +15,20 @@ from typing import Any
 
 from yxray.config_utils import as_list, field_name, first_text, select_field_rows
 from yxray.models.workflow import WorkflowDoc
+from yxray.tool_registry import (
+    SCAFFOLD_FILTER_SEGMENTS,
+    SCAFFOLD_FORMULA_SEGMENTS,
+    SCAFFOLD_INPUT_SEGMENTS,
+    SCAFFOLD_JOIN_SEGMENTS,
+    SCAFFOLD_OUTPUT_SEGMENTS,
+    SCAFFOLD_SAMPLE_SEGMENTS,
+    SCAFFOLD_SELECT_SEGMENTS,
+    SCAFFOLD_SORT_SEGMENTS,
+    SCAFFOLD_SUMMARIZE_SEGMENTS,
+    SCAFFOLD_UNION_SEGMENTS,
+    SCAFFOLD_UNIQUE_SEGMENTS,
+    tool_segment,
+)
 from yxray.topology import topo_order
 
 __all__ = ["scaffold"]
@@ -370,30 +384,17 @@ def _gen_unique(
 # ── Generator registry ─────────────────────────────────────────────────────
 
 _GENERATORS: dict[str, Any] = {
-    "DbFileInput": _gen_input,
-    "InputData": _gen_input,
-    "TextInput": _gen_input,
-    "DbFileOutput": _gen_output,
-    "OutputData": _gen_output,
-    "AlteryxFilter": _gen_filter,
-    "Filter": _gen_filter,
-    "AlteryxSelect": _gen_select,
-    "Select": _gen_select,
-    "AlteryxFormula": _gen_formula,
-    "Formula": _gen_formula,
-    "AlteryxJoin": _gen_join,
-    "Join": _gen_join,
-    "AlteryxUnion": _gen_union,
-    "Union": _gen_union,
-    "AlteryxAppend": _gen_union,
-    "Append": _gen_union,
-    "AlteryxSummarize": _gen_summarize,
-    "Summarize": _gen_summarize,
-    "AlteryxSort": _gen_sort,
-    "Sort": _gen_sort,
-    "AlteryxSample": _gen_sample,
-    "Sample": _gen_sample,
-    "Unique": _gen_unique,
+    **dict.fromkeys(SCAFFOLD_INPUT_SEGMENTS, _gen_input),
+    **dict.fromkeys(SCAFFOLD_OUTPUT_SEGMENTS, _gen_output),
+    **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, _gen_filter),
+    **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
+    **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
+    **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, _gen_join),
+    **dict.fromkeys(SCAFFOLD_UNION_SEGMENTS, _gen_union),
+    **dict.fromkeys(SCAFFOLD_SUMMARIZE_SEGMENTS, _gen_summarize),
+    **dict.fromkeys(SCAFFOLD_SORT_SEGMENTS, _gen_sort),
+    **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, _gen_sample),
+    **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, _gen_unique),
 }
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -427,7 +428,7 @@ def scaffold(doc: WorkflowDoc) -> str:
         node = node_map.get(tool_id)
         if node is None:
             continue
-        segment = node.tool_type.split(".")[-1]
+        segment = tool_segment(node.tool_type)
         preds = pred_map.get(tool_id, [])
         anchors = anchor_map.get(tool_id, {})
 

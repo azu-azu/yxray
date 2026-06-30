@@ -23,6 +23,16 @@ from yxray.config_utils import (
     select_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
+from yxray.tool_registry import (
+    AGGREGATE_SEGMENTS,
+    FILTER_SEGMENTS,
+    FORMULA_SEGMENTS,
+    JOIN_SEGMENTS,
+    SELECT_SEGMENTS,
+    UNION_SEGMENTS,
+    classify_tool,
+    tool_segment,
+)
 from yxray.topology import topo_order
 
 __all__ = [
@@ -32,59 +42,6 @@ __all__ = [
     "summarize",
     "extract_key_insights",
 ]
-
-# ---------------------------------------------------------------------------
-# Tool type registry
-# ---------------------------------------------------------------------------
-
-# Last segment of the plugin string (e.g. "DbFileInput") →
-# (display_name, category)
-# category: "input" | "transform" | "output" | "unknown"
-_TOOL_MAP: dict[str, tuple[str, str]] = {
-    "DbFileInput": ("Input", "input"),
-    "InputData": ("Input", "input"),
-    "TextInput": ("Text Input", "input"),
-    "DbFileOutput": ("Output", "output"),
-    "OutputData": ("Output", "output"),
-    "BrowseV2": ("Browse", "output"),
-    "Browse": ("Browse", "output"),
-    "AlteryxFilter": ("Filter", "transform"),
-    "Filter": ("Filter", "transform"),
-    "AlteryxJoin": ("Join", "transform"),
-    "Join": ("Join", "transform"),
-    "AlteryxSelect": ("Select Fields", "transform"),
-    "Select": ("Select Fields", "transform"),
-    "AlteryxFormula": ("Formula", "transform"),
-    "Formula": ("Formula", "transform"),
-    "MultiFieldFormula": ("Multi-Field Formula", "transform"),
-    "AlteryxSummarize": ("Summarize", "transform"),
-    "Summarize": ("Summarize", "transform"),
-    "AlteryxSort": ("Sort", "transform"),
-    "Sort": ("Sort", "transform"),
-    "AlteryxSample": ("Sample", "transform"),
-    "Sample": ("Sample", "transform"),
-    "AlteryxUnion": ("Union", "transform"),
-    "Union": ("Union", "transform"),
-    "AlteryxAppend": ("Append", "transform"),
-    "Append": ("Append", "transform"),
-    "AlteryxCrossTab": ("Cross Tab", "transform"),
-    "CrossTab": ("Cross Tab", "transform"),
-    "AlteryxTranspose": ("Transpose", "transform"),
-    "Transpose": ("Transpose", "transform"),
-    "DynamicInput": ("Dynamic Input", "input"),
-    "DynamicRename": ("Dynamic Rename", "transform"),
-    "RecordID": ("Record ID", "transform"),
-    "DateTime": ("Date/Time", "transform"),
-    "DataCleansing": ("Data Cleansing", "transform"),
-    "FindReplace": ("Find & Replace", "transform"),
-    "GenerateRows": ("Generate Rows", "transform"),
-    "AlteryxFuzzyMatch": ("Fuzzy Match", "transform"),
-    "Tile": ("Tile", "transform"),
-    "Random": ("Random Sample", "transform"),
-    "RunCommand": ("Run Command", "transform"),
-    "ToolContainer": ("Container", "unknown"),
-    "CountRecords": ("Count Records", "transform"),
-}
 
 # Trunk detection thresholds for extract_key_insights:
 # a Filter/Formula is considered a "trunk" node when its downstream reach
@@ -245,7 +202,7 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         if node is None:
             continue
         short_type, category = classify(node.tool_type)
-        segment = node.tool_type.split(".")[-1]
+        segment = tool_segment(node.tool_type)
         dc = downstream.get(tid, 0)
         role = _insight_role(
             segment, category, node.config,
@@ -299,12 +256,7 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
 
 def classify(tool_type: str) -> tuple[str, str]:
     """Return (display_name, category) for a plugin string."""
-    segment = tool_type.split(".")[-1]
-    if segment in _TOOL_MAP:
-        return _TOOL_MAP[segment]
-    # Macro (.yxmc path) or unknown plugin
-    name = segment.replace("_", " ").replace("-", " ")
-    return name, "unknown"
+    return classify_tool(tool_type)
 
 
 def _count_by_short_type(nodes: list[Any]) -> str:
@@ -476,19 +428,6 @@ def _describe_container(config: dict[str, Any], members: list[Any] | None) -> st
     return _truncate(f"{prefix}contains {len(member_nodes)} tools ({summary})", 110)
 
 
-_JOIN_SEGMENTS = frozenset({"AlteryxJoin", "Join", "AlteryxAppend", "Append"})
-_UNION_SEGMENTS = frozenset({"AlteryxUnion", "Union"})
-_AGGREGATE_SEGMENTS = frozenset(
-    {
-        "AlteryxSummarize", "Summarize", "AlteryxCrossTab",
-        "CrossTab", "AlteryxTranspose", "Transpose",
-    }
-)
-_FILTER_SEGMENTS = frozenset({"AlteryxFilter", "Filter"})
-_FORMULA_SEGMENTS = frozenset({"AlteryxFormula", "Formula", "MultiFieldFormula"})
-_SELECT_SEGMENTS = frozenset({"AlteryxSelect", "Select"})
-
-
 def _insight_role(
     segment: str,
     category: str,
@@ -501,17 +440,17 @@ def _insight_role(
         return "input"
     if category == "output" and "Browse" not in segment:
         return "output"
-    if segment in _JOIN_SEGMENTS:
+    if segment in JOIN_SEGMENTS:
         return "join"
-    if segment in _UNION_SEGMENTS:
+    if segment in UNION_SEGMENTS:
         return "union"
-    if segment in _AGGREGATE_SEGMENTS:
+    if segment in AGGREGATE_SEGMENTS:
         return "aggregate"
-    if segment in _FILTER_SEGMENTS:
+    if segment in FILTER_SEGMENTS:
         return "filter" if downstream_count >= trunk_threshold else None
-    if segment in _FORMULA_SEGMENTS:
+    if segment in FORMULA_SEGMENTS:
         return "formula" if downstream_count >= trunk_threshold else None
-    if segment in _SELECT_SEGMENTS:
+    if segment in SELECT_SEGMENTS:
         rows = select_field_rows(config)
         renamed = sum(
             1 for r in rows
@@ -575,7 +514,7 @@ def _describe(
     Pass max_len to cap the output length (Summary panel).
     Omit max_len (default None) for untruncated output (At a Glance panel).
     """
-    segment = tool_type.split(".")[-1]
+    segment = tool_segment(tool_type)
     describer = _DESCRIBERS.get(segment)
     result = describer(config, members) if describer else ""
     if max_len is not None and result:
