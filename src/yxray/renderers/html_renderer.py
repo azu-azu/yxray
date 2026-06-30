@@ -282,6 +282,11 @@ button.stat-card:hover { opacity: 0.85; }
 </details>
 {% endif %}
 <script>
+// Chrome logs "Unsafe attempt to load URL file://..." for any file:// page —
+// this is browser-internal behaviour unrelated to yxray. Safe to ignore.
+if (location.protocol === 'file:') {
+  console.info('[yxray] Chrome file:// security notice is expected and harmless. See: https://crbug.com/40476315');
+}
 function setTheme(theme) {
     if (theme === 'light') {
         document.documentElement.classList.add('light');
