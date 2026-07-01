@@ -33,7 +33,9 @@ _DEFAULT_DIFF_DIR = pathlib.Path("input_diff")
 def _pick_single_default() -> pathlib.Path:
     folder = _DEFAULT_SINGLE_DIR
     if not folder.is_dir():
-        typer.echo(f"Error: no file given and default folder not found: {folder}", err=True)
+        typer.echo(
+            f"Error: no file given and default folder not found: {folder}", err=True
+        )
         raise typer.Exit(code=2)
     files = sorted(f for f in folder.iterdir() if f.suffix in _WORKFLOW_EXTS)
     if len(files) == 0:
@@ -52,12 +54,15 @@ def _pick_single_default() -> pathlib.Path:
 def _pick_diff_default() -> tuple[pathlib.Path, pathlib.Path]:
     folder = _DEFAULT_DIFF_DIR
     if not folder.is_dir():
-        typer.echo(f"Error: no files given and default folder not found: {folder}", err=True)
+        typer.echo(
+            f"Error: no files given and default folder not found: {folder}", err=True
+        )
         raise typer.Exit(code=2)
     files = sorted(f for f in folder.iterdir() if f.suffix in _WORKFLOW_EXTS)
     if len(files) != 2:
         typer.echo(
-            f"Error: {folder}/ must contain exactly 2 .yxmd/.yxmc files, found {len(files)}",
+            f"Error: {folder}/ must contain exactly 2 .yxmd/.yxmc files, "
+            f"found {len(files)}",
             err=True,
         )
         raise typer.Exit(code=2)
