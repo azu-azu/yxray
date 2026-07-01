@@ -289,38 +289,23 @@ app.command("inspect")(_inspect_impl)
 app.command("i", hidden=True)(_inspect_impl)
 
 
-def _explain_impl(  # noqa: B008
-    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
-        None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
-    ),
+def _collect_deps(code: str) -> list[str]:
+    deps = ["pandas"]
+    if "read_excel" in code or "to_excel" in code:
+        deps.append("openpyxl")
+    return deps
+
+
+def _write_explain_outputs(
+    workflow: pathlib.Path,
+    steps: list[Any],
+    code: str,
 ) -> None:
-    """Explain each tool and generate a Python scaffold, written to output/.
-
-    Omit the path to use the single file in input/.
-    Creates output/<workflow_stem>.md with a tool summary table and a
-    Python scaffold code block.  Unsupported tools are flagged TODO.
-
-      acd explain workflow.yxmd
-      acd ex workflow.yxmd
-    """
-    from yxray.explain import explain
-    from yxray.scaffold import scaffold
-
-    if workflow is None:
-        workflow = _pick_single_default()
-    try:
-        doc = parse_one(workflow)
-    except MalformedXMLError as e:
-        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
-        raise typer.Exit(code=2) from None
-    except ParseError as e:
-        typer.echo(f"Error: {e.message}", err=True)
-        raise typer.Exit(code=2) from None
-
-    steps = explain(doc)
-    code = scaffold(doc)
-
-    out_path = _resolve_output(None, f"{workflow.stem}.md")
+    out_dir = pathlib.Path("output")
+    out_dir.mkdir(exist_ok=True)
+    out_path = out_dir / f"{workflow.stem}.md"
+    py_path = out_dir / f"{workflow.stem}.py"
+    req_path = out_dir / "requirements.txt"
 
     md_lines: list[str] = [
         f"# {workflow.name}",
@@ -348,8 +333,65 @@ def _explain_impl(  # noqa: B008
         "",
     ]
 
+    py_lines = [
+        f'"""{workflow.stem}.py — generated from {workflow.name}',
+        "",
+        "Edit main() to implement your logic.",
+        '"""',
+        "from __future__ import annotations",
+        "",
+        "import pandas as pd",
+        "",
+        "",
+        "def main() -> None:",
+        "    pass",
+        "",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+
     out_path.write_text("\n".join(md_lines), encoding="utf-8")
-    typer.echo(f"Report written to {out_path}", err=True)
+    py_path.write_text("\n".join(py_lines), encoding="utf-8")
+    req_path.write_text("\n".join(_collect_deps(code)) + "\n", encoding="utf-8")
+    typer.echo(f"Report   → {out_path}", err=True)
+    typer.echo(f"Template → {py_path}", err=True)
+    typer.echo(f"Deps     → {req_path}", err=True)
+
+
+def _explain_impl(  # noqa: B008
+    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
+    ),
+) -> None:
+    """Explain each tool and generate a Python scaffold, written to output/.
+
+    Omit the path to use the single file in input/.
+    Creates three files in output/:
+      <workflow_stem>.md    — tool summary table + Python scaffold code block
+      <workflow_stem>.py    — minimal Python template (main() stub)
+      requirements.txt      — detected package dependencies
+    Unsupported tools are flagged TODO.
+
+      acd explain workflow.yxmd
+      acd ex workflow.yxmd
+    """
+    from yxray.explain import explain
+    from yxray.scaffold import scaffold
+
+    if workflow is None:
+        workflow = _pick_single_default()
+    try:
+        doc = parse_one(workflow)
+    except MalformedXMLError as e:
+        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+    except ParseError as e:
+        typer.echo(f"Error: {e.message}", err=True)
+        raise typer.Exit(code=2) from None
+
+    _write_explain_outputs(workflow, explain(doc), scaffold(doc))
 
 
 app.command("explain")(_explain_impl)
