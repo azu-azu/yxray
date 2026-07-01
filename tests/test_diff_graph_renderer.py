@@ -89,6 +89,13 @@ def test_single_graph_embeds_topological_node_layers() -> None:
     assert data["node_layer"] == {"1": 0, "2": 1}
 
 
+def test_single_graph_copy_python_respects_uppercase_selected() -> None:
+    """Copy Python keeps parity with table rendering for Selected attributes."""
+    html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
+
+    assert "f['@selected'] || f['@Selected'] || 'True'" in html
+
+
 def test_render_returns_fragment_not_full_document() -> None:
     """GRPH-01: output is a fragment, not a full HTML document."""
     renderer = DiffGraphRenderer()

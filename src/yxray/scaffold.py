@@ -547,9 +547,13 @@ def _emit_main_body(
         body.append(f"# ToolID {tool_id}: {segment}")
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
-            code = _gen_input(tool_id, segment, node.config, preds, anchors, input_paths)
+            code = _gen_input(
+                tool_id, segment, node.config, preds, anchors, input_paths
+            )
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
-            code = _gen_output(tool_id, segment, node.config, preds, anchors, output_paths)
+            code = _gen_output(
+                tool_id, segment, node.config, preds, anchors, output_paths
+            )
         else:
             gen = _GENERATORS.get(segment)
             if gen is None:
@@ -592,7 +596,9 @@ def scaffold(doc: WorkflowDoc) -> str:
     if has_select:
         lines += _emit_select_helpers()
     lines += ["", "", "def main() -> None:"]
-    lines += _emit_main_body(order, node_map, pred_map, anchor_map, input_paths, output_paths)
+    lines += _emit_main_body(
+        order, node_map, pred_map, anchor_map, input_paths, output_paths
+    )
     lines += [
         "",
         "",
