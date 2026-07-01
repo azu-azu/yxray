@@ -2259,7 +2259,7 @@ function copyPanelPython() {
     if (typeof f !== 'object') return;
     var name = f['@field'] || f['@name'] || f['@Field'] || f['@Name'] || '';
     if (!name) return;
-    var selected = (f['@selected'] || 'True').toLowerCase() !== 'false';
+    var selected = (f['@selected'] || f['@Selected'] || 'True').toLowerCase() !== 'false';
     var rename = f['@rename'] || f['@Rename'] || '';
     if (!selected) {
       lines.push('    SelectColumnEdit("' + name + '", selected=False),');

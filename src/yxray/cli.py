@@ -360,7 +360,11 @@ def _extract_template_context(code: str) -> dict[str, Any]:
             group_keys.append((cols, source))
 
         blocks = re.findall(r"(?:on|left_on|right_on)=\[([^\]]+)\]", section)
-        cols = list(dict.fromkeys(c for b in blocks for c in re.findall(r'"([^"]+)"', b)))
+        cols = list(
+            dict.fromkeys(
+                c for b in blocks for c in re.findall(r'"([^"]+)"', b)
+            )
+        )
         if cols:
             join_keys.append((cols, source))
 
@@ -417,7 +421,9 @@ def _build_py_lines(workflow: pathlib.Path, code: str) -> list[str]:
     ]
 
     if inputs or outputs:
-        lines.append("# ── Paths ─────────────────────────────────────────────────────────────")
+        lines.append(
+            "# ── Paths ─────────────────────────────────────────────────────────────"
+        )
         if inputs:
             lines.append("INPUTS = {")
             for key, path in inputs:
@@ -430,7 +436,9 @@ def _build_py_lines(workflow: pathlib.Path, code: str) -> list[str]:
             lines.append("}")
         lines.append("")
 
-    lines.append("# ── Detected columns ──────────────────────────────────────────────────")
+    lines.append(
+        "# ── Detected columns ──────────────────────────────────────────────────"
+    )
     for var, groups in (
         ("SELECT_COLUMNS", ctx["select_cols"]),
         ("GROUP_KEYS", ctx["group_keys"]),
