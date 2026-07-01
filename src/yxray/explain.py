@@ -11,7 +11,6 @@ python_hint by looking up the raw tool_type segment from doc.nodes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from yxray.models.workflow import WorkflowDoc
 from yxray.summarizer import summarize
@@ -33,16 +32,6 @@ class ExplainStep:
     description: str
     python_hint: str
     supported: bool
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "tool_id": self.tool_id,
-            "short_type": self.short_type,
-            "category": self.category,
-            "description": self.description,
-            "python_hint": self.python_hint,
-            "supported": self.supported,
-        }
 
 
 # ---------------------------------------------------------------------------

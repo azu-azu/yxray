@@ -89,19 +89,6 @@ def test_explain_topo_order() -> None:
     assert ids.index(1) < ids.index(2)
 
 
-def test_explain_to_dict_keys() -> None:
-    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
-    d = explain(doc)[0].to_dict()
-    assert set(d.keys()) == {
-        "tool_id",
-        "short_type",
-        "category",
-        "description",
-        "python_hint",
-        "supported",
-    }
-
-
 def test_explain_union_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Union", x=0, y=0))
     steps = explain(doc)
