@@ -2785,6 +2785,13 @@ function clearSearch() {
 document.getElementById('search-input').addEventListener('input', function() {
   doSearch(this.value);
 });
+document.getElementById('search-input').addEventListener('focus', function() {
+  if (searchActive) {
+    var q = this.value.trim();
+    var srp = document.getElementById('search-results-panel');
+    if (q && srp && !srp.classList.contains('open')) doSearch(q, true);
+  }
+});
 document.getElementById('search-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') { this.blur(); }
   else if (e.key === 'Escape') { clearSearch(); this.blur(); }
