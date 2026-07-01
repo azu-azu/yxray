@@ -25,6 +25,13 @@ def test_scaffold_includes_docstring() -> None:
     assert "test.yxmd" in code
 
 
+def test_scaffold_includes_main() -> None:
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
+    code = scaffold(doc)
+    assert "def main()" in code
+    assert '__name__ == "__main__"' in code
+
+
 # ── Input / Output ──────────────────────────────────────────────────────────
 
 
@@ -36,7 +43,8 @@ def test_scaffold_input_excel() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_1 = pd.read_excel("master.xlsx")' in code
+    assert 'INPUTS["input_1"]' in code
+    assert "pd.read_excel" in code
 
 
 def test_scaffold_input_csv() -> None:
@@ -47,7 +55,22 @@ def test_scaffold_input_csv() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_1 = pd.read_csv("data.csv")' in code
+    assert 'INPUTS["input_1"]' in code
+    assert "pd.read_csv" in code
+
+
+def test_scaffold_input_paths_env_block() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            config={"File": "data.csv"},
+        )
+    )
+    code = scaffold(doc)
+    assert 'ENV = os.getenv("APP_ENV", "test")' in code
+    assert "BASE_DIR" in code
+    assert 'parents[2]' in code
+    assert '"input_1"' in code
 
 
 def test_scaffold_output_csv() -> None:
@@ -74,7 +97,8 @@ def test_scaffold_output_csv() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df_1.to_csv("out.csv", index=False)' in code
+    assert 'OUTPUTS["output_2"]' in code
+    assert ".to_csv" in code
 
 
 # ── Filter ─────────────────────────────────────────────────────────────────
@@ -127,7 +151,8 @@ def test_scaffold_select_columns() -> None:
     code = scaffold(doc)
     assert '"Name"' in code
     assert '"Age"' in code
-    assert '"Junk"' not in code
+    assert 'SelectColumnEdit("Junk", selected=False)' in code
+    assert "apply_select_edits" in code
 
 
 def test_scaffold_select_with_rename() -> None:
@@ -155,8 +180,32 @@ def test_scaffold_select_with_rename() -> None:
         ),
     )
     code = scaffold(doc)
-    assert "rename" in code
     assert '"new_col"' in code
+    assert "SelectColumnEdit" in code
+
+
+def test_scaffold_select_emits_helpers() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [{"@field": "Col", "@selected": "True"}]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "from dataclasses import dataclass" in code
+    assert "class SelectColumnEdit:" in code
+    assert "def apply_select_edits(" in code
 
 
 # ── Join ───────────────────────────────────────────────────────────────────
