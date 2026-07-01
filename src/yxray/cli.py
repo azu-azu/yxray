@@ -25,6 +25,44 @@ app = typer.Typer(no_args_is_help=True)
 # Spinner + summary go to stderr so stdout stays clean for --json
 _err_console = Console(stderr=True)
 
+_WORKFLOW_EXTS = {".yxmd", ".yxmc"}
+_DEFAULT_SINGLE_DIR = pathlib.Path("input")
+_DEFAULT_DIFF_DIR = pathlib.Path("input_diff")
+
+
+def _pick_single_default() -> pathlib.Path:
+    folder = _DEFAULT_SINGLE_DIR
+    if not folder.is_dir():
+        typer.echo(f"Error: no file given and default folder not found: {folder}", err=True)
+        raise typer.Exit(code=2)
+    files = sorted(f for f in folder.iterdir() if f.suffix in _WORKFLOW_EXTS)
+    if len(files) == 0:
+        typer.echo(f"Error: no .yxmd/.yxmc file found in {folder}/", err=True)
+        raise typer.Exit(code=2)
+    if len(files) > 1:
+        typer.echo(
+            f"Error: multiple files in {folder}/ — specify one explicitly: "
+            + ", ".join(f.name for f in files),
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return files[0]
+
+
+def _pick_diff_default() -> tuple[pathlib.Path, pathlib.Path]:
+    folder = _DEFAULT_DIFF_DIR
+    if not folder.is_dir():
+        typer.echo(f"Error: no files given and default folder not found: {folder}", err=True)
+        raise typer.Exit(code=2)
+    files = sorted(f for f in folder.iterdir() if f.suffix in _WORKFLOW_EXTS)
+    if len(files) != 2:
+        typer.echo(
+            f"Error: {folder}/ must contain exactly 2 .yxmd/.yxmc files, found {len(files)}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return files[0], files[1]
+
 
 def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Path:
     out = path if path is not None else pathlib.Path("output") / default_name
@@ -33,11 +71,11 @@ def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Pat
 
 
 def _diff_impl(  # noqa: B008
-    workflow_a: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help="Baseline .yxmd or .yxwz file (quote paths that contain spaces)"
+    workflow_a: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help="Baseline .yxmd/.yxmc file (omit to use input_diff/ folder)"
     ),
-    workflow_b: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help="Changed .yxmd or .yxwz file (quote paths that contain spaces)"
+    workflow_b: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help="Changed .yxmd/.yxmc file (omit to use input_diff/ folder)"
     ),
     output: pathlib.Path | None = typer.Option(  # noqa: B008
         None,
@@ -85,12 +123,19 @@ def _diff_impl(  # noqa: B008
         help="Write JSON diff to stdout instead of HTML file (pipe-friendly)",
     ),
 ) -> None:
-    """Compare two Alteryx .yxmd or .yxwz workflow/app files and report differences.
+    """Compare two Alteryx .yxmd or .yxmc workflow files and report differences.
 
+    Omit both paths to use the two files in input_diff/.
     Paths that contain spaces must be quoted in the shell, e.g.:
 
       acd diff "My Workflow A.yxmd" "My Workflow B.yxmd"
     """
+    if workflow_a is None and workflow_b is None:
+        workflow_a, workflow_b = _pick_diff_default()
+    elif workflow_a is None or workflow_b is None:
+        typer.echo("Error: provide both workflow files or neither", err=True)
+        raise typer.Exit(code=2)
+
     # Compute governance metadata upfront — single timestamp for audit consistency
     # Guard here: missing file raises FileNotFoundError before pipeline even starts
     try:
@@ -184,8 +229,8 @@ app.command("d", hidden=True)(_diff_impl)
 
 
 def _inspect_impl(  # noqa: B008
-    workflow: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help=".yxmd or .yxwz workflow file to inspect"
+    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help=".yxmd/.yxmc workflow file to inspect (omit to use input/ folder)"
     ),
     output: pathlib.Path | None = typer.Option(  # noqa: B008
         None,
@@ -204,9 +249,12 @@ def _inspect_impl(  # noqa: B008
 ) -> None:
     """Inspect a single Alteryx workflow and generate an interactive HTML report.
 
+    Omit the path to use the single file in input/.
     Produces a standalone vis-network graph showing all tools and connections.
     Click any node to view its configuration. No diff — single-workflow view only.
     """
+    if workflow is None:
+        workflow = _pick_single_default()
     try:
         with _err_console.status("Parsing workflow...", spinner="dots"):
             doc = parse_one(workflow, filter_ui_tools=filter_ui_tools)
@@ -237,8 +285,8 @@ app.command("i", hidden=True)(_inspect_impl)
 
 
 def _explain_impl(  # noqa: B008
-    workflow: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help=".yxmd or .yxwz workflow file"
+    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
     ),
     json_output: bool = typer.Option(  # noqa: B008
         False,
@@ -248,6 +296,7 @@ def _explain_impl(  # noqa: B008
 ) -> None:
     """Show each tool's Python/pandas equivalent in topological order.
 
+    Omit the path to use the single file in input/.
     Outputs a plain-text report (or JSON with --json) mapping every
     Alteryx tool to its nearest pandas equivalent.  Unsupported tools
     are flagged with a TODO comment.
@@ -257,6 +306,8 @@ def _explain_impl(  # noqa: B008
     """
     from yxray.explain import explain
 
+    if workflow is None:
+        workflow = _pick_single_default()
     try:
         doc = parse_one(workflow)
     except MalformedXMLError as e:
@@ -288,8 +339,8 @@ app.command("ex", hidden=True)(_explain_impl)
 
 
 def _scaffold_impl(  # noqa: B008
-    workflow: pathlib.Path = typer.Argument(  # noqa: B008
-        ..., help=".yxmd or .yxwz workflow file"
+    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
     ),
     output: pathlib.Path | None = typer.Option(  # noqa: B008
         None,
@@ -300,6 +351,7 @@ def _scaffold_impl(  # noqa: B008
 ) -> None:
     """Generate a Python/pandas scaffold from an Alteryx workflow.
 
+    Omit the path to use the single file in input/.
     Produces a .py skeleton with one code block per tool in topological
     order. Supported tools get semi-concrete pandas code; unsupported
     tools get a TODO comment.
@@ -309,6 +361,8 @@ def _scaffold_impl(  # noqa: B008
     """
     from yxray.scaffold import scaffold
 
+    if workflow is None:
+        workflow = _pick_single_default()
     try:
         doc = parse_one(workflow)
     except MalformedXMLError as e:
