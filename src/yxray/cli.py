@@ -297,6 +297,27 @@ def _collect_deps(code: str) -> list[str]:
     return deps
 
 
+def _build_pyproject(workflow: pathlib.Path, code: str) -> str:
+    deps = _collect_deps(code)
+    dep_lines = "\n".join(f'    "{dep}",' for dep in deps)
+    return (
+        "[project]\n"
+        'name = "<your-project-name>"\n'
+        'version = "0.1.0"\n'
+        f'description = "Generated from {workflow.name}"\n'
+        'requires-python = ">=3.11"\n'
+        "dependencies = [\n"
+        f"{dep_lines}\n"
+        "]\n"
+        "\n"
+        "[project.scripts]\n"
+        f'"{workflow.stem}" = "<package>.main:main"\n'
+        "\n"
+        "[tool.hatch.build.targets.wheel]\n"
+        'packages = ["src/"]\n'
+    )
+
+
 def _extract_template_context(code: str) -> dict[str, Any]:
     """Extract paths and column names per category, with source attribution."""
     sections = re.split(r"# [─]{10,}\n", code)
@@ -456,7 +477,7 @@ def _write_explain_outputs(
     out_dir.mkdir(exist_ok=True)
     out_path = out_dir / f"{workflow.stem}.md"
     py_path = out_dir / f"{workflow.stem}.py"
-    req_path = out_dir / "requirements.txt"
+    pyproject_path = out_dir / "pyproject.toml"
 
     md_lines: list[str] = [
         f"# {workflow.name}",
@@ -486,10 +507,10 @@ def _write_explain_outputs(
 
     out_path.write_text("\n".join(md_lines), encoding="utf-8")
     py_path.write_text("\n".join(_build_py_lines(workflow, code)), encoding="utf-8")
-    req_path.write_text("\n".join(_collect_deps(code)) + "\n", encoding="utf-8")
-    typer.echo(f"Report   → {out_path}", err=True)
-    typer.echo(f"Template → {py_path}", err=True)
-    typer.echo(f"Deps     → {req_path}", err=True)
+    pyproject_path.write_text(_build_pyproject(workflow, code), encoding="utf-8")
+    typer.echo(f"Report     → {out_path}", err=True)
+    typer.echo(f"Template   → {py_path}", err=True)
+    typer.echo(f"Pyproject  → {pyproject_path}", err=True)
 
 
 def _explain_impl(  # noqa: B008
@@ -503,7 +524,7 @@ def _explain_impl(  # noqa: B008
     Creates three files in output/:
       <workflow_stem>.md    — tool summary table + Python scaffold code block
       <workflow_stem>.py    — minimal Python template (main() stub)
-      requirements.txt      — detected package dependencies
+      pyproject.toml        — project scaffold with detected dependencies
     Unsupported tools are flagged TODO.
 
       acd explain workflow.yxmd
