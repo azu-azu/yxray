@@ -293,77 +293,17 @@ def _explain_impl(  # noqa: B008
     workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
         None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
     ),
-    json_output: bool = typer.Option(  # noqa: B008
-        False,
-        "--json",
-        help="Write JSON to stdout instead of plain text",
-    ),
 ) -> None:
-    """Show each tool's Python/pandas equivalent in topological order.
+    """Explain each tool and generate a Python scaffold, written to output/.
 
     Omit the path to use the single file in input/.
-    Outputs a plain-text report (or JSON with --json) mapping every
-    Alteryx tool to its nearest pandas equivalent.  Unsupported tools
-    are flagged with a TODO comment.
+    Creates output/<workflow_stem>.md with a tool summary table and a
+    Python scaffold code block.  Unsupported tools are flagged TODO.
 
       acd explain workflow.yxmd
-      acd explain workflow.yxmd --json
+      acd ex workflow.yxmd
     """
     from yxray.explain import explain
-
-    if workflow is None:
-        workflow = _pick_single_default()
-    try:
-        doc = parse_one(workflow)
-    except MalformedXMLError as e:
-        typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
-        raise typer.Exit(code=2) from None
-    except ParseError as e:
-        typer.echo(f"Error: {e.message}", err=True)
-        raise typer.Exit(code=2) from None
-
-    steps = explain(doc)
-
-    if json_output:
-        typer.echo(
-            json.dumps([s.to_dict() for s in steps], indent=2, ensure_ascii=False)
-        )
-        return
-
-    for step in steps:
-        tag = " [unsupported]" if not step.supported else ""
-        typer.echo(f"ToolID {step.tool_id}: {step.short_type}{tag}")
-        if step.description:
-            typer.echo(f"  description: {step.description}")
-        typer.echo(f"  python_hint: {step.python_hint}")
-        typer.echo("")
-
-
-app.command("explain")(_explain_impl)
-app.command("ex", hidden=True)(_explain_impl)
-
-
-def _scaffold_impl(  # noqa: B008
-    workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
-        None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
-    ),
-    output: pathlib.Path | None = typer.Option(  # noqa: B008
-        None,
-        "--output",
-        "-o",
-        help="Write Python scaffold to file instead of stdout",
-    ),
-) -> None:
-    """Generate a Python/pandas scaffold from an Alteryx workflow.
-
-    Omit the path to use the single file in input/.
-    Produces a .py skeleton with one code block per tool in topological
-    order. Supported tools get semi-concrete pandas code; unsupported
-    tools get a TODO comment.
-
-      acd scaffold workflow.yxmd
-      acd scaffold workflow.yxmd -o workflow.py
-    """
     from yxray.scaffold import scaffold
 
     if workflow is None:
@@ -377,17 +317,43 @@ def _scaffold_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
+    steps = explain(doc)
     code = scaffold(doc)
 
-    if output:
-        output.write_text(code, encoding="utf-8")
-        typer.echo(f"Scaffold written to {output}", err=True)
-    else:
-        typer.echo(code)
+    out_path = _resolve_output(None, f"{workflow.stem}.md")
+
+    md_lines: list[str] = [
+        f"# {workflow.name}",
+        "",
+        "## Tool Summary",
+        "",
+        "| ToolID | Type | Category | Description | Python Hint | Supported |",
+        "|--------|------|----------|-------------|-------------|-----------|",
+    ]
+    for step in steps:
+        desc = (step.description or "").replace("|", "\\|")
+        hint = step.python_hint.replace("|", "\\|")
+        supported = "yes" if step.supported else "no"
+        md_lines.append(
+            f"| {step.tool_id} | {step.short_type} | {step.category}"
+            f" | {desc} | `{hint}` | {supported} |"
+        )
+    md_lines += [
+        "",
+        "## Python Scaffold",
+        "",
+        "```python",
+        code.rstrip("\n"),
+        "```",
+        "",
+    ]
+
+    out_path.write_text("\n".join(md_lines), encoding="utf-8")
+    typer.echo(f"Report written to {out_path}", err=True)
 
 
-app.command("scaffold")(_scaffold_impl)
-app.command("sc", hidden=True)(_scaffold_impl)
+app.command("explain")(_explain_impl)
+app.command("ex", hidden=True)(_explain_impl)
 
 
 def _file_sha256(path: pathlib.Path) -> str:
