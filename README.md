@@ -43,6 +43,8 @@ acd inspect workflow.yxmd --no-filter-ui-tools
 
 The report contains an interactive vis-network graph. Click any node to view its configuration and Python/pandas equivalent. Supports light/dark theme, zoom, pan, and fullscreen.
 
+For **Select** and **AlteryxSelect** nodes, a **Copy Python** button appears in the panel action bar. Clicking it writes a ready-to-paste `SelectColumnEdit` snippet to the clipboard — the same format that `scaffold` emits.
+
 ---
 
 ### diff
@@ -105,6 +107,8 @@ acd explain workflow.yxmd --json | jq '.[].python_hint'
 
 Unsupported tools are flagged with a `# TODO` comment.
 
+Also writes `output/pyproject.toml` — a `[project]` scaffold with detected dependencies (`pandas`, `openpyxl` when Excel I/O is present) and a `[project.scripts]` entry keyed by the workflow filename.
+
 ---
 
 ### scaffold
@@ -122,7 +126,12 @@ Write to a file:
 acd scaffold workflow.yxmd -o workflow.py
 ```
 
-Each tool becomes one annotated code block in topological order. Supported tools get semi-concrete pandas code; unsupported tools get a `# TODO` comment.
+The generated file is structured as a runnable Python module:
+
+- **Preamble**: imports, `ENV = os.getenv("APP_ENV", "test")`, and `SelectColumnEdit` / `apply_select_edits` helpers (emitted when any Select tool is present)
+- **Paths block**: `INPUTS` / `OUTPUTS` dicts gated by `ENV`. `test` mode resolves paths relative to `BASE_DIR`; `prod` mode uses the original absolute paths from the workflow
+- **`main()` body**: one annotated code block per tool in topological order — supported tools get semi-concrete pandas code, unsupported tools get a `# TODO` comment
+- **Entry point**: `if __name__ == "__main__": logging.basicConfig(...); main()`
 
 ---
 
