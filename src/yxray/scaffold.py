@@ -44,19 +44,16 @@ def _translate_expr(expr: str, df_var: str) -> str:
     return _FIELD_RE.sub(lambda m: f'{df_var}["{m.group(1)}"]', expr)
 
 
-def _file_read(path: str) -> str:
-    """Return `pd.read_excel` or `pd.read_csv` based on file extension."""
-    ext = pathlib.Path(path).suffix.lower()
+def _file_read(path_expr: str, ext: str) -> str:
     if ext in (".xlsx", ".xlsm", ".xls"):
-        return f'pd.read_excel("{path}")'
-    return f'pd.read_csv("{path}")'
+        return f"pd.read_excel({path_expr})"
+    return f"pd.read_csv({path_expr})"
 
 
-def _file_write(path: str, df_var: str) -> str:
-    ext = pathlib.Path(path).suffix.lower()
+def _file_write(path_expr: str, df_var: str, ext: str) -> str:
     if ext in (".xlsx", ".xlsm", ".xls"):
-        return f'{df_var}.to_excel("{path}", index=False)'
-    return f'{df_var}.to_csv("{path}", index=False)'
+        return f"{df_var}.to_excel({path_expr}, index=False)"
+    return f"{df_var}.to_csv({path_expr}, index=False)"
 
 
 # ── Connection helpers ─────────────────────────────────────────────────────
@@ -93,10 +90,12 @@ def _gen_input(
     config: dict[str, Any],
     _preds: list[int],
     _anchors: dict[str, int],
+    input_paths: dict[int, str],
 ) -> str:
-    path = first_text(config, "File", "FileName")
-    if path:
-        return f"{_dvar(tool_id)} = {_file_read(path)}"
+    if tool_id in input_paths:
+        ext = pathlib.Path(input_paths[tool_id]).suffix.lower()
+        path_expr = f'INPUTS["input_{tool_id}"]'
+        return f"{_dvar(tool_id)} = {_file_read(path_expr, ext)}"
     return f"{_dvar(tool_id)} = pd.read_csv(...)  # TODO: set file path"
 
 
@@ -106,12 +105,14 @@ def _gen_output(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    output_paths: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
     df_in = _dvar(src) if src else "df_?"
-    path = first_text(config, "File", "FileName")
-    if path:
-        return _file_write(path, df_in)
+    if tool_id in output_paths:
+        ext = pathlib.Path(output_paths[tool_id]).suffix.lower()
+        path_expr = f'OUTPUTS["output_{tool_id}"]'
+        return _file_write(path_expr, df_in, ext)
     return f"{df_in}.to_csv(...)  # TODO: set file path"
 
 
@@ -146,28 +147,35 @@ def _gen_select(
     df_in = _dvar(src) if src else "df_?"
     df_out = _dvar(tool_id)
     rows = select_field_rows(config)
-    selected = [
-        field_name(r)
-        for r in rows
-        if isinstance(r, dict)
-        and r.get("@selected", "True").lower() not in ("false",)
-        and field_name(r)
-    ]
-    renames = {
-        field_name(r): (r.get("@rename") or r.get("@Rename", ""))
-        for r in rows
-        if isinstance(r, dict)
-        and field_name(r)
-        and (r.get("@rename") or r.get("@Rename", ""))
-        and (r.get("@rename") or r.get("@Rename", "")) != field_name(r)
-    }
-    if not selected:
+
+    edits: list[tuple[str, str | None, bool]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        name = field_name(r)
+        if not name:
+            continue
+        selected = r.get("@selected", "True").lower() not in ("false",)
+        new_name: str | None = r.get("@rename") or r.get("@Rename") or None
+        if new_name == name:
+            new_name = None
+        edits.append((name, new_name, selected))
+
+    if not edits:
         return f"{df_out} = {df_in}  # TODO: Select — no columns found"
-    cols = "[" + ", ".join(f'"{c}"' for c in selected) + "]"
-    if renames:
-        rename_dict = "{" + ", ".join(f'"{k}": "{v}"' for k, v in renames.items()) + "}"
-        return f"{df_out} = {df_in}[{cols}].rename(columns={rename_dict})"
-    return f"{df_out} = {df_in}[{cols}]"
+
+    var = f"_COLS_{tool_id}"
+    col_lines: list[str] = [f"{var} = ["]
+    for name, new_name, selected in edits:
+        if not selected:
+            col_lines.append(f'    SelectColumnEdit("{name}", selected=False),')
+        elif new_name:
+            col_lines.append(f'    SelectColumnEdit("{name}", "{new_name}"),')
+        else:
+            col_lines.append(f'    SelectColumnEdit("{name}"),')
+    col_lines.append("]")
+    col_lines.append(f"{df_out} = apply_select_edits({df_in}, {var})")
+    return "\n".join(col_lines)
 
 
 def _gen_formula(
@@ -218,11 +226,9 @@ def _gen_join(
     df_left = _dvar(left_id) if left_id else "df_left"
     df_right = _dvar(right_id) if right_id else "df_right"
 
-    # Parse join keys from JoinExpression
     expr = first_text(config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
 
-    # Also try JoinInfo style
     if not matches:
         join_info = config.get("JoinInfo", {})
         if isinstance(join_info, list):
@@ -253,7 +259,6 @@ def _gen_join(
             f'    how="inner",\n'
             f')'
         )
-    # Fallback — no keys parsed
     return (
         f"# TODO: parse join condition: {expr or '(none)'}\n"
         f'{df_out} = pd.merge({df_left}, {df_right}, on=[...], how="inner")'
@@ -384,8 +389,6 @@ def _gen_unique(
 # ── Generator registry ─────────────────────────────────────────────────────
 
 _GENERATORS: dict[str, Any] = {
-    **dict.fromkeys(SCAFFOLD_INPUT_SEGMENTS, _gen_input),
-    **dict.fromkeys(SCAFFOLD_OUTPUT_SEGMENTS, _gen_output),
     **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, _gen_filter),
     **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
     **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
@@ -396,6 +399,171 @@ _GENERATORS: dict[str, Any] = {
     **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, _gen_sample),
     **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, _gen_unique),
 }
+
+# ── Scaffold section builders ──────────────────────────────────────────────
+
+
+def _collect_metadata(
+    node_map: dict[int, Any],
+    order: list[int],
+) -> tuple[dict[int, str], dict[int, str], bool]:
+    """Pre-pass: collect input/output paths and whether any Select tools exist."""
+    input_paths: dict[int, str] = {}
+    output_paths: dict[int, str] = {}
+    has_select = False
+
+    for tool_id in order:
+        node = node_map.get(tool_id)
+        if node is None:
+            continue
+        segment = tool_segment(node.tool_type)
+        if segment in SCAFFOLD_INPUT_SEGMENTS:
+            path = first_text(node.config, "File", "FileName")
+            if path:
+                input_paths[tool_id] = path
+        elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
+            path = first_text(node.config, "File", "FileName")
+            if path:
+                output_paths[tool_id] = path
+        elif segment in SCAFFOLD_SELECT_SEGMENTS:
+            has_select = True
+
+    return input_paths, output_paths, has_select
+
+
+def _emit_preamble(source: str, has_select: bool) -> list[str]:
+    lines: list[str] = [
+        f'"""Scaffold generated by yxray from {source}"""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+    if has_select:
+        lines.append("from dataclasses import dataclass")
+    lines += [
+        "import logging",
+        "import os",
+        "from pathlib import Path",
+        "",
+        "import pandas as pd",
+        "",
+        "logger = logging.getLogger(__name__)",
+    ]
+    return lines
+
+
+def _emit_paths_block(
+    input_paths: dict[int, str],
+    output_paths: dict[int, str],
+) -> list[str]:
+    if not (input_paths or output_paths):
+        return []
+
+    lines: list[str] = [
+        "",
+        'ENV = os.getenv("APP_ENV", "test")',
+        "",
+        "# ── Paths ─────────────────────────────────────────────────────────────",
+        "",
+        'if ENV == "test":',
+        "    BASE_DIR = Path(__file__).resolve().parents[2]",
+    ]
+    if input_paths:
+        lines += ["", "    INPUTS = {"]
+        for tid, path in input_paths.items():
+            fname = pathlib.Path(path).name
+            lines.append(f'        "input_{tid}": BASE_DIR / "input" / "{fname}",')
+        lines.append("    }")
+    if output_paths:
+        lines += ["", "    OUTPUTS = {"]
+        for tid, path in output_paths.items():
+            fname = pathlib.Path(path).name
+            lines.append(f'        "output_{tid}": BASE_DIR / "output" / "{fname}",')
+        lines.append("    }")
+    lines += ["", 'elif ENV == "prod":']
+    if input_paths:
+        lines.append("    INPUTS = {")
+        for tid, path in input_paths.items():
+            lines.append(f'        "input_{tid}": Path(r"{path}"),')
+        lines.append("    }")
+    if output_paths:
+        if input_paths:
+            lines.append("")
+        lines.append("    OUTPUTS = {")
+        for tid, path in output_paths.items():
+            lines.append(f'        "output_{tid}": Path(r"{path}"),')
+        lines.append("    }")
+    lines += [
+        "",
+        "else:",
+        '    raise ValueError(f"Unknown ENV: {ENV}")',
+    ]
+    return lines
+
+
+def _emit_select_helpers() -> list[str]:
+    return [
+        "",
+        "",
+        "@dataclass(frozen=True)",
+        "class SelectColumnEdit:",
+        "    name: str",
+        "    new_name: str | None = None",
+        "    selected: bool = True",
+        "",
+        "",
+        "def apply_select_edits(",
+        "        df: pd.DataFrame,",
+        "        columns: list[SelectColumnEdit],",
+        ") -> pd.DataFrame:",
+        "    drop_columns = {c.name for c in columns if not c.selected}",
+        "    rename_map = {",
+        "        c.name: c.new_name",
+        "        for c in columns",
+        "        if c.selected and c.new_name and c.new_name != c.name",
+        "    }",
+        "    return df.drop(columns=drop_columns).rename(columns=rename_map)",
+    ]
+
+
+def _emit_main_body(
+    order: list[int],
+    node_map: dict[int, Any],
+    pred_map: dict[int, list[int]],
+    anchor_map: dict[int, dict[str, int]],
+    input_paths: dict[int, str],
+    output_paths: dict[int, str],
+) -> list[str]:
+    body: list[str] = []
+    for tool_id in order:
+        node = node_map.get(tool_id)
+        if node is None:
+            continue
+        segment = tool_segment(node.tool_type)
+        preds = pred_map.get(tool_id, [])
+        anchors = anchor_map.get(tool_id, {})
+
+        body.append(f"# {'─' * 68}")
+        body.append(f"# ToolID {tool_id}: {segment}")
+
+        if segment in SCAFFOLD_INPUT_SEGMENTS:
+            code = _gen_input(tool_id, segment, node.config, preds, anchors, input_paths)
+        elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
+            code = _gen_output(tool_id, segment, node.config, preds, anchors, output_paths)
+        else:
+            gen = _GENERATORS.get(segment)
+            if gen is None:
+                body.append("# TODO: unsupported tool type — review manually")
+                body.append(f"# {_dvar(tool_id)} = ...")
+                body.append("")
+                continue
+            code = gen(tool_id, segment, node.config, preds, anchors)
+
+        body.append(code)
+        body.append("")
+
+    return ["    " + line if line else "" for line in body]
+
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -415,36 +583,22 @@ def scaffold(doc: WorkflowDoc) -> str:
     pred_map = _build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
-
     source = pathlib.Path(doc.filepath).name
-    lines: list[str] = [
-        f'"""Scaffold generated by yxray from {source}"""',
+
+    input_paths, output_paths, has_select = _collect_metadata(node_map, order)
+
+    lines = _emit_preamble(source, has_select)
+    lines += _emit_paths_block(input_paths, output_paths)
+    if has_select:
+        lines += _emit_select_helpers()
+    lines += ["", "", "def main() -> None:"]
+    lines += _emit_main_body(order, node_map, pred_map, anchor_map, input_paths, output_paths)
+    lines += [
         "",
-        "import pandas as pd",
         "",
+        'if __name__ == "__main__":',
+        "    logging.basicConfig(level=logging.INFO)",
+        "    main()",
     ]
-
-    for tool_id in order:
-        node = node_map.get(tool_id)
-        if node is None:
-            continue
-        segment = tool_segment(node.tool_type)
-        preds = pred_map.get(tool_id, [])
-        anchors = anchor_map.get(tool_id, {})
-
-        # Section header
-        lines.append(f"# {'─' * 68}")
-        lines.append(f"# ToolID {tool_id}: {segment}")
-
-        gen = _GENERATORS.get(segment)
-        if gen is None:
-            lines.append("# TODO: unsupported tool type — review manually")
-            lines.append(f"# {_dvar(tool_id)} = ...")
-            lines.append("")
-            continue
-
-        code = gen(tool_id, segment, node.config, preds, anchors)
-        lines.append(code)
-        lines.append("")
 
     return "\n".join(lines)
