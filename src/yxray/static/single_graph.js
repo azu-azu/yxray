@@ -1797,6 +1797,10 @@ function openPanel(nodeId) {
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
     if (_entry) _renderPanelEntry(_entry, body);
+    if (_pyBtn && _entry &&
+        (_entry.tool_type === 'Select' || _entry.tool_type === 'AlteryxSelect')) {
+      _pyBtn.style.display = '';
+    }
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -2241,6 +2245,7 @@ function copyPanelPython() {
   }
 
   var cfg = entry.config;
+  if (!cfg) return;
   var fields = cfg.SelectFields || cfg.Fields || {};
   var fieldList = (typeof fields === 'object') ? (fields.SelectField || fields.Field || []) : [];
   if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
@@ -2254,7 +2259,7 @@ function copyPanelPython() {
     if (typeof f !== 'object') return;
     var name = f['@field'] || f['@name'] || f['@Field'] || f['@Name'] || '';
     if (!name) return;
-    var selected = (f['@selected'] || f['@Selected'] || 'True').toLowerCase() !== 'false';
+    var selected = (f['@selected'] || 'True').toLowerCase() !== 'false';
     var rename = f['@rename'] || f['@Rename'] || '';
     if (!selected) {
       lines.push('    SelectColumnEdit("' + name + '", selected=False),');
