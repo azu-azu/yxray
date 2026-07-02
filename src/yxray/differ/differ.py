@@ -303,6 +303,24 @@ def _get_parent_path(path: str) -> str:
     return re.sub(r"\[\d+\]$", "", path)
 
 
+def _edge_diffs_for(
+    conns: frozenset[AlteryxConnection],
+    change_type: str,
+) -> list[EdgeDiff]:
+    """Build a sorted list of EdgeDiff entries for a set of connections."""
+    key = lambda c: (c.src_tool, c.src_anchor, c.dst_tool, c.dst_anchor)
+    return [
+        EdgeDiff(
+            src_tool=c.src_tool,
+            src_anchor=c.src_anchor,
+            dst_tool=c.dst_tool,
+            dst_anchor=c.dst_anchor,
+            change_type=change_type,
+        )
+        for c in sorted(conns, key=key)
+    ]
+
+
 def _diff_edges(
     old_connections: tuple[AlteryxConnection, ...],
     new_connections: tuple[AlteryxConnection, ...],
@@ -319,38 +337,7 @@ def _diff_edges(
     """
     old_set = frozenset(old_connections)
     new_set = frozenset(new_connections)
-
-    removed = old_set - new_set
-    added = new_set - old_set
-
-    edge_diffs: list[EdgeDiff] = []
-
-    # Sort removed connections for deterministic output
-    for conn in sorted(
-        removed, key=lambda c: (c.src_tool, c.src_anchor, c.dst_tool, c.dst_anchor)
-    ):
-        edge_diffs.append(
-            EdgeDiff(
-                src_tool=conn.src_tool,
-                src_anchor=conn.src_anchor,
-                dst_tool=conn.dst_tool,
-                dst_anchor=conn.dst_anchor,
-                change_type="removed",
-            )
-        )
-
-    # Sort added connections for deterministic output
-    for conn in sorted(
-        added, key=lambda c: (c.src_tool, c.src_anchor, c.dst_tool, c.dst_anchor)
-    ):
-        edge_diffs.append(
-            EdgeDiff(
-                src_tool=conn.src_tool,
-                src_anchor=conn.src_anchor,
-                dst_tool=conn.dst_tool,
-                dst_anchor=conn.dst_anchor,
-                change_type="added",
-            )
-        )
-
-    return tuple(edge_diffs)
+    return tuple(
+        _edge_diffs_for(old_set - new_set, "removed")
+        + _edge_diffs_for(new_set - old_set, "added")
+    )

@@ -13,7 +13,7 @@ from rich.console import Console
 from yxray.exceptions import MalformedXMLError, ParseError
 from yxray.models import DiffResult
 from yxray.parser import parse_one
-from yxray.pipeline import DiffRequest, run
+from yxray.pipeline import DiffRequest, DiffResponse, run
 from yxray.renderers import (
     DiffGraphRenderer,
     HTMLRenderer,
@@ -188,50 +188,63 @@ def _diff_impl(  # noqa: B008
 
     # Render output
     if json_output:
-        json_str = _cli_json_output(result, metadata)
-        typer.echo(json_str)  # stdout — pipe-friendly
+        typer.echo(_cli_json_output(result, metadata))  # stdout — pipe-friendly
     else:
-        file_a_str = str(workflow_a.resolve())
-        file_b_str = str(workflow_b.resolve())
-        all_connections = response.doc_a.connections + response.doc_b.connections
-        graph_html = DiffGraphRenderer().render(
-            result,
-            all_connections=all_connections,
-            nodes_old=response.doc_a.nodes,
-            nodes_new=response.doc_b.nodes,
-            canvas_layout=canvas_layout,
+        assert workflow_a is not None and workflow_b is not None  # narrowed above
+        _write_diff_html(
+            result, response, workflow_a, workflow_b, metadata, output,
+            canvas_layout=canvas_layout, quiet=quiet,
         )
-        added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
-        modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
-        steps = summarize(
-            response.doc_b, added_ids=added_ids, modified_ids=modified_ids
-        )
-        insights = extract_key_insights(response.doc_b)
-        html = HTMLRenderer().render(
-            result,
-            file_a=file_a_str,
-            file_b=file_b_str,
-            graph_html=graph_html,
-            metadata=metadata,
-            workflow_steps=steps,
-            key_insights=insights,
-        )
-        out_path = _resolve_output(output, "diff_report.html")
-        out_path.write_text(html, encoding="utf-8")
-        webbrowser.open(out_path.resolve().as_uri())
-        if not quiet:
-            change_count = (
-                len(result.added_nodes)
-                + len(result.removed_nodes)
-                + len(result.modified_nodes)
-                + len(result.edge_diffs)
-            )
-            typer.echo(
-                f"Report written to {out_path} ({change_count} changes detected)",
-                err=True,
-            )
 
     raise typer.Exit(code=1)
+
+
+def _write_diff_html(
+    result: DiffResult,
+    response: DiffResponse,
+    workflow_a: pathlib.Path,
+    workflow_b: pathlib.Path,
+    metadata: dict[str, Any],
+    output: pathlib.Path | None,
+    *,
+    canvas_layout: bool,
+    quiet: bool,
+) -> None:
+    all_connections = response.doc_a.connections + response.doc_b.connections
+    graph_html = DiffGraphRenderer().render(
+        result,
+        all_connections=all_connections,
+        nodes_old=response.doc_a.nodes,
+        nodes_new=response.doc_b.nodes,
+        canvas_layout=canvas_layout,
+    )
+    added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
+    modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
+    steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
+    insights = extract_key_insights(response.doc_b)
+    html = HTMLRenderer().render(
+        result,
+        file_a=str(workflow_a.resolve()),
+        file_b=str(workflow_b.resolve()),
+        graph_html=graph_html,
+        metadata=metadata,
+        workflow_steps=steps,
+        key_insights=insights,
+    )
+    out_path = _resolve_output(output, "diff_report.html")
+    out_path.write_text(html, encoding="utf-8")
+    webbrowser.open(out_path.resolve().as_uri())
+    if not quiet:
+        change_count = (
+            len(result.added_nodes)
+            + len(result.removed_nodes)
+            + len(result.modified_nodes)
+            + len(result.edge_diffs)
+        )
+        typer.echo(
+            f"Report written to {out_path} ({change_count} changes detected)",
+            err=True,
+        )
 
 
 app.command("diff")(_diff_impl)

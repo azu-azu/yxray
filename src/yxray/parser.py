@@ -150,27 +150,12 @@ def _parse_one(path: pathlib.Path, *, filter_ui_tools: bool = True) -> WorkflowD
     return _tree_to_workflow(tree, filepath=str(path), filter_ui_tools=filter_ui_tools)
 
 
-def _tree_to_workflow(
-    tree: etree._ElementTree[etree._Element],  # type: ignore[type-arg]
-    filepath: str,
+def _parse_nodes(
+    root: etree._Element,
     *,
-    filter_ui_tools: bool = True,
-) -> WorkflowDoc:
-    """Convert an lxml ElementTree to a WorkflowDoc.
-
-    Parameters
-    ----------
-    tree:
-        A fully-parsed lxml ElementTree.
-    filepath:
-        The original file path string, stored verbatim on WorkflowDoc.
-    filter_ui_tools:
-        When True (default), AlteryxGuiToolkit.* nodes are skipped so that
-        app interface elements do not appear as spurious diffs.
-    """
-    root: etree._Element = tree.getroot()
-
-    # --- Nodes ---
+    filter_ui_tools: bool,
+) -> list[AlteryxNode]:
+    """Extract AlteryxNode objects from the XML root element."""
     nodes_list: list[AlteryxNode] = []
     for node_elem in root.findall("Nodes//Node"):
         tool_id_str = node_elem.get("ToolID")
@@ -233,8 +218,11 @@ def _tree_to_workflow(
                 container_id=container_id,
             )
         )
+    return nodes_list
 
-    # --- Connections ---
+
+def _parse_connections(root: etree._Element) -> list[AlteryxConnection]:
+    """Extract AlteryxConnection objects from the XML root element."""
     connections_list: list[AlteryxConnection] = []
     for conn_elem in root.findall("Connections/Connection"):
         origin: etree._Element | None = conn_elem.find("Origin")
@@ -255,11 +243,32 @@ def _tree_to_workflow(
                 dst_anchor=AnchorName(dest.get("Connection", "Input")),
             )
         )
+    return connections_list
 
+
+def _tree_to_workflow(
+    tree: etree._ElementTree[etree._Element],  # type: ignore[type-arg]
+    filepath: str,
+    *,
+    filter_ui_tools: bool = True,
+) -> WorkflowDoc:
+    """Convert an lxml ElementTree to a WorkflowDoc.
+
+    Parameters
+    ----------
+    tree:
+        A fully-parsed lxml ElementTree.
+    filepath:
+        The original file path string, stored verbatim on WorkflowDoc.
+    filter_ui_tools:
+        When True (default), AlteryxGuiToolkit.* nodes are skipped so that
+        app interface elements do not appear as spurious diffs.
+    """
+    root: etree._Element = tree.getroot()
     return WorkflowDoc(
         filepath=filepath,
-        nodes=tuple(nodes_list),
-        connections=tuple(connections_list),
+        nodes=tuple(_parse_nodes(root, filter_ui_tools=filter_ui_tools)),
+        connections=tuple(_parse_connections(root)),
     )
 
 
