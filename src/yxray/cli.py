@@ -347,7 +347,7 @@ def _write_explain_outputs(
     ]
     for step in steps:
         desc = (step.description or "").replace("|", "\\|")
-        hint = step.python_hint.replace("|", "\\|")
+        hint = step.python_hint.replace("|", "\\|").replace("\n", " ")
         supported = "yes" if step.supported else "no"
         md_lines.append(
             f"| {step.tool_id} | {step.short_type} | {step.category}"
