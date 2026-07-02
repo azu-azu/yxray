@@ -1875,16 +1875,24 @@ function _renderPanelEntry(entry, container) {
   if (entry.python_hint) {
     var hintRow = document.createElement('div');
     hintRow.className = 'config-row';
+    var hintKeyRow = document.createElement('div');
+    hintKeyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
     var hintKey = document.createElement('div');
     hintKey.className = 'config-key';
     hintKey.textContent = 'python hint';
+    var hintCopyBtn = document.createElement('button');
+    hintCopyBtn.className = 'panel-action-btn';
+    hintCopyBtn.textContent = 'Copy';
+    hintCopyBtn.onclick = function() { _clipboardWrite(entry.python_hint, hintCopyBtn, 'Copy'); };
+    hintKeyRow.appendChild(hintKey);
+    hintKeyRow.appendChild(hintCopyBtn);
     var hintVal = document.createElement('div');
     hintVal.className = 'config-val';
     hintVal.style.cssText = entry.supported
       ? 'color:var(--badge-formula-text);background:var(--badge-formula-bg);border:1px solid var(--badge-formula-border);'
       : 'color:var(--badge-filter-text);background:var(--badge-filter-bg);border:1px solid var(--badge-filter-border);';
     hintVal.textContent = entry.python_hint;
-    hintRow.appendChild(hintKey);
+    hintRow.appendChild(hintKeyRow);
     hintRow.appendChild(hintVal);
     container.appendChild(hintRow);
   }
