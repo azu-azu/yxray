@@ -18,7 +18,6 @@ file_version_info.txt
 .env.*
 .claude/
 .planning/
-docs/
 Docs/internal/
 tests/eval/results/
 app/frontend/.vite/
