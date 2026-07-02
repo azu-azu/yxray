@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 from collections import deque
 from typing import Any
 
@@ -10,6 +11,11 @@ from yxray.models.workflow import WorkflowDoc
 
 def topo_order(doc: WorkflowDoc) -> list[int]:
     """Return tool IDs in topological order (Kahn's algorithm, sources first).
+
+    Ties among simultaneously-ready nodes are broken by ascending tool_id
+    (via a min-heap) rather than readiness order, so that branches of
+    uneven length still come out close to numeric/flow order instead of
+    being interleaved by whichever branch resolves first.
 
     ToolContainer nodes are excluded — they carry no data-flow information
     and would otherwise appear as spurious sources (in_degree == 0).
@@ -25,15 +31,16 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
         if s in successors and d in in_degree:
             successors[s].append(d)
             in_degree[d] += 1
-    queue: deque[int] = deque(nid for nid in node_ids if in_degree[nid] == 0)
+    heap: list[int] = [nid for nid in node_ids if in_degree[nid] == 0]
+    heapq.heapify(heap)
     result: list[int] = []
-    while queue:
-        nid = queue.popleft()
+    while heap:
+        nid = heapq.heappop(heap)
         result.append(nid)
         for s in successors[nid]:
             in_degree[s] -= 1
             if in_degree[s] == 0:
-                queue.append(s)
+                heapq.heappush(heap, s)
     visited = set(result)
     for nid in node_ids:
         if nid not in visited:
