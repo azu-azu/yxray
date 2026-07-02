@@ -385,7 +385,7 @@ def _explain_impl(  # noqa: B008
         ),
     ),
 ) -> None:
-    """Explain each tool and generate a Python scaffold, written to the output directory.
+    """Explain each tool and generate a Python scaffold, written to the output dir.
 
     Omit the path to use the single file in input/.
     Creates three files in the output directory (output/ by default,
