@@ -109,6 +109,12 @@ Unsupported tools are flagged with a `# TODO` comment.
 
 Also writes `output/pyproject.toml` — a `[project]` scaffold with detected dependencies (`pandas`, `openpyxl` when Excel I/O is present) and a `[project.scripts]` entry keyed by the workflow filename.
 
+Use `--output`/`-o` to write the `.md`/`.py`/`pyproject.toml` trio into a different directory instead of `output/` (created if missing):
+
+```bash
+acd explain workflow.yxmd -o build/
+```
+
 ---
 
 ### scaffold
