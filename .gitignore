@@ -19,7 +19,7 @@ file_version_info.txt
 .claude/
 .planning/
 docs/
-Docs/
+Docs/internal/
 tests/eval/results/
 app/frontend/.vite/
 
