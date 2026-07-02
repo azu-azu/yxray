@@ -31,7 +31,7 @@ from yxray.tool_registry import (
 )
 from yxray.topology import topo_order
 
-__all__ = ["scaffold", "scaffold_simple"]
+__all__ = ["scaffold", "scaffold_simple", "node_code_snippets"]
 
 # ── Alteryx expression → pandas translation ───────────────────────────────
 
@@ -399,6 +399,39 @@ _GENERATORS: dict[str, Any] = {
     **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, _gen_sample),
     **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, _gen_unique),
 }
+
+# Segments whose scaffold snippet is short and self-contained enough to show
+# as a single node's "python hint" (used by the inspect report's right pane).
+# Excludes Select (would enumerate every column — too long) and Input/Output
+# (depend on file paths, which the panel already shows separately).
+_DETAIL_HINT_SEGMENTS = frozenset(_GENERATORS) - SCAFFOLD_SELECT_SEGMENTS
+
+
+def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
+    """Per-node pandas code, identical to the .md Python Scaffold section.
+
+    Only returns entries for tool_ids whose segment is in
+    _DETAIL_HINT_SEGMENTS; callers should fall back to the generic
+    python_hint for everything else.
+    """
+    node_map = {
+        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
+    }
+    pred_map = _build_predecessor_map(doc)
+    anchor_map = _build_anchor_map(doc)
+
+    snippets: dict[int, str] = {}
+    for tool_id, node in node_map.items():
+        segment = tool_segment(node.tool_type)
+        if segment not in _DETAIL_HINT_SEGMENTS:
+            continue
+        preds = pred_map.get(tool_id, [])
+        anchors = anchor_map.get(tool_id, {})
+        snippets[tool_id] = _GENERATORS[segment](
+            tool_id, segment, node.config, preds, anchors
+        )
+    return snippets
+
 
 # ── Scaffold section builders ──────────────────────────────────────────────
 

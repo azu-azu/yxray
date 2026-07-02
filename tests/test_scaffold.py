@@ -1,6 +1,6 @@
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
-from yxray.scaffold import scaffold
+from yxray.scaffold import node_code_snippets, scaffold
 
 
 def _doc(
@@ -346,3 +346,65 @@ def test_scaffold_topo_order() -> None:
     )
     code = scaffold(doc)
     assert code.index("ToolID 1") < code.index("ToolID 2")
+
+
+# ── node_code_snippets (inspect panel "python hint") ────────────────────────
+
+
+def test_node_code_snippets_includes_filter() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": "[Age] > 18"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    snippets = node_code_snippets(doc)
+    assert 2 in snippets
+    assert 'df_1["Age"] > 18' in snippets[2]
+
+
+def test_node_code_snippets_excludes_select() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            config={"SelectFields": {"SelectField": [{"@field": "Age"}]}},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    snippets = node_code_snippets(doc)
+    assert 2 not in snippets
+
+
+def test_node_code_snippets_excludes_input_output() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            config={"File": "a.csv"},
+        ),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="OutputData", x=10, y=0,
+            config={"File": "out.csv"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    snippets = node_code_snippets(doc)
+    assert 1 not in snippets
+    assert 2 not in snippets
