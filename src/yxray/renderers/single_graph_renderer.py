@@ -22,6 +22,7 @@ from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers._graph_builder import _safe_json, load_vis_js
 from yxray.renderers._report_assets import CONTRAST_COLOR_JS, STEP_DETAIL_JS
 from yxray.renderers._templates import load_template
+from yxray.scaffold import node_code_snippets
 from yxray.topology import compute_node_layer
 
 
@@ -84,10 +85,13 @@ class SingleGraphRenderer:
         )
 
     def _add_python_hints(self, doc: WorkflowDoc, config_map: dict[str, Any]) -> None:
+        detail_snippets = node_code_snippets(doc)
         for step in _explain_workflow(doc):
             entry = config_map.get(str(step.tool_id))
             if entry is not None:
-                entry["python_hint"] = step.python_hint
+                entry["python_hint"] = detail_snippets.get(
+                    step.tool_id, step.python_hint
+                )
                 entry["supported"] = step.supported
 
     def _workflow_steps_to_dicts(
