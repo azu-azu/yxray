@@ -4,7 +4,6 @@ import datetime
 import hashlib
 import json
 import pathlib
-import re
 import webbrowser
 from typing import Any
 
@@ -323,168 +322,13 @@ def _build_pyproject(workflow: pathlib.Path, code: str) -> str:
     )
 
 
-def _extract_template_context(code: str) -> dict[str, Any]:
-    """Extract paths and column names per category, with source attribution."""
-    sections = re.split(r"# [─]{10,}\n", code)
-
-    inputs: list[tuple[str, str]] = []
-    outputs: list[tuple[str, str]] = []
-    select_cols: list[tuple[list[str], str]] = []
-    group_keys: list[tuple[list[str], str]] = []
-    join_keys: list[tuple[list[str], str]] = []
-    derived_cols: list[tuple[list[str], str]] = []
-    input_key_counts: dict[str, int] = {}
-    output_key_counts: dict[str, int] = {}
-
-    for section in sections:
-        m = re.search(r"# ToolID (\d+): (\w+)", section)
-        if not m:
-            continue
-        source = f"Tool #{m.group(1)} / {m.group(2)}"
-
-        for path in re.findall(r'pd\.read_(?:csv|excel)\("([^"]+)"\)', section):
-            stem = pathlib.Path(path).stem
-            n = input_key_counts.get(stem, 0)
-            input_key_counts[stem] = n + 1
-            inputs.append((stem if n == 0 else f"{stem}_{n + 1}", path))
-
-        for path in re.findall(r'\.to_(?:csv|excel)\("([^"]+)"', section):
-            stem = pathlib.Path(path).stem
-            n = output_key_counts.get(stem, 0)
-            output_key_counts[stem] = n + 1
-            outputs.append((stem if n == 0 else f"{stem}_{n + 1}", path))
-
-        blocks = re.findall(r"\[\[([^\]]+)\]", section)
-        cols = [c for b in blocks for c in re.findall(r'"([^"]+)"', b)]
-        if cols:
-            select_cols.append((cols, source))
-
-        blocks = re.findall(r"\.groupby\(\[([^\]]+)\]\)", section)
-        cols = [c for b in blocks for c in re.findall(r'"([^"]+)"', b)]
-        if cols:
-            group_keys.append((cols, source))
-
-        blocks = re.findall(r"(?:on|left_on|right_on)=\[([^\]]+)\]", section)
-        cols = list(
-            dict.fromkeys(
-                c for b in blocks for c in re.findall(r'"([^"]+)"', b)
-            )
-        )
-        if cols:
-            join_keys.append((cols, source))
-
-        cols = re.findall(r"\.assign\((\w+)=", section)
-        if cols:
-            derived_cols.append((cols, source))
-
-    return {
-        "inputs": inputs,
-        "outputs": outputs,
-        "select_cols": select_cols,
-        "group_keys": group_keys,
-        "join_keys": join_keys,
-        "derived_cols": derived_cols,
-    }
-
-
-def _build_py_lines(workflow: pathlib.Path, code: str) -> list[str]:
-    ctx = _extract_template_context(code)
-    inputs: list[tuple[str, str]] = ctx["inputs"]
-    outputs: list[tuple[str, str]] = ctx["outputs"]
-
-    def _flat_sorted(groups: list[tuple[list[str], str]]) -> list[str]:
-        seen: set[str] = set()
-        out: list[str] = []
-        for cols, _ in groups:
-            for c in cols:
-                if c not in seen:
-                    seen.add(c)
-                    out.append(c)
-        return sorted(out)
-
-    def _col_block(var: str, groups: list[tuple[list[str], str]]) -> list[str]:
-        if not groups:
-            return [f"{var} = []"]
-        block: list[str] = [f"# Source: {src}" for _, src in groups]
-        block.append(f"{var} = [")
-        for col in _flat_sorted(groups):
-            block.append(f'    "{col}",')
-        block.append("]")
-        return block
-
-    lines: list[str] = [
-        f'"""{workflow.stem}.py — generated from {workflow.name}',
-        "",
-        "Edit main() to implement your logic.",
-        '"""',
-        "from __future__ import annotations",
-        "",
-        "from pathlib import Path",
-        "",
-        "import pandas as pd",
-        "",
-    ]
-
-    if inputs or outputs:
-        lines.append(
-            "# ── Paths ─────────────────────────────────────────────────────────────"
-        )
-        if inputs:
-            lines.append("INPUTS = {")
-            for key, path in inputs:
-                lines.append(f'    "{key}": Path("{path}"),')
-            lines.append("}")
-        if outputs:
-            lines.append("OUTPUTS = {")
-            for key, path in outputs:
-                lines.append(f'    "{key}": Path("{path}"),')
-            lines.append("}")
-        lines.append("")
-
-    lines.append(
-        "# ── Detected columns ──────────────────────────────────────────────────"
-    )
-    for var, groups in (
-        ("SELECT_COLUMNS", ctx["select_cols"]),
-        ("GROUP_KEYS", ctx["group_keys"]),
-        ("JOIN_KEYS", ctx["join_keys"]),
-        ("DERIVED_COLUMNS", ctx["derived_cols"]),
-    ):
-        lines += _col_block(var, groups)
-        lines.append("")
-
-    first_in = f'INPUTS["{inputs[0][0]}"]' if inputs else "...  # TODO: set input"
-    first_out = f'OUTPUTS["{outputs[0][0]}"]' if outputs else "...  # TODO: set output"
-    lines += [
-        "",
-        "def main() -> None:",
-        f"    df = pd.read_csv({first_in})",
-        "",
-        "    # TODO: Apply filters",
-        "",
-        "    # TODO: Create derived columns",
-        "    # df = df.assign(...)",
-        "",
-        "    # TODO: Aggregate or join data",
-        "",
-        "    # TODO: Select output columns",
-        "    # result = df[SELECT_COLUMNS]",
-        "",
-        "    # TODO: Write output",
-        f"    # result.to_csv({first_out}, index=False)",
-        "",
-        "",
-        'if __name__ == "__main__":',
-        "    main()",
-        "",
-    ]
-    return lines
 
 
 def _write_explain_outputs(
     workflow: pathlib.Path,
     steps: list[Any],
-    code: str,
+    py_code: str,
+    md_code: str,
     out_dir: pathlib.Path | None = None,
 ) -> None:
     out_dir = out_dir if out_dir is not None else pathlib.Path("output")
@@ -514,14 +358,14 @@ def _write_explain_outputs(
         "## Python Scaffold",
         "",
         "```python",
-        code.rstrip("\n"),
+        md_code.rstrip("\n"),
         "```",
         "",
     ]
 
     out_path.write_text("\n".join(md_lines), encoding="utf-8")
-    py_path.write_text("\n".join(_build_py_lines(workflow, code)), encoding="utf-8")
-    pyproject_path.write_text(_build_pyproject(workflow, code), encoding="utf-8")
+    py_path.write_text(py_code, encoding="utf-8")
+    pyproject_path.write_text(_build_pyproject(workflow, py_code), encoding="utf-8")
     typer.echo(f"Report     → {out_path}", err=True)
     typer.echo(f"Template   → {py_path}", err=True)
     typer.echo(f"Pyproject  → {pyproject_path}", err=True)
@@ -541,7 +385,7 @@ def _explain_impl(  # noqa: B008
         ),
     ),
 ) -> None:
-    """Explain each tool and generate a Python scaffold, written to the output directory.
+    """Explain each tool and generate a Python scaffold, written to the output dir.
 
     Omit the path to use the single file in input/.
     Creates three files in the output directory (output/ by default,
@@ -555,7 +399,7 @@ def _explain_impl(  # noqa: B008
       acd ex workflow.yxmd -o build/
     """
     from yxray.explain import explain
-    from yxray.scaffold import scaffold
+    from yxray.scaffold import scaffold, scaffold_simple
 
     if workflow is None:
         workflow = _pick_single_default()
@@ -568,7 +412,13 @@ def _explain_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
-    _write_explain_outputs(workflow, explain(doc), scaffold(doc), out_dir=output)
+    _write_explain_outputs(
+        workflow,
+        explain(doc),
+        py_code=scaffold(doc),
+        md_code=scaffold_simple(doc),
+        out_dir=output,
+    )
 
 
 app.command("explain")(_explain_impl)
