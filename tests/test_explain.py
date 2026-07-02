@@ -89,6 +89,14 @@ def test_explain_topo_order() -> None:
     assert ids.index(1) < ids.index(2)
 
 
+def test_explain_filter_hint() -> None:
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Filter", x=0, y=0))
+    steps = explain(doc)
+    assert "mask" in steps[0].python_hint
+    assert "str.contains" in steps[0].python_hint
+    assert steps[0].supported is True
+
+
 def test_explain_union_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Union", x=0, y=0))
     steps = explain(doc)

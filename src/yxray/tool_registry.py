@@ -8,6 +8,12 @@ ToolCategory = str
 
 UNSUPPORTED_PYTHON_HINT = "# TODO: no direct pandas equivalent — review manually"
 
+_FILTER_HINT = (
+    "df = df[mask]\n"
+    '# ~df[col].str.contains(r"...", na=False)\n'
+    '# df[col].isna() | (df[col] == "")'
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ToolInfo:
@@ -43,8 +49,8 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "Browse": ToolInfo(
         "Browse", "output", "# Browse — no output step needed in Python", True
     ),
-    "AlteryxFilter": ToolInfo("Filter", "transform", "df = df[<condition>]", True),
-    "Filter": ToolInfo("Filter", "transform", "df = df[<condition>]", True),
+    "AlteryxFilter": ToolInfo("Filter", "transform", _FILTER_HINT, True),
+    "Filter": ToolInfo("Filter", "transform", _FILTER_HINT, True),
     "AlteryxSelect": ToolInfo(
         "Select Fields",
         "transform",
