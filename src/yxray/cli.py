@@ -71,7 +71,12 @@ def _pick_diff_default() -> tuple[pathlib.Path, pathlib.Path]:
 
 
 def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Path:
-    out = path if path is not None else pathlib.Path("output") / default_name
+    if path is None:
+        out = pathlib.Path("output") / default_name
+    elif path.is_dir():
+        out = path / default_name
+    else:
+        out = path
     out.parent.mkdir(parents=True, exist_ok=True)
     return out
 
