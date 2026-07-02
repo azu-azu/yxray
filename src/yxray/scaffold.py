@@ -29,7 +29,7 @@ from yxray.tool_registry import (
     SCAFFOLD_UNIQUE_SEGMENTS,
     tool_segment,
 )
-from yxray.topology import topo_order
+from yxray.topology import build_predecessor_map, topo_order
 
 __all__ = ["scaffold", "scaffold_simple", "node_code_snippets"]
 
@@ -58,14 +58,6 @@ def _file_write(path_expr: str, df_var: str, ext: str) -> str:
 
 # ── Connection helpers ─────────────────────────────────────────────────────
 
-
-def _build_predecessor_map(doc: WorkflowDoc) -> dict[int, list[int]]:
-    """All upstream tool_ids for each tool, in connection order."""
-    preds: dict[int, list[int]] = {}
-    for c in doc.connections:
-        dst = int(c.dst_tool)
-        preds.setdefault(dst, []).append(int(c.src_tool))
-    return preds
 
 
 def _build_anchor_map(doc: WorkflowDoc) -> dict[int, dict[str, int]]:
@@ -417,7 +409,7 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     node_map = {
         int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
     }
-    pred_map = _build_predecessor_map(doc)
+    pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
 
     snippets: dict[int, str] = {}
@@ -616,7 +608,7 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
         for n in doc.nodes
         if "ToolContainer" not in n.tool_type
     }
-    pred_map = _build_predecessor_map(doc)
+    pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name
@@ -684,7 +676,7 @@ def scaffold(doc: WorkflowDoc) -> str:
         for n in doc.nodes
         if "ToolContainer" not in n.tool_type
     }
-    pred_map = _build_predecessor_map(doc)
+    pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name

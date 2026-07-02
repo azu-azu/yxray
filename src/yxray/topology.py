@@ -48,6 +48,15 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
     return result
 
 
+def build_predecessor_map(doc: WorkflowDoc) -> dict[int, list[int]]:
+    """Return {dst_tool_id: [src_tool_ids]} for all connections in *doc*."""
+    preds: dict[int, list[int]] = {}
+    for c in doc.connections:
+        dst = int(c.dst_tool)
+        preds.setdefault(dst, []).append(int(c.src_tool))
+    return preds
+
+
 def compute_node_layer(doc: WorkflowDoc) -> dict[int, int]:
     node_ids = [
         node.tool_id for node in doc.nodes if "ToolContainer" not in node.tool_type
