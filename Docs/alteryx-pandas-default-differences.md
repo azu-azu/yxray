@@ -175,6 +175,28 @@ df.groupby("col", dropna=False).agg({"val": "sum"})
 
 ---
 
+## 11. DataCleansing — ヘッダー名のトリム
+
+Alteryx の DataCleansing ツールはデータ値のクレンジング（空白除去、NULL 置換など）に加え、**列名自体のリネーム**機能を持つ。"Rename Fields" オプションで列名の前後空白を一括除去できる。
+
+DynamicRename ツールを使う場合は `TrimWhitespace([Name])` のような式で全列名を動的に変換する。
+
+pandas 相当：
+
+```python
+# 列名の前後空白を一括除去（DataCleansing / DynamicRename の "Rename Fields" 相当）
+df.columns = df.columns.str.strip()
+```
+
+値のクレンジング（セル内の空白除去）は列名とは別操作になる。
+
+```python
+# 値の前後空白除去（DataCleansing の値クレンジング相当）
+df["col"] = df["col"].str.strip()
+```
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -188,6 +210,7 @@ df.groupby("col", dropna=False).agg({"val": "sum"})
 | Union が ByPosition モード | 列名を揃えてから `concat` |
 | Sort に NULL が含まれる | `na_position='first'` |
 | Summarize に NULL グループがある | `groupby(..., dropna=False)` |
+| DataCleansing の "Rename Fields" | `df.columns = df.columns.str.strip()` |
 
 ---
 
