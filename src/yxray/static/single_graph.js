@@ -1490,6 +1490,47 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
+// Builds "ToolID 1 → ToolID 3 → ToolID 6" from member IDs, which are already
+// stored in flow order (see sortedMemberIds: layer, then y, then x position).
+function _flowOrderIdsText(memberIds) {
+  return memberIds.map(function(mid) { return 'ToolID ' + mid; }).join(' → ');
+}
+
+// Shared "Cluster Name" / "Flow Order IDs" info block, shown for both
+// collapsed clusters and expanded groups so the values stay copy-able and
+// visible on the pane without digging into the member list below.
+function _renderClusterInfoBlock(toolType, memberIds, body) {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-bottom:14px;';
+
+  function addRow(label, value, copyBtnId) {
+    var row = document.createElement('div');
+    row.className = 'config-row';
+    var keyRow = document.createElement('div');
+    keyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    var keyEl = document.createElement('div');
+    keyEl.className = 'config-key';
+    keyEl.textContent = label;
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'panel-action-btn';
+    copyBtn.id = copyBtnId;
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = function() { _clipboardWrite(value, copyBtn, 'Copy'); };
+    keyRow.appendChild(keyEl);
+    keyRow.appendChild(copyBtn);
+    var valEl = document.createElement('div');
+    valEl.className = 'config-val';
+    valEl.textContent = value;
+    row.appendChild(keyRow);
+    row.appendChild(valEl);
+    wrap.appendChild(row);
+  }
+
+  addRow('Cluster Name', toolType, 'panel-copy-cluster-name-btn');
+  addRow('Flow Order IDs', _flowOrderIdsText(memberIds), 'panel-copy-flow-ids-btn');
+  body.appendChild(wrap);
+}
+
 // Shared render helper: builds Expand/Collapse button + member list for a cluster.
 // Called from openPanel() and from within the buttons themselves so the panel
 // stays open and its content flips between "Expand" and "Collapse" states.
@@ -1502,6 +1543,7 @@ function _refreshClusterPanel(groupKey) {
     var c = AppState.clusterMap[groupKey];
     document.getElementById('panel-title-text').textContent =
       c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
+    _renderClusterInfoBlock(c.toolType, c.memberIds, body);
     var expandBtn = document.createElement('button');
     expandBtn.className = 'ctrl-btn';
     expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
@@ -1531,6 +1573,7 @@ function _refreshClusterPanel(groupKey) {
     var group = AppState.groupMembers[groupKey];
     document.getElementById('panel-title-text').textContent =
       group.toolType + ' \xd7' + group.memberIds.length + ' nodes';
+    _renderClusterInfoBlock(group.toolType, group.memberIds, body);
     var collapseBtn = document.createElement('button');
     collapseBtn.className = 'ctrl-btn';
     collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
