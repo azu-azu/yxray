@@ -343,7 +343,10 @@ def _write_explain_outputs(
     py_code: str,
     md_code: str,
     out_dir: pathlib.Path | None = None,
+    warnings: list[Any] | None = None,
 ) -> None:
+    from yxray.staleness import StaleFieldWarning
+
     out_dir = out_dir if out_dir is not None else pathlib.Path("output")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{workflow.stem}.md"
@@ -366,6 +369,23 @@ def _write_explain_outputs(
             f"| {step.tool_id} | {step.short_type} | {step.category}"
             f" | {desc} | `{hint}` | {supported} |"
         )
+
+    if warnings:
+        md_lines += [
+            "",
+            "## Warnings",
+            "",
+            "| ToolID | Field | Renamed To | Renamed At | Message |",
+            "|--------|-------|------------|------------|---------|",
+        ]
+        for w in warnings:
+            if isinstance(w, StaleFieldWarning):
+                msg = w.message.replace("|", "\\|")
+                md_lines.append(
+                    f"| {w.tool_id} | `{w.field_name}` | `{w.renamed_to}`"
+                    f" | {w.renamed_at} | {msg} |"
+                )
+
     md_lines += [
         "",
         "## Python Scaffold",
@@ -382,6 +402,11 @@ def _write_explain_outputs(
     typer.echo(f"Report     → {out_path}", err=True)
     typer.echo(f"Template   → {py_path}", err=True)
     typer.echo(f"Pyproject  → {pyproject_path}", err=True)
+    if warnings:
+        typer.echo(f"\n⚠  {len(warnings)} stale field warning(s):", err=True)
+        for w in warnings:
+            if isinstance(w, StaleFieldWarning):
+                typer.echo(f"   Tool {w.tool_id}: {w.message}", err=True)
 
 
 def _explain_impl(  # noqa: B008
@@ -413,6 +438,7 @@ def _explain_impl(  # noqa: B008
     """
     from yxray.explain import explain
     from yxray.scaffold import scaffold, scaffold_simple
+    from yxray.staleness import detect_stale_select_fields
 
     if workflow is None:
         workflow = _pick_single_default()
@@ -431,6 +457,7 @@ def _explain_impl(  # noqa: B008
         py_code=scaffold(doc),
         md_code=scaffold_simple(doc),
         out_dir=output,
+        warnings=detect_stale_select_fields(doc),
     )
 
 
