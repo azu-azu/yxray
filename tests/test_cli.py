@@ -177,6 +177,25 @@ def test_diff_output_flag_writes_custom_path(tmp_path: pathlib.Path) -> None:
     assert custom.exists()
 
 
+def test_diff_output_flag_existing_dir_writes_default_name(
+    tmp_path: pathlib.Path,
+) -> None:
+    """--output pointing at an existing directory writes diff_report.html inside it."""
+    path_a = tmp_path / "a.yxmd"
+    path_b = tmp_path / "b.yxmd"
+    path_a.write_bytes(MINIMAL_YXMD_A)
+    path_b.write_bytes(MINIMAL_YXMD_B)
+    out_dir = tmp_path / "reports"
+    out_dir.mkdir()
+
+    result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--output", str(out_dir)]
+    )
+
+    assert result.exit_code == 1
+    assert (out_dir / "diff_report.html").exists()
+
+
 def test_diff_no_file_written_on_clean_diff(tmp_path: pathlib.Path) -> None:
     """When no differences found, no output file is written (exit 0, no file)."""
     path_a = tmp_path / "a.yxmd"
@@ -256,3 +275,32 @@ def test_diff_include_positions_detects_position_change(tmp_path: pathlib.Path) 
         app, ["diff", str(path_a), str(path_b), "--include-positions"]
     )
     assert result_with_flag.exit_code == 1
+
+
+def test_explain_output_flag_writes_to_custom_dir(tmp_path: pathlib.Path) -> None:
+    """--output flag writes the .md/.py/pyproject.toml trio into the given dir."""
+    workflow = tmp_path / "wf.yxmd"
+    workflow.write_bytes(MINIMAL_YXMD_A)
+    out_dir = tmp_path / "custom_output"
+
+    result = runner.invoke(app, ["explain", str(workflow), "--output", str(out_dir)])
+
+    assert result.exit_code == 0
+    assert (out_dir / "wf.md").exists()
+    assert (out_dir / "wf.py").exists()
+    assert (out_dir / "pyproject.toml").exists()
+
+
+def test_explain_output_flag_existing_dir_writes_files(tmp_path: pathlib.Path) -> None:
+    """--output pointing at an existing directory still writes all three files."""
+    workflow = tmp_path / "wf.yxmd"
+    workflow.write_bytes(MINIMAL_YXMD_A)
+    out_dir = tmp_path / "existing"
+    out_dir.mkdir()
+
+    result = runner.invoke(app, ["explain", str(workflow), "--output", str(out_dir)])
+
+    assert result.exit_code == 0
+    assert (out_dir / "wf.md").exists()
+    assert (out_dir / "wf.py").exists()
+    assert (out_dir / "pyproject.toml").exists()
