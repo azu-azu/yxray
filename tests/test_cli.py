@@ -289,3 +289,18 @@ def test_explain_output_flag_writes_to_custom_dir(tmp_path: pathlib.Path) -> Non
     assert (out_dir / "wf.md").exists()
     assert (out_dir / "wf.py").exists()
     assert (out_dir / "pyproject.toml").exists()
+
+
+def test_explain_output_flag_existing_dir_writes_files(tmp_path: pathlib.Path) -> None:
+    """--output pointing at an existing directory still writes all three files."""
+    workflow = tmp_path / "wf.yxmd"
+    workflow.write_bytes(MINIMAL_YXMD_A)
+    out_dir = tmp_path / "existing"
+    out_dir.mkdir()
+
+    result = runner.invoke(app, ["explain", str(workflow), "--output", str(out_dir)])
+
+    assert result.exit_code == 0
+    assert (out_dir / "wf.md").exists()
+    assert (out_dir / "wf.py").exists()
+    assert (out_dir / "pyproject.toml").exists()
