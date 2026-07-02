@@ -275,3 +275,17 @@ def test_diff_include_positions_detects_position_change(tmp_path: pathlib.Path) 
         app, ["diff", str(path_a), str(path_b), "--include-positions"]
     )
     assert result_with_flag.exit_code == 1
+
+
+def test_explain_output_flag_writes_to_custom_dir(tmp_path: pathlib.Path) -> None:
+    """--output flag writes the .md/.py/pyproject.toml trio into the given dir."""
+    workflow = tmp_path / "wf.yxmd"
+    workflow.write_bytes(MINIMAL_YXMD_A)
+    out_dir = tmp_path / "custom_output"
+
+    result = runner.invoke(app, ["explain", str(workflow), "--output", str(out_dir)])
+
+    assert result.exit_code == 0
+    assert (out_dir / "wf.md").exists()
+    assert (out_dir / "wf.py").exists()
+    assert (out_dir / "pyproject.toml").exists()

@@ -485,9 +485,10 @@ def _write_explain_outputs(
     workflow: pathlib.Path,
     steps: list[Any],
     code: str,
+    out_dir: pathlib.Path | None = None,
 ) -> None:
-    out_dir = pathlib.Path("output")
-    out_dir.mkdir(exist_ok=True)
+    out_dir = out_dir if out_dir is not None else pathlib.Path("output")
+    out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{workflow.stem}.md"
     py_path = out_dir / f"{workflow.stem}.py"
     pyproject_path = out_dir / "pyproject.toml"
@@ -530,18 +531,28 @@ def _explain_impl(  # noqa: B008
     workflow: pathlib.Path | None = typer.Argument(  # noqa: B008
         None, help=".yxmd/.yxmc workflow file (omit to use input/ folder)"
     ),
+    output: pathlib.Path | None = typer.Option(  # noqa: B008
+        None,
+        "--output",
+        "-o",
+        help=(
+            "Output directory for the .md/.py/pyproject.toml files"
+            " (default: output/)"
+        ),
+    ),
 ) -> None:
     """Explain each tool and generate a Python scaffold, written to output/.
 
     Omit the path to use the single file in input/.
-    Creates three files in output/:
+    Creates three files in the output directory (output/ by default,
+    or the directory given via --output/-o):
       <workflow_stem>.md    — tool summary table + Python scaffold code block
       <workflow_stem>.py    — minimal Python template (main() stub)
       pyproject.toml        — project scaffold with detected dependencies
     Unsupported tools are flagged TODO.
 
       acd explain workflow.yxmd
-      acd ex workflow.yxmd
+      acd ex workflow.yxmd -o build/
     """
     from yxray.explain import explain
     from yxray.scaffold import scaffold
@@ -557,7 +568,7 @@ def _explain_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
-    _write_explain_outputs(workflow, explain(doc), scaffold(doc))
+    _write_explain_outputs(workflow, explain(doc), scaffold(doc), out_dir=output)
 
 
 app.command("explain")(_explain_impl)
