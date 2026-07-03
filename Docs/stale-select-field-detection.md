@@ -117,10 +117,22 @@ stale フィールドが検出された場合、以下が追加される。
 Report     → output/workflow.md
 Template   → output/workflow.py
 Pyproject  → output/pyproject.toml
+```
 
-⚠  1 stale field warning(s):
-   Tool 108: "abc" was renamed to "def" at Tool 166.
-             This setting in Tool 108 has no effect on the current schema.
+警告はターミナルには表示しない。生成ファイルを参照する。
+
+### Python scaffold（`.py` / `.md` の Python Scaffold セクション）
+
+該当ツールの `# ToolID` ヘッダー直下に `# WARNING:` コメントが挿入される。
+
+```python
+# ────────────────────────────────────────────────────────────────────
+# ToolID 108: AlteryxSelect
+# WARNING: "abc" was renamed to "def" at Tool 166. This setting in Tool 108 has no effect on the current schema.
+_COLS_108 = [
+    SelectColumnEdit("abc", selected=False),
+    ...
+]
 ```
 
 ### Markdown レポート（`.md` ファイル）

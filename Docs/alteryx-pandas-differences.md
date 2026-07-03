@@ -197,6 +197,66 @@ df["col"] = df["col"].str.strip()
 
 ---
 
+## 13. `DateTimeAdd` — 日時加減算
+
+| | 挙動 |
+|---|---|
+| **Alteryx** `DateTimeAdd(dt, n, "unit")` | 日時フィールドに整数 `n` を `unit` 単位で加算（負数で減算） |
+| **pandas** | `pd.DateOffset` を使って同等の演算を行う |
+
+```python
+# Alteryx: DateTimeAdd(DateTimeToday(), -2, "months")
+pd.Timestamp.today().normalize() + pd.DateOffset(months=-2)
+
+# Alteryx: DateTimeAdd([date_col], 7, "days")
+df["date_col"] + pd.DateOffset(days=7)
+```
+
+対応する unit 文字列：`"years"` / `"months"` / `"days"` / `"hours"` / `"minutes"` / `"seconds"`
+
+---
+
+## 14. `ToDate` — 文字列から日付型への変換
+
+| | 挙動 |
+|---|---|
+| **Alteryx** `ToDate(val)` | 文字列や数値を日付型に変換 |
+| **pandas** | `pd.to_datetime(val)` |
+
+```python
+# Alteryx: ToDate("2024-01-01")
+pd.to_datetime("2024-01-01")
+```
+
+---
+
+## 15. `FindReplace`（FindAny モード）— 部分一致ルックアップ
+
+Alteryx の **FindReplace ツール**には `FindWhole`（完全一致）と `FindAny`（部分一致）の2モードがある。
+
+| モード | 挙動 | scaffold の翻訳 |
+|--------|------|-----------------|
+| **FindWhole** | FieldFind の値が FieldSearch に完全一致する行を結合 | `pd.merge(how="left")` |
+| **FindAny** | FieldFind の値が FieldSearch の中に含まれる行を結合 | `pd.merge(how="left")`（※意味論的差異あり） |
+
+FindAny は本来「部分一致（substring）ジョイン」だが、ID ベースのジョインでは実質的に完全一致と同等になる場合が多い。scaffold は `pd.merge` に変換し、NOTEコメントで意味論の確認を促す。
+
+`ReplaceMultipleFound="False"` のとき（最初のマッチのみ保持）は、右側 DataFrame を先に `drop_duplicates()` してから merge する。
+
+```python
+# FindAny + ReplaceMultipleFound=False の例
+_LOOKUP_81 = df_replace[["ELID", "col_a", "col_b"]].drop_duplicates("ELID")
+df = pd.merge(
+    df,
+    _LOOKUP_81,
+    left_on="EL_ID",
+    right_on="ELID",
+    how="left",
+)
+```
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -212,6 +272,10 @@ df["col"] = df["col"].str.strip()
 | Summarize に NULL グループがある | `groupby(..., dropna=False)` |
 | DataCleansing の "Rename Fields" | `df.columns = df.columns.str.strip()` |
 | `Substring(col, start, length)` | 0-indexed。`str[start:start+length]`（`-1` 補正は不要） |
+| `DateTimeAdd(dt, n, "unit")` | `dt + pd.DateOffset(unit=n)` |
+| `ToDate(val)` | `pd.to_datetime(val)` |
+| FindReplace FindAny + Append | `pd.merge(how="left")` に変換。部分一致の意味論は要確認 |
+| FindReplace FindAny + ReplaceMultipleFound=False | 右側を `drop_duplicates()` してから merge |
 
 ---
 
