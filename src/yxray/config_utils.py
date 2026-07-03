@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+_NUMBER_RE = re.compile(r"-?\d+(\.\d+)?")
 
 
 def as_list(value: Any) -> list[Any]:
@@ -46,6 +49,54 @@ def child_values(obj: Any, key: str) -> list[Any]:
     if isinstance(obj, list):
         return [child for value in obj for child in child_values(value, key)]
     return []
+
+
+def simple_filter_condition(config: dict[str, Any]) -> tuple[str, str, str] | None:
+    """Extract (field, operator, operand) from a Simple-mode Filter config.
+
+    Simple-mode filters store the condition as structured elements under
+    <Simple> (Operator / Field / Operands/Operand) instead of an
+    <Expression> string.
+    """
+    mode = get_text(config, "Mode")
+    if mode and mode.lower() != "simple":
+        return None
+    simple = config.get("Simple")
+    if not isinstance(simple, dict):
+        return None
+    field = get_text(simple, "Field")
+    operator = get_text(simple, "Operator")
+    if not field or not operator:
+        return None
+    operand = get_text(simple.get("Operands"), "Operand")
+    return field, operator, operand
+
+
+def operand_literal(operand: str) -> str:
+    """Quote a Simple-mode filter operand unless it is a numeric literal."""
+    if _NUMBER_RE.fullmatch(operand):
+        return operand
+    return '"' + operand + '"'
+
+
+_UNARY_FILTER_OPERATORS = {
+    "IsNull": "is null",
+    "IsNotNull": "is not null",
+    "IsEmpty": "is empty",
+    "IsNotEmpty": "is not empty",
+}
+
+
+def simple_filter_summary(config: dict[str, Any]) -> str:
+    """Human-readable condition for a Simple-mode Filter, or ""."""
+    cond = simple_filter_condition(config)
+    if cond is None:
+        return ""
+    field, operator, operand = cond
+    unary = _UNARY_FILTER_OPERATORS.get(operator)
+    if unary:
+        return f"[{field}] {unary}"
+    return f"[{field}] {operator} {operand_literal(operand)}"
 
 
 def field_name(field: dict[str, Any]) -> str:

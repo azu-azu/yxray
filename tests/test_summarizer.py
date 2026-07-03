@@ -39,6 +39,30 @@ def test_summarize_filter_plugin_variant_describes_condition() -> None:
     assert steps[0].description == "Keeps rows where Field1 > 100"
 
 
+def test_summarize_filter_simple_mode_describes_condition() -> None:
+    doc = WorkflowDoc(
+        filepath="workflow.yxmd",
+        nodes=(
+            node(
+                1,
+                "AlteryxBasePluginsGui.Filter.Filter",
+                {
+                    "Mode": "Simple",
+                    "Simple": {
+                        "Operator": "=",
+                        "Field": "CAPEX/OPEX",
+                        "Operands": {"Operand": "CAPEX"},
+                    },
+                },
+            ),
+        ),
+    )
+
+    steps = summarize(doc)
+
+    assert steps[0].description == 'Keeps rows where [CAPEX/OPEX] = "CAPEX"'
+
+
 def test_summarize_formula_plugin_variant_describes_expression() -> None:
     doc = WorkflowDoc(
         filepath="workflow.yxmd",

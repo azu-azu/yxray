@@ -123,6 +123,74 @@ def test_scaffold_filter_translates_field_notation() -> None:
     assert "df_2 = df_1[" in code
 
 
+def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Mode": "Simple", "Simple": simple_config},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+def test_scaffold_filter_simple_mode_string_equality() -> None:
+    doc = _simple_filter_doc(
+        {
+            "Operator": "=",
+            "Field": "CAPEX/OPEX",
+            "Operands": {
+                "IgnoreTimeInDateTime": "True",
+                "DateType": "fixed",
+                "PeriodDate": "2024-03-13 15:05:03",
+                "PeriodType": None,
+                "PeriodCount": "0",
+                "Operand": "CAPEX",
+                "StartDate": "2024-03-13 15:05:03",
+                "EndDate": "2024-03-13 15:05:03",
+            },
+        }
+    )
+    code = scaffold(doc)
+    assert 'df_2 = df_1[df_1["CAPEX/OPEX"] == "CAPEX"]' in code
+    assert "Filter expression missing" not in code
+
+
+def test_scaffold_filter_simple_mode_numeric_comparison() -> None:
+    doc = _simple_filter_doc(
+        {
+            "Operator": ">",
+            "Field": "Amount",
+            "Operands": {"Operand": "100"},
+        }
+    )
+    code = scaffold(doc)
+    assert 'df_2 = df_1[df_1["Amount"] > 100]' in code
+
+
+def test_scaffold_filter_simple_mode_is_null() -> None:
+    doc = _simple_filter_doc({"Operator": "IsNull", "Field": "Amount"})
+    code = scaffold(doc)
+    assert 'df_2 = df_1[df_1["Amount"].isna()]' in code
+
+
+def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
+    doc = _simple_filter_doc(
+        {
+            "Operator": "InThePast",
+            "Field": "Date",
+            "Operands": {"Operand": ""},
+        }
+    )
+    code = scaffold(doc)
+    assert "df_2 = df_1  # TODO: Filter expression missing" in code
+
+
 # ── Select ─────────────────────────────────────────────────────────────────
 
 

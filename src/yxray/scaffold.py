@@ -13,7 +13,14 @@ import pathlib
 import re
 from typing import Any
 
-from yxray.config_utils import as_list, field_name, first_text, select_field_rows
+from yxray.config_utils import (
+    as_list,
+    field_name,
+    first_text,
+    operand_literal,
+    select_field_rows,
+    simple_filter_condition,
+)
 from yxray.models.workflow import WorkflowDoc
 from yxray.tool_registry import (
     SCAFFOLD_FILTER_SEGMENTS,
@@ -108,6 +115,41 @@ def _gen_output(
     return f"{df_in}.to_csv(...)  # TODO: set file path"
 
 
+_SIMPLE_FILTER_OPS = {
+    "=": "==",
+    "!=": "!=",
+    ">": ">",
+    ">=": ">=",
+    "<": "<",
+    "<=": "<=",
+}
+
+
+def _simple_filter_pandas(config: dict[str, Any], df_var: str) -> str:
+    """Pandas boolean expression for a Simple-mode Filter, or ""."""
+    cond = simple_filter_condition(config)
+    if cond is None:
+        return ""
+    field, operator, operand = cond
+    col = f'{df_var}["{field}"]'
+    if operator == "IsNull":
+        return f"{col}.isna()"
+    if operator == "IsNotNull":
+        return f"{col}.notna()"
+    if operator == "IsEmpty":
+        return f'({col}.isna() | ({col} == ""))'
+    if operator == "IsNotEmpty":
+        return f'({col}.notna() & ({col} != ""))'
+    if operator == "Contains":
+        return f'{col}.str.contains("{operand}", na=False)'
+    if operator == "NotContains":
+        return f'~{col}.str.contains("{operand}", na=False)'
+    op = _SIMPLE_FILTER_OPS.get(operator)
+    if op is None:
+        return ""
+    return f"{col} {op} {operand_literal(operand)}"
+
+
 def _gen_filter(
     tool_id: int,
     segment: str,
@@ -124,6 +166,12 @@ def _gen_filter(
         return (
             f"# NOTE: Alteryx expression — review translation\n"
             f"{df_out} = {df_in}[{pandas_expr}]"
+        )
+    simple_expr = _simple_filter_pandas(config, df_in)
+    if simple_expr:
+        return (
+            f"# NOTE: from Simple-mode filter settings — review translation\n"
+            f"{df_out} = {df_in}[{simple_expr}]"
         )
     return f"{df_out} = {df_in}  # TODO: Filter expression missing"
 

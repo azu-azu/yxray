@@ -21,6 +21,7 @@ from yxray.config_utils import (
     formula_field_summaries,
     get_text,
     select_field_rows,
+    simple_filter_summary,
 )
 from yxray.models.workflow import WorkflowDoc
 from yxray.tool_registry import (
@@ -291,6 +292,8 @@ def _describe_text_input(config: dict[str, Any], _members: list[Any] | None) -> 
 
 def _describe_filter(config: dict[str, Any], _members: list[Any] | None) -> str:
     expr = first_text(config, "Expression", "CustomFilterExpression")
+    if not expr:
+        expr = simple_filter_summary(config)
     return f"Keeps rows where {expr}" if expr else "Filters rows"
 
 
