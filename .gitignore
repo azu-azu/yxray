@@ -18,6 +18,7 @@ file_version_info.txt
 .env.*
 .claude/
 .planning/
+CLAUDE.md
 Docs/internal/
 tests/eval/results/
 app/frontend/.vite/
