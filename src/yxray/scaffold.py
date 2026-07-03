@@ -918,6 +918,7 @@ def _emit_main_body(
     input_paths: dict[int, str],
     output_paths: dict[int, str],
     names: dict[int, str],
+    warnings_by_tool: dict[int, list[str]] | None = None,
 ) -> list[str]:
     body: list[str] = []
     for tool_id in order:
@@ -930,6 +931,8 @@ def _emit_main_body(
 
         body.append(f"# {'─' * 68}")
         body.append(f"# ToolID {tool_id}: {segment}")
+        for msg in (warnings_by_tool or {}).get(tool_id, []):
+            body.append(f"# WARNING: {msg}")
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             code = _gen_input(
@@ -957,7 +960,10 @@ def _emit_main_body(
 # ── Public API ─────────────────────────────────────────────────────────────
 
 
-def scaffold_simple(doc: WorkflowDoc) -> str:
+def scaffold_simple(
+    doc: WorkflowDoc,
+    warnings_by_tool: dict[int, list[str]] | None = None,
+) -> str:
     """Return a flat Python scaffold without ENV/paths block or main() wrapper.
 
     Used for .md display: shows tool-by-tool code in topological order with
@@ -990,6 +996,8 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
 
         lines.append(f"# {'─' * 68}")
         lines.append(f"# ToolID {tool_id}: {segment}")
+        for msg in (warnings_by_tool or {}).get(tool_id, []):
+            lines.append(f"# WARNING: {msg}")
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             path = first_text(node.config, "File", "FileName")
@@ -1036,7 +1044,10 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
     return "\n".join(header + lines)
 
 
-def scaffold(doc: WorkflowDoc) -> str:
+def scaffold(
+    doc: WorkflowDoc,
+    warnings_by_tool: dict[int, list[str]] | None = None,
+) -> str:
     """Return a Python scaffold string for the given workflow.
 
     Each tool becomes one annotated code block in topological order.
@@ -1059,7 +1070,8 @@ def scaffold(doc: WorkflowDoc) -> str:
 
     names = _assign_frame_names(order, node_map, pred_map)
     body = _emit_main_body(
-        order, node_map, pred_map, anchor_map, input_paths, output_paths, names
+        order, node_map, pred_map, anchor_map, input_paths, output_paths, names,
+        warnings_by_tool=warnings_by_tool,
     )
     uses_numpy = any(_NUMPY_RE.search(line) for line in body)
 

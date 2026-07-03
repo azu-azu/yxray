@@ -432,11 +432,6 @@ def _write_explain_outputs(
     typer.echo(f"Report     → {out_path}", err=True)
     typer.echo(f"Template   → {py_path}", err=True)
     typer.echo(f"Pyproject  → {pyproject_path}", err=True)
-    if warnings:
-        typer.echo(f"\n⚠  {len(warnings)} stale field warning(s):", err=True)
-        for w in warnings:
-            if isinstance(w, StaleFieldWarning):
-                typer.echo(f"   Tool {w.tool_id}: {w.message}", err=True)
 
 
 def _explain_impl(  # noqa: B008
@@ -481,13 +476,18 @@ def _explain_impl(  # noqa: B008
         typer.echo(f"Error: {e.message}", err=True)
         raise typer.Exit(code=2) from None
 
+    stale_warnings = detect_stale_select_fields(doc)
+    warnings_by_tool: dict[int, list[str]] = {}
+    for w in stale_warnings:
+        warnings_by_tool.setdefault(w.tool_id, []).append(w.message)
+
     _write_explain_outputs(
         workflow,
         explain(doc),
-        py_code=scaffold(doc),
-        md_code=scaffold_simple(doc),
+        py_code=scaffold(doc, warnings_by_tool=warnings_by_tool),
+        md_code=scaffold_simple(doc, warnings_by_tool=warnings_by_tool),
         out_dir=output,
-        warnings=detect_stale_select_fields(doc),
+        warnings=stale_warnings,
     )
 
 
