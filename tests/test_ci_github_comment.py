@@ -102,16 +102,19 @@ class TestIsPrivateRepo(unittest.TestCase):
 
     def test_is_private_repo_returns_false_for_public(self):
         """urlopen returns {"private": false} — is_private_repo() returns False."""
-        os.environ["GITHUB_TOKEN"] = "test-token"
-        os.environ["GITHUB_REPOSITORY"] = "owner/repo"
-
         fake_body = json.dumps({"private": False}).encode()
         mock_response = MagicMock()
         mock_response.read.return_value = fake_body
         mock_response.__enter__ = lambda s: s
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "test-token", "GITHUB_REPOSITORY": "owner/repo"},
+            ),
+            patch("urllib.request.urlopen", return_value=mock_response),
+        ):
             result = gdc.is_private_repo()
 
         self.assertFalse(
@@ -121,10 +124,13 @@ class TestIsPrivateRepo(unittest.TestCase):
 
     def test_is_private_repo_returns_true_on_exception(self):
         """When urlopen raises an exception, is_private_repo() falls back to True."""
-        os.environ["GITHUB_TOKEN"] = "test-token"
-        os.environ["GITHUB_REPOSITORY"] = "owner/repo"
-
-        with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "test-token", "GITHUB_REPOSITORY": "owner/repo"},
+            ),
+            patch("urllib.request.urlopen", side_effect=Exception("network error")),
+        ):
             result = gdc.is_private_repo()
 
         self.assertTrue(

@@ -482,15 +482,15 @@ def _gen_unique(
     df_in = names.get(src, "df_?")
     df_out = names[tool_id]
     unique_fields = config.get("UniqueFields", {})
-    names: list[str] = []
+    field_names: list[str] = []
     if isinstance(unique_fields, dict):
-        names = [
+        field_names = [
             field_name(f)
             for f in as_list(unique_fields.get("Field"))
             if isinstance(f, dict) and field_name(f)
         ]
-    if names:
-        subset = "[" + ", ".join(f'"{n}"' for n in names) + "]"
+    if field_names:
+        subset = "[" + ", ".join(f'"{n}"' for n in field_names) + "]"
         return f"{df_out} = {df_in}.drop_duplicates(subset={subset})"
     return f"{df_out} = {df_in}.drop_duplicates()"
 
@@ -518,14 +518,14 @@ def _gen_text_input(
 ) -> str:
     df_out = names[tool_id]
     fields = config.get("Fields", {})
-    names: list[str] = []
+    field_names: list[str] = []
     if isinstance(fields, dict):
-        names = [
+        field_names = [
             field_name(f)
             for f in as_list(fields.get("Field"))
             if isinstance(f, dict) and field_name(f)
         ]
-    if not names:
+    if not field_names:
         return f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
 
     data = config.get("Data", {})
@@ -544,7 +544,7 @@ def _gen_text_input(
         "# NOTE: Text Input values are strings — cast dtypes if needed",
         f"{df_out} = pd.DataFrame({{",
     ]
-    for i, name in enumerate(names):
+    for i, name in enumerate(field_names):
         values = ", ".join(
             f'"{row[i]}"' if i < len(row) else '""' for row in rows
         )
