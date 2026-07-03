@@ -84,6 +84,8 @@ def _tokenize(expr: str) -> list[_Token]:
 # Comparisons bind *looser* than & and | in Python, so a comparison used
 # as a boolean operand must be parenthesized.
 
+_DATEOFFSET_UNITS = frozenset({"years", "months", "days", "hours", "minutes", "seconds"})
+
 _CMP = 1
 _OR = 2
 _AND = 3
@@ -120,8 +122,8 @@ def _emit_datetimeadd(args: list[_Emitted]) -> str:
     dt = args[0][0]
     amount = args[1][0]
     unit_raw = args[2][0].strip("'\"")
-    _OFFSET_UNITS = {"years", "months", "days", "hours", "minutes", "seconds"}
-    pandas_unit = unit_raw.lower() if unit_raw.lower() in _OFFSET_UNITS else unit_raw
+    unit_lower = unit_raw.lower()
+    pandas_unit = unit_lower if unit_lower in _DATEOFFSET_UNITS else unit_raw
     return f"{dt} + pd.DateOffset({pandas_unit}={amount})"
 
 
