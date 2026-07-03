@@ -191,6 +191,87 @@ def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
     assert "df_2 = df_1  # TODO: Filter expression missing" in code
 
 
+# ── Formula ────────────────────────────────────────────────────────────────
+
+
+def test_scaffold_formula_translates_if_expression() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {
+                        "@field": "Grade",
+                        "@expression": (
+                            'IF [Score] >= 80 THEN "A" '
+                            'ELSEIF [Score] >= 60 THEN "B" '
+                            'ELSE "C" ENDIF'
+                        ),
+                    }
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "import numpy as np" in code
+    assert (
+        "np.select([df_1[\"Score\"] >= 80, df_1[\"Score\"] >= 60],"
+        " ['A', 'B'], default='C')" in code
+    )
+    assert "THEN" not in code
+
+
+def test_scaffold_filter_boolean_expression_parenthesized() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": '[Age] > 18 AND [Status] = "Active"'},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')" in code
+    assert "import numpy as np" not in code
+
+
+def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {
+                        "@field": "y",
+                        "@expression": "[x] ?? weird syntax",
+                    }
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df_1["x"] ?? weird syntax' in code
+
+
 # ── Select ─────────────────────────────────────────────────────────────────
 
 
