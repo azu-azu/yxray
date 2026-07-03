@@ -187,6 +187,9 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 
+# Enable the pre-commit hook (runs ruff on every commit)
+pre-commit install
+
 # Tests
 python -m pytest
 
