@@ -80,6 +80,29 @@ def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Pat
     return out
 
 
+def _execute_diff(
+    workflow_a: pathlib.Path,
+    workflow_b: pathlib.Path,
+    filter_ui_tools: bool,
+    include_positions: bool,
+) -> tuple[DiffResponse, dict[str, Any]]:
+    """Run the diff pipeline and return (response, governance_metadata).
+
+    Pure of Typer/spinner/exit side effects — suitable for direct testing.
+    Raises OSError, MalformedXMLError, or ParseError on failure.
+    """
+    hash_a = _file_sha256(workflow_a)
+    hash_b = _file_sha256(workflow_b)
+    metadata = _build_governance_metadata(workflow_a, workflow_b, hash_a, hash_b)
+    request = DiffRequest(
+        path_a=workflow_a,
+        path_b=workflow_b,
+        filter_ui_tools=filter_ui_tools,
+    )
+    response = run(request, include_positions=include_positions)
+    return response, metadata
+
+
 def _diff_impl(  # noqa: B008
     workflow_a: pathlib.Path | None = typer.Argument(  # noqa: B008
         None, help="Baseline .yxmd/.yxmc file (omit to use input_diff/ folder)"
@@ -146,28 +169,22 @@ def _diff_impl(  # noqa: B008
         typer.echo("Error: provide both workflow files or neither", err=True)
         raise typer.Exit(code=2)
 
-    # Compute governance metadata upfront — single timestamp for audit consistency
-    # Guard here: missing file raises FileNotFoundError before pipeline even starts
+    assert workflow_a is not None and workflow_b is not None  # narrowed above
+
+    # Run pipeline (spinner goes to stderr; stdout stays clean for --json)
     try:
-        hash_a = _file_sha256(workflow_a)
-        hash_b = _file_sha256(workflow_b)
+        if quiet or json_output:
+            response, metadata = _execute_diff(
+                workflow_a, workflow_b, filter_ui_tools, include_positions
+            )
+        else:
+            with _err_console.status("Running diff...", spinner="dots"):
+                response, metadata = _execute_diff(
+                    workflow_a, workflow_b, filter_ui_tools, include_positions
+                )
     except OSError as e:
         typer.echo(f"Error: {e.strerror}: {e.filename}", err=True)
         raise typer.Exit(code=2) from None
-    metadata = _build_governance_metadata(workflow_a, workflow_b, hash_a, hash_b)
-
-    # Run pipeline (spinner goes to stderr; stdout stays clean for --json)
-    request = DiffRequest(
-        path_a=workflow_a,
-        path_b=workflow_b,
-        filter_ui_tools=filter_ui_tools,
-    )
-    try:
-        if quiet or json_output:
-            response = run(request, include_positions=include_positions)
-        else:
-            with _err_console.status("Running diff...", spinner="dots"):
-                response = run(request, include_positions=include_positions)
     except MalformedXMLError as e:
         typer.echo(f"Error: Invalid XML in {e.filepath}: {e.message}", err=True)
         raise typer.Exit(code=2) from None
@@ -180,8 +197,7 @@ def _diff_impl(  # noqa: B008
     if result.is_empty:
         if json_output:
             # Emit empty JSON for consistent downstream tool behaviour
-            json_str = _cli_json_output(result, metadata)
-            typer.echo(json_str)
+            typer.echo(_cli_json_output(result, metadata))
         if not quiet:
             typer.echo("No differences found", err=True)
         raise typer.Exit(code=0)
@@ -190,13 +206,45 @@ def _diff_impl(  # noqa: B008
     if json_output:
         typer.echo(_cli_json_output(result, metadata))  # stdout — pipe-friendly
     else:
-        assert workflow_a is not None and workflow_b is not None  # narrowed above
         _write_diff_html(
             result, response, workflow_a, workflow_b, metadata, output,
             canvas_layout=canvas_layout, quiet=quiet,
         )
 
     raise typer.Exit(code=1)
+
+
+def _build_diff_html(
+    result: DiffResult,
+    response: DiffResponse,
+    workflow_a: pathlib.Path,
+    workflow_b: pathlib.Path,
+    metadata: dict[str, Any],
+    *,
+    canvas_layout: bool,
+) -> str:
+    """Render the diff HTML string. Pure of file I/O and browser side effects."""
+    all_connections = response.doc_a.connections + response.doc_b.connections
+    graph_html = DiffGraphRenderer().render(
+        result,
+        all_connections=all_connections,
+        nodes_old=response.doc_a.nodes,
+        nodes_new=response.doc_b.nodes,
+        canvas_layout=canvas_layout,
+    )
+    added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
+    modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
+    steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
+    insights = extract_key_insights(response.doc_b)
+    return HTMLRenderer().render(
+        result,
+        file_a=str(workflow_a.resolve()),
+        file_b=str(workflow_b.resolve()),
+        graph_html=graph_html,
+        metadata=metadata,
+        workflow_steps=steps,
+        key_insights=insights,
+    )
 
 
 def _write_diff_html(
@@ -210,26 +258,8 @@ def _write_diff_html(
     canvas_layout: bool,
     quiet: bool,
 ) -> None:
-    all_connections = response.doc_a.connections + response.doc_b.connections
-    graph_html = DiffGraphRenderer().render(
-        result,
-        all_connections=all_connections,
-        nodes_old=response.doc_a.nodes,
-        nodes_new=response.doc_b.nodes,
-        canvas_layout=canvas_layout,
-    )
-    added_ids = frozenset(int(n.tool_id) for n in result.added_nodes)
-    modified_ids = frozenset(int(nd.tool_id) for nd in result.modified_nodes)
-    steps = summarize(response.doc_b, added_ids=added_ids, modified_ids=modified_ids)
-    insights = extract_key_insights(response.doc_b)
-    html = HTMLRenderer().render(
-        result,
-        file_a=str(workflow_a.resolve()),
-        file_b=str(workflow_b.resolve()),
-        graph_html=graph_html,
-        metadata=metadata,
-        workflow_steps=steps,
-        key_insights=insights,
+    html = _build_diff_html(
+        result, response, workflow_a, workflow_b, metadata, canvas_layout=canvas_layout
     )
     out_path = _resolve_output(output, "diff_report.html")
     out_path.write_text(html, encoding="utf-8")
