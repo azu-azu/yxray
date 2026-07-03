@@ -16,6 +16,19 @@ file_version_info.txt
 # Open-source exclusions — sensitive/internal files
 .env
 .env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+security/forbidden_terms.txt
+
+# Local databases (allow intentional test fixtures)
+*.sqlite
+*.db
+!tests/fixtures/*.sqlite
+!tests/fixtures/*.db
 .claude/
 .planning/
 CLAUDE.md

@@ -120,6 +120,17 @@ def _emit_isempty(args: list[_Emitted]) -> str:
     return f'({_series(args[0])}.isna() | ({args[0][0]} == ""))'
 
 
+def _emit_substring(args: list[_Emitted]) -> str:
+    # Alteryx Substring is 0-indexed: Substring("DENVER", 2, 3) == "NVE"
+    _check_args("Substring", args, 2)
+    s = _series(args[0])
+    start = _paren(args[1], _ADD)
+    if len(args) >= 3:
+        length = _paren(args[2], _ADD)
+        return f"{s}.str[{start}:{start}+{length}]"
+    return f"{s}.str[{start}:]"
+
+
 def _str_method(name: str, template: str, argc: int) -> Callable[..., str]:
     def emit(args: list[_Emitted]) -> str:
         _check_args(name, args, argc)
@@ -148,6 +159,7 @@ _FUNCTIONS: dict[str, Callable[[list[_Emitted]], str]] = {
     "replace": _str_method("Replace", ".str.replace({}, {}, regex=False)", 3),
     "left": _str_method("Left", ".str[:{}]", 2),
     "right": _str_method("Right", ".str[-{}:]", 2),
+    "substring": _emit_substring,
     "tostring": _str_method("ToString", ".astype(str)", 1),
     "tonumber": lambda args: (
         f'pd.to_numeric({args[0][0]}, errors="coerce")'

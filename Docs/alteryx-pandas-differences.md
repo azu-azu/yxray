@@ -211,6 +211,29 @@ df["col"] = df["col"].str.strip()
 | Sort に NULL が含まれる | `na_position='first'` |
 | Summarize に NULL グループがある | `groupby(..., dropna=False)` |
 | DataCleansing の "Rename Fields" | `df.columns = df.columns.str.strip()` |
+| `Substring(col, start, length)` | 0-indexed。`str[start:start+length]`（`-1` 補正は不要） |
+
+---
+
+## 12. `Substring` — 0-indexed（SQL の 1-indexed とは異なる）
+
+| | 挙動 |
+|---|---|
+| **Alteryx** `Substring(col, start, length)` | `start` は **0-indexed**（最初の文字が位置 0） |
+| **SQL** `SUBSTRING(col, start, length)` | `start` は 1-indexed（最初の文字が位置 1） |
+| **pandas** `df[col].str[start:start+length]` | 0-indexed（Python スライスと同じ） |
+
+Alteryx が 0-indexed であることの確認例：`Substring("DENVER", 2, 3)` → `"NVE"`（位置 2 から3文字）。もし 1-indexed なら `"ENV"` になるはず。
+
+```python
+# Alteryx: Substring([col], 5, 2)  →  位置5から2文字
+df[col].str[5:5+2]   # = [5:7]
+
+# Alteryx: Substring([col], 3)  →  位置3から末尾まで
+df[col].str[3:]
+```
+
+SQL（1-indexed）から移植した変換式に `-1` 補正を入れると、全出力が1文字ずれてエラーなく誤動作するため注意。
 
 ---
 

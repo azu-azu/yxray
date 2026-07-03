@@ -117,6 +117,20 @@ def test_in_list() -> None:
     assert t('[x] IN ("a", "b")') == "df[\"x\"].isin(['a', 'b'])"
 
 
+def test_substring_with_length() -> None:
+    # 0-indexed: Substring("DENVER", 2, 3) == "NVE"
+    assert t("Substring([field], 5, 2)") == 'df["field"].str[5:5+2]'
+
+
+def test_substring_without_length() -> None:
+    assert t("Substring([field], 3)") == 'df["field"].str[3:]'
+
+
+def test_substring_zero_indexed_denver() -> None:
+    # Regression: Substring("DENVER", 2, 3) == "NVE", not "ENV"
+    assert t("Substring([City], 2, 3)") == 'df["City"].str[2:2+3]'
+
+
 def test_unknown_function_kept_verbatim() -> None:
     assert (
         t('DateTimeDiff([a], [b], "days")')
