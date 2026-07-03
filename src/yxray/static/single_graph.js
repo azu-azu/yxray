@@ -1493,7 +1493,7 @@ window.addEventListener('resize', function() {
 // Builds "ToolID 1 → ToolID 3 → ToolID 6" from member IDs, which are already
 // stored in flow order (see sortedMemberIds: layer, then y, then x position).
 function _flowOrderIdsText(memberIds) {
-  return memberIds.map(function(mid) { return 'ToolID ' + mid; }).join(' → ');
+  return memberIds.map(function(mid) { return 'ToolID ' + mid; }).join(' → ') + ' (' + memberIds.length + 'nodes)';
 }
 
 // Shared "Cluster Name" / "Flow Order IDs" info block, shown for both
