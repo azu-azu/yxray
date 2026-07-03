@@ -4,7 +4,10 @@ scaffold(doc) returns a .py file string with one code block per tool,
 in topological order. Supported tools get real (if partial) pandas code;
 unsupported tools get a TODO comment.
 
-Variable naming: df_{tool_id} — unambiguous and easy for the user to rename.
+Variable naming: plain `df`, reassigned in place along a chain. Numbered
+names (df2, df3, ...) appear only while several streams are alive at the
+same time (e.g. the two sides of a join); each tool's ToolID comment
+keeps the mapping back to the workflow.
 """
 
 from __future__ import annotations
@@ -93,8 +96,40 @@ def _build_anchor_map(doc: WorkflowDoc) -> dict[int, dict[str, int]]:
     return anchors
 
 
-def _dvar(tool_id: int) -> str:
-    return f"df_{tool_id}"
+def _assign_frame_names(
+    order: list[int],
+    node_map: dict[int, Any],
+    pred_map: dict[int, list[int]],
+) -> dict[int, str]:
+    """Name each tool's output frame, reusing plain "df" whenever possible.
+
+    Liveness-based: a name is freed once its last consumer has been
+    emitted, so straight chains reassign `df` in place and numbered names
+    (df2, df3, ...) appear only while several streams are alive at once.
+    """
+    remaining: dict[int, int] = {}
+    for tool_id in order:
+        for pred in pred_map.get(tool_id, []):
+            remaining[pred] = remaining.get(pred, 0) + 1
+
+    names: dict[int, str] = {}
+    in_use: set[str] = set()
+    for tool_id in order:
+        if tool_id not in node_map:
+            continue
+        for pred in pred_map.get(tool_id, []):
+            remaining[pred] -= 1
+            if remaining[pred] == 0 and pred in names:
+                in_use.discard(names[pred])
+        name = "df"
+        counter = 2
+        while name in in_use:
+            name = f"df{counter}"
+            counter += 1
+        names[tool_id] = name
+        if remaining.get(tool_id, 0) > 0:
+            in_use.add(name)
+    return names
 
 
 # ── Per-tool code generators ───────────────────────────────────────────────
@@ -107,12 +142,13 @@ def _gen_input(
     _preds: list[int],
     _anchors: dict[str, int],
     input_paths: dict[int, str],
+    names: dict[int, str],
 ) -> str:
     if tool_id in input_paths:
         ext = pathlib.Path(input_paths[tool_id]).suffix.lower()
         path_expr = f'INPUTS["input_{tool_id}"]'
-        return f"{_dvar(tool_id)} = {_file_read(path_expr, ext)}"
-    return f"{_dvar(tool_id)} = pd.read_csv(...)  # TODO: set file path"
+        return f"{names[tool_id]} = {_file_read(path_expr, ext)}"
+    return f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
 
 
 def _gen_output(
@@ -122,9 +158,10 @@ def _gen_output(
     preds: list[int],
     _anchors: dict[str, int],
     output_paths: dict[int, str],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
+    df_in = names.get(src, "df_?")
     if tool_id in output_paths:
         ext = pathlib.Path(output_paths[tool_id]).suffix.lower()
         path_expr = f'OUTPUTS["output_{tool_id}"]'
@@ -173,10 +210,11 @@ def _gen_filter(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         pandas_expr = _translate_expr(expr, df_in)
@@ -199,10 +237,11 @@ def _gen_select(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     rows = select_field_rows(config)
 
     edits: list[tuple[str, str | None, bool]] = []
@@ -241,10 +280,11 @@ def _gen_formula(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     ffs = config.get("FormulaFields", {})
     formulas: list[tuple[str, str]] = []
     if isinstance(ffs, dict):
@@ -276,12 +316,13 @@ def _gen_join(
     config: dict[str, Any],
     preds: list[int],
     anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     left_id = anchors.get("Left")
     right_id = anchors.get("Right")
-    df_left = _dvar(left_id) if left_id else "df_left"
-    df_right = _dvar(right_id) if right_id else "df_right"
+    df_left = names.get(left_id, "df_left")
+    df_right = names.get(right_id, "df_right")
 
     expr = first_text(config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
@@ -328,11 +369,12 @@ def _gen_union(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     if not preds:
         return f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
-    parts = ", ".join(_dvar(p) for p in preds)
+    parts = ", ".join(names.get(p, "df_?") for p in preds)
     return f"{df_out} = pd.concat([{parts}], ignore_index=True)"
 
 
@@ -342,10 +384,11 @@ def _gen_summarize(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     sf = config.get("SummarizeFields", {})
     if not isinstance(sf, dict):
         return f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO"
@@ -391,10 +434,11 @@ def _gen_sort(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     rows = sort_field_rows(config)
     if rows:
         fields = [r["@field"] for r in rows]
@@ -412,10 +456,11 @@ def _gen_sample(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     for key in ("RecordLimit", "N", "@N"):
         val = config.get(key)
         if val:
@@ -431,10 +476,11 @@ def _gen_unique(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     unique_fields = config.get("UniqueFields", {})
     names: list[str] = []
     if isinstance(unique_fields, dict):
@@ -468,8 +514,9 @@ def _gen_text_input(
     config: dict[str, Any],
     _preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     fields = config.get("Fields", {})
     names: list[str] = []
     if isinstance(fields, dict):
@@ -512,12 +559,13 @@ def _gen_findreplace(
     config: dict[str, Any],
     preds: list[int],
     anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     f_id = _anchor_src(anchors, preds, ("F", "Find", "Input"), 0)
     r_id = _anchor_src(anchors, preds, ("R", "Replace"), 1)
-    df_f = _dvar(f_id) if f_id else "df_find"
-    df_r = _dvar(r_id) if r_id else "df_replace"
+    df_f = names.get(f_id, "df_find")
+    df_r = names.get(r_id, "df_replace")
 
     field_find = first_text(config, "FieldFind")
     field_search = first_text(config, "FieldSearch")
@@ -576,12 +624,13 @@ def _gen_appendfields(
     config: dict[str, Any],
     preds: list[int],
     anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     s_id = _anchor_src(anchors, preds, ("Sources", "Source"), 1)
-    df_t = _dvar(t_id) if t_id else "df_targets"
-    df_s = _dvar(s_id) if s_id else "df_sources"
+    df_t = names.get(t_id, "df_targets")
+    df_s = names.get(s_id, "df_sources")
     return (
         "# NOTE: Append Fields — every source record is appended"
         " to every target record\n"
@@ -595,10 +644,11 @@ def _gen_createpoints(
     config: dict[str, Any],
     preds: list[int],
     _anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _dvar(src) if src else "df_?"
-    df_out = _dvar(tool_id)
+    df_in = names.get(src, "df_?")
+    df_out = names[tool_id]
     fields = config.get("Fields", {})
     x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
     y = fields.get("@fieldY", "") if isinstance(fields, dict) else ""
@@ -620,12 +670,13 @@ def _gen_spatialmatch(
     config: dict[str, Any],
     preds: list[int],
     anchors: dict[str, int],
+    names: dict[int, str],
 ) -> str:
-    df_out = _dvar(tool_id)
+    df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     u_id = _anchor_src(anchors, preds, ("Universe",), 1)
-    df_t = _dvar(t_id) if t_id else "df_targets"
-    df_u = _dvar(u_id) if u_id else "df_universe"
+    df_t = names.get(t_id, "df_targets")
+    df_u = names.get(u_id, "df_universe")
     method = config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
@@ -682,6 +733,7 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     }
     pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
+    names = _assign_frame_names(topo_order(doc), node_map, pred_map)
 
     snippets: dict[int, str] = {}
     for tool_id, node in node_map.items():
@@ -691,7 +743,7 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
         preds = pred_map.get(tool_id, [])
         anchors = anchor_map.get(tool_id, {})
         snippets[tool_id] = _GENERATORS[segment](
-            tool_id, segment, node.config, preds, anchors
+            tool_id, segment, node.config, preds, anchors, names
         )
     return snippets
 
@@ -843,6 +895,7 @@ def _emit_main_body(
     anchor_map: dict[int, dict[str, int]],
     input_paths: dict[int, str],
     output_paths: dict[int, str],
+    names: dict[int, str],
 ) -> list[str]:
     body: list[str] = []
     for tool_id in order:
@@ -858,20 +911,20 @@ def _emit_main_body(
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             code = _gen_input(
-                tool_id, segment, node.config, preds, anchors, input_paths
+                tool_id, segment, node.config, preds, anchors, input_paths, names
             )
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
             code = _gen_output(
-                tool_id, segment, node.config, preds, anchors, output_paths
+                tool_id, segment, node.config, preds, anchors, output_paths, names
             )
         else:
             gen = _GENERATORS.get(segment)
             if gen is None:
                 body.append("# TODO: unsupported tool type — review manually")
-                body.append(f"# {_dvar(tool_id)} = ...")
+                body.append(f"# {names[tool_id]} = ...")
                 body.append("")
                 continue
-            code = gen(tool_id, segment, node.config, preds, anchors)
+            code = gen(tool_id, segment, node.config, preds, anchors, names)
 
         body.append(code)
         body.append("")
@@ -897,6 +950,7 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name
+    names = _assign_frame_names(order, node_map, pred_map)
     has_spatial = any(
         tool_segment(node.tool_type) in SCAFFOLD_SPATIAL_SEGMENTS
         for node in node_map.values()
@@ -920,12 +974,12 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
             if path:
                 ext = pathlib.Path(path).suffix.lower()
                 path_expr = f'"{path}"'
-                code = f"{_dvar(tool_id)} = {_file_read(path_expr, ext)}"
+                code = f"{names[tool_id]} = {_file_read(path_expr, ext)}"
             else:
-                code = f"{_dvar(tool_id)} = pd.read_csv(...)  # TODO: set file path"
+                code = f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
             src = preds[0] if preds else None
-            df_in = _dvar(src) if src else "df_?"
+            df_in = names.get(src, "df_?")
             path = first_text(node.config, "File", "FileName")
             if path:
                 ext = pathlib.Path(path).suffix.lower()
@@ -937,10 +991,10 @@ def scaffold_simple(doc: WorkflowDoc) -> str:
             gen = _GENERATORS.get(segment)
             if gen is None:
                 lines.append("# TODO: unsupported tool type — review manually")
-                lines.append(f"# {_dvar(tool_id)} = ...")
+                lines.append(f"# {names[tool_id]} = ...")
                 lines.append("")
                 continue
-            code = gen(tool_id, segment, node.config, preds, anchors)
+            code = gen(tool_id, segment, node.config, preds, anchors, names)
 
         lines.append(code)
         lines.append("")
@@ -981,8 +1035,9 @@ def scaffold(doc: WorkflowDoc) -> str:
         node_map, order
     )
 
+    names = _assign_frame_names(order, node_map, pred_map)
     body = _emit_main_body(
-        order, node_map, pred_map, anchor_map, input_paths, output_paths
+        order, node_map, pred_map, anchor_map, input_paths, output_paths, names
     )
     uses_numpy = any(_NUMPY_RE.search(line) for line in body)
 

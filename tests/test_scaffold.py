@@ -119,8 +119,8 @@ def test_scaffold_filter_translates_field_notation() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df_1["Age"] > 18' in code
-    assert "df_2 = df_1[" in code
+    assert 'df["Age"] > 18' in code
+    assert "df = df[" in code
 
 
 def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:
@@ -157,7 +157,7 @@ def test_scaffold_filter_simple_mode_string_equality() -> None:
         }
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1[df_1["CAPEX/OPEX"] == "CAPEX"]' in code
+    assert 'df = df[df["CAPEX/OPEX"] == "CAPEX"]' in code
     assert "Filter expression missing" not in code
 
 
@@ -170,13 +170,13 @@ def test_scaffold_filter_simple_mode_numeric_comparison() -> None:
         }
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1[df_1["Amount"] > 100]' in code
+    assert 'df = df[df["Amount"] > 100]' in code
 
 
 def test_scaffold_filter_simple_mode_is_null() -> None:
     doc = _simple_filter_doc({"Operator": "IsNull", "Field": "Amount"})
     code = scaffold(doc)
-    assert 'df_2 = df_1[df_1["Amount"].isna()]' in code
+    assert 'df = df[df["Amount"].isna()]' in code
 
 
 def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
@@ -188,7 +188,7 @@ def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
         }
     )
     code = scaffold(doc)
-    assert "df_2 = df_1  # TODO: Filter expression missing" in code
+    assert "df = df  # TODO: Filter expression missing" in code
 
 
 # ── Formula ────────────────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ def test_scaffold_formula_translates_if_expression() -> None:
     code = scaffold(doc)
     assert "import numpy as np" in code
     assert (
-        "np.select([df_1[\"Score\"] >= 80, df_1[\"Score\"] >= 60],"
+        "np.select([df[\"Score\"] >= 80, df[\"Score\"] >= 60],"
         " ['A', 'B'], default='C')" in code
     )
     assert "THEN" not in code
@@ -243,7 +243,7 @@ def test_scaffold_filter_boolean_expression_parenthesized() -> None:
         ),
     )
     code = scaffold(doc)
-    assert "(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')" in code
+    assert "(df[\"Age\"] > 18) & (df[\"Status\"] == 'Active')" in code
     assert "import numpy as np" not in code
 
 
@@ -269,7 +269,7 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df_1["x"] ?? weird syntax' in code
+    assert 'df["x"] ?? weird syntax' in code
 
 
 # ── Select ─────────────────────────────────────────────────────────────────
@@ -382,8 +382,7 @@ def test_scaffold_join_same_key() -> None:
     code = scaffold(doc)
     assert "pd.merge" in code
     assert '"CustomerID"' in code
-    assert "df_1" in code
-    assert "df_2" in code
+    assert "df, df2" in code
 
 
 def test_scaffold_join_different_keys() -> None:
@@ -463,8 +462,7 @@ def test_scaffold_union_concat() -> None:
     )
     code = scaffold(doc)
     assert "pd.concat" in code
-    assert "df_1" in code
-    assert "df_2" in code
+    assert "pd.concat([df, df2], ignore_index=True)" in code
 
 
 # ── Sort / Unique ──────────────────────────────────────────────────────────
@@ -496,7 +494,7 @@ def test_scaffold_sort_reads_nested_field_rows() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
+    assert 'df = df.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
 
 
 def test_scaffold_sort_multiple_fields() -> None:
@@ -514,7 +512,7 @@ def test_scaffold_sort_multiple_fields() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.sort_values(["A", "B"], ascending=[True, False])' in code
+    assert 'df = df.sort_values(["A", "B"], ascending=[True, False])' in code
 
 
 def test_scaffold_unique_uses_subset() -> None:
@@ -525,7 +523,7 @@ def test_scaffold_unique_uses_subset() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.drop_duplicates(subset=["EL_ID"])' in code
+    assert 'df = df.drop_duplicates(subset=["EL_ID"])' in code
 
 
 def test_scaffold_unique_without_fields_keeps_default() -> None:
@@ -533,7 +531,7 @@ def test_scaffold_unique_without_fields_keeps_default() -> None:
         AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0)
     )
     code = scaffold(doc)
-    assert "df_2 = df_1.drop_duplicates()" in code
+    assert "df = df.drop_duplicates()" in code
 
 
 # ── Text Input ─────────────────────────────────────────────────────────────
@@ -557,7 +555,7 @@ def test_scaffold_text_input_builds_dataframe() -> None:
         )
     )
     code = scaffold(doc)
-    assert "df_1 = pd.DataFrame({" in code
+    assert "df = pd.DataFrame({" in code
     assert (
         '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
     )
@@ -608,7 +606,7 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert 'df_2[["EL_ID", "閉業/閉店日", "開業/開店日"]]' in code
+    assert 'df2[["EL_ID", "閉業/閉店日", "開業/開店日"]]' in code
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
@@ -628,8 +626,8 @@ def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert '_MAP_3 = dict(zip(df_2["OldCode"], df_2["NewCode"]))' in code
-    assert 'df_3["Code"]' in code
+    assert '_MAP_3 = dict(zip(df2["OldCode"], df2["NewCode"]))' in code
+    assert 'df["Code"]' in code
 
 
 def test_scaffold_findreplace_partial_match_falls_back() -> None:
@@ -659,7 +657,7 @@ def test_scaffold_appendfields_cross_join() -> None:
         "Sources",
     )
     code = scaffold(doc)
-    assert 'df_3 = pd.merge(df_1, df_2, how="cross")' in code
+    assert 'df = pd.merge(df, df2, how="cross")' in code
     assert "unsupported tool type" not in code
 
 
@@ -679,7 +677,7 @@ def test_scaffold_createpoints_geopandas() -> None:
     code = scaffold(doc)
     assert "import geopandas as gpd" in code
     assert (
-        'geometry=gpd.points_from_xy(df_1["Longitude"], df_1["Latitude"])' in code
+        'geometry=gpd.points_from_xy(df["Longitude"], df["Latitude"])' in code
     )
 
 
@@ -703,7 +701,7 @@ def test_scaffold_unsupported_tool_todo() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="DynamicRename", x=0, y=0))
     code = scaffold(doc)
     assert "TODO" in code
-    assert "df_1 = ..." in code
+    assert "df = ..." in code
 
 
 # ── Topo order ─────────────────────────────────────────────────────────────
@@ -745,7 +743,7 @@ def test_node_code_snippets_includes_filter() -> None:
     )
     snippets = node_code_snippets(doc)
     assert 2 in snippets
-    assert 'df_1["Age"] > 18' in snippets[2]
+    assert 'df["Age"] > 18' in snippets[2]
 
 
 def test_node_code_snippets_excludes_select() -> None:
