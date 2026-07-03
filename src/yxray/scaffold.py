@@ -579,18 +579,40 @@ def _gen_findreplace(
             for f in as_list(append_fields.get("Field"))
             if isinstance(f, dict) and field_name(f)
         ]
+    rmf_raw = config.get("ReplaceMultipleFound", {})
+    replace_multiple_found = not (
+        isinstance(rmf_raw, dict) and rmf_raw.get("@value", "").lower() == "false"
+    )
 
-    whole_match = find_mode == "FindWhole" and field_find and field_search
-    if whole_match and replace_mode == "Append" and append_names:
+    whole_match = find_mode == "FindWhole" and bool(field_find and field_search)
+    any_match = find_mode == "FindAny" and bool(field_find and field_search)
+
+    if (whole_match or any_match) and replace_mode == "Append" and append_names:
         cols = ", ".join(f'"{n}"' for n in (field_search, *append_names))
         key = (
             f'    on="{field_find}",'
             if field_find == field_search
             else f'    left_on="{field_find}",\n    right_on="{field_search}",'
         )
-        return (
+        note = (
             "# NOTE: Find Replace (append fields on whole match) as a left join"
-            " — review translation\n"
+            if whole_match
+            else "# NOTE: Find Replace (FindAny — translated as left join; verify match semantics)"
+        )
+        if any_match and not replace_multiple_found:
+            lookup_var = f"_LOOKUP_{tool_id}"
+            return (
+                f"{note} — review translation\n"
+                f"{lookup_var} = {df_r}[[{cols}]].drop_duplicates('{field_search}')\n"
+                f"{df_out} = pd.merge(\n"
+                f"    {df_f},\n"
+                f"    {lookup_var},\n"
+                f"{key}\n"
+                f'    how="left",\n'
+                f")"
+            )
+        return (
+            f"{note} — review translation\n"
             f"{df_out} = pd.merge(\n"
             f"    {df_f},\n"
             f"    {df_r}[[{cols}]],\n"

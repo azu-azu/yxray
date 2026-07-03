@@ -630,7 +630,54 @@ def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
     assert 'df["Code"]' in code
 
 
-def test_scaffold_findreplace_partial_match_falls_back() -> None:
+def test_scaffold_findreplace_findany_append_left_join() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "EL_ID",
+            "FieldSearch": "EL_ID",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "True"},
+            "ReplaceAppendFields": {
+                "Field": [{"@field": "col_a"}, {"@field": "col_b"}],
+            },
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert 'df2[["EL_ID", "col_a", "col_b"]]' in code
+    assert 'on="EL_ID"' in code
+    assert 'how="left"' in code
+    assert "TODO: Find Replace" not in code
+
+
+def test_scaffold_findreplace_findany_append_dedup_when_first_match_only() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "key_a",
+            "FieldSearch": "key_b",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "False"},
+            "ReplaceAppendFields": {
+                "Field": [{"@field": "val"}],
+            },
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert "drop_duplicates" in code
+    assert 'left_on="key_a"' in code
+    assert 'right_on="key_b"' in code
+    assert 'how="left"' in code
+    assert "TODO: Find Replace" not in code
+
+
+def test_scaffold_findreplace_findany_replace_mode_falls_back() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
