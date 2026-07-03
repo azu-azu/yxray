@@ -21,6 +21,8 @@ from yxray.config_utils import (
     formula_field_summaries,
     get_text,
     select_field_rows,
+    simple_filter_summary,
+    sort_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
 from yxray.tool_registry import (
@@ -291,6 +293,8 @@ def _describe_text_input(config: dict[str, Any], _members: list[Any] | None) -> 
 
 def _describe_filter(config: dict[str, Any], _members: list[Any] | None) -> str:
     expr = first_text(config, "Expression", "CustomFilterExpression")
+    if not expr:
+        expr = simple_filter_summary(config)
     return f"Keeps rows where {expr}" if expr else "Filters rows"
 
 
@@ -384,18 +388,11 @@ def _describe_summarize(config: dict[str, Any], _members: list[Any] | None) -> s
 
 
 def _describe_sort(config: dict[str, Any], _members: list[Any] | None) -> str:
-    sort_info = config.get("SortInfo", {})
-    if isinstance(sort_info, dict):
-        field = sort_info.get("@field", "")
-        order = sort_info.get("@order", "")
-        if field:
-            return f"{field} ({order})" if order else field
-    if isinstance(sort_info, list) and sort_info:
-        first = sort_info[0]
-        if isinstance(first, dict):
-            field = first.get("@field", "")
-            order = first.get("@order", "")
-            return f"{field} ({order})" if order else field
+    rows = sort_field_rows(config)
+    if rows:
+        field = rows[0].get("@field", "")
+        order = rows[0].get("@order", "")
+        return f"{field} ({order})" if order else field
     return "Sorts rows"
 
 
