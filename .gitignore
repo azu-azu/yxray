@@ -48,3 +48,6 @@ examples/*_report.html
 
 *.yxmc
 *.yxmd
+input/
+input_diff/
+output/
