@@ -20,8 +20,8 @@ from typing import Any
 
 from yxray.config_utils import field_name, select_field_rows
 from yxray.models.workflow import WorkflowDoc
-from yxray.topology import build_predecessor_map, topo_order
 from yxray.tool_registry import classify_tool
+from yxray.topology import build_predecessor_map, topo_order
 
 
 @dataclass(frozen=True)

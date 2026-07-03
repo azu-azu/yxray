@@ -55,7 +55,9 @@ def _conn(src: int, dst: int) -> AlteryxConnection:
     )
 
 
-def _doc(*nodes: AlteryxNode, connections: tuple[AlteryxConnection, ...] = ()) -> WorkflowDoc:
+def _doc(
+    *nodes: AlteryxNode, connections: tuple[AlteryxConnection, ...] = ()
+) -> WorkflowDoc:
     return WorkflowDoc(filepath="test.yxmd", nodes=nodes, connections=connections)
 
 
@@ -279,7 +281,8 @@ def test_independent_branch_no_cross_warning() -> None:
         _select_node(1, [_rename_row("A", "B")]),
         _non_select_node(2, "InputData"),
         _select_node(3, [_drop_row("A")]),  # downstream of branch A only? no...
-        # Actually: 1→3, 2→4 (no 4 in doc). Let's just test 1→3 with no rename upstream of 3 via 2
+        # Actually: 1→3, 2→4 (no 4 in doc). Let's just test 1→3 with no rename
+        # upstream of 3 via 2
         connections=(_conn(1, 3),),
     )
     warnings = detect_stale_select_fields(doc)

@@ -19,9 +19,11 @@ from yxray.matcher.matcher import MatchResult
 from yxray.models import (
     AlteryxConnection,
     AlteryxNode,
+    AnchorName,
     DiffResult,
     EdgeDiff,
     NodeDiff,
+    ToolID,
 )
 
 # Empty by design: add dotted paths only when confirmed from real .yxmd fixtures.
@@ -308,7 +310,10 @@ def _edge_diffs_for(
     change_type: str,
 ) -> list[EdgeDiff]:
     """Build a sorted list of EdgeDiff entries for a set of connections."""
-    key = lambda c: (c.src_tool, c.src_anchor, c.dst_tool, c.dst_anchor)
+
+    def key(c: AlteryxConnection) -> tuple[ToolID, AnchorName, ToolID, AnchorName]:
+        return (c.src_tool, c.src_anchor, c.dst_tool, c.dst_anchor)
+
     return [
         EdgeDiff(
             src_tool=c.src_tool,
