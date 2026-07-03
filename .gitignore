@@ -45,3 +45,6 @@ tmp.md
 examples/*_report.html
 *_report.html
 *_graph.html
+
+*.yxmc
+*.yxmd
