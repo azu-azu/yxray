@@ -110,6 +110,22 @@ def field_name(field: dict[str, Any]) -> str:
     )
 
 
+def sort_field_rows(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Sort rows (@field/@order dicts) from a Sort tool config.
+
+    Workflows nest them as SortInfo/Field; rows directly under SortInfo
+    are tolerated as well.
+    """
+    sort_info = config.get("SortInfo", {})
+    if isinstance(sort_info, dict):
+        rows = as_list(sort_info["Field"]) if "Field" in sort_info else [sort_info]
+    elif isinstance(sort_info, list):
+        rows = sort_info
+    else:
+        rows = []
+    return [r for r in rows if isinstance(r, dict) and r.get("@field")]
+
+
 def select_field_rows(config: dict[str, Any]) -> list[Any]:
     fields = config.get("SelectFields", config.get("Fields", {}))
     if not isinstance(fields, dict):

@@ -147,7 +147,28 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         True,
     ),
     "FindReplace": ToolInfo(
-        "Find & Replace", "transform", "df[...].str.replace(..., ...)", True
+        "Find & Replace",
+        "transform",
+        'pd.merge(data, lookup, ..., how="left") / df[...].map(lookup)',
+        True,
+    ),
+    "AppendFields": ToolInfo(
+        "Append Fields",
+        "transform",
+        'pd.merge(targets, sources, how="cross")',
+        True,
+    ),
+    "CreatePoints": ToolInfo(
+        "Create Points",
+        "transform",
+        "gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(x, y))",
+        True,
+    ),
+    "SpatialMatch": ToolInfo(
+        "Spatial Match",
+        "transform",
+        'gpd.sjoin(targets, universe, predicate="intersects")',
+        True,
     ),
     "GenerateRows": ToolInfo(
         "Generate Rows", "transform", "pd.DataFrame(range(...))", True
@@ -202,8 +223,9 @@ FILTER_SEGMENTS = frozenset({"AlteryxFilter", "Filter"})
 FORMULA_SEGMENTS = frozenset({"AlteryxFormula", "Formula", "MultiFieldFormula"})
 SELECT_SEGMENTS = frozenset({"AlteryxSelect", "Select"})
 
-SCAFFOLD_INPUT_SEGMENTS = frozenset({"DbFileInput", "InputData", "TextInput"})
+SCAFFOLD_INPUT_SEGMENTS = frozenset({"DbFileInput", "InputData"})
 SCAFFOLD_OUTPUT_SEGMENTS = frozenset({"DbFileOutput", "OutputData"})
+SCAFFOLD_TEXTINPUT_SEGMENTS = frozenset({"TextInput"})
 SCAFFOLD_FILTER_SEGMENTS = FILTER_SEGMENTS
 SCAFFOLD_SELECT_SEGMENTS = SELECT_SEGMENTS
 SCAFFOLD_FORMULA_SEGMENTS = FORMULA_SEGMENTS - {"MultiFieldFormula"}
@@ -213,6 +235,13 @@ SCAFFOLD_SUMMARIZE_SEGMENTS = frozenset({"AlteryxSummarize", "Summarize"})
 SCAFFOLD_SORT_SEGMENTS = frozenset({"AlteryxSort", "Sort"})
 SCAFFOLD_SAMPLE_SEGMENTS = frozenset({"AlteryxSample", "Sample"})
 SCAFFOLD_UNIQUE_SEGMENTS = frozenset({"Unique"})
+SCAFFOLD_FINDREPLACE_SEGMENTS = frozenset({"FindReplace"})
+SCAFFOLD_APPENDFIELDS_SEGMENTS = frozenset({"AppendFields"})
+SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})
+SCAFFOLD_SPATIALMATCH_SEGMENTS = frozenset({"SpatialMatch"})
+SCAFFOLD_SPATIAL_SEGMENTS = (
+    SCAFFOLD_CREATEPOINTS_SEGMENTS | SCAFFOLD_SPATIALMATCH_SEGMENTS
+)
 
 
 def tool_segment(tool_type: str) -> str:

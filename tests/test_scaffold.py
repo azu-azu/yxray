@@ -386,11 +386,240 @@ def test_scaffold_union_concat() -> None:
     assert "df_2" in code
 
 
+# ── Sort / Unique ──────────────────────────────────────────────────────────
+
+
+def _chain_doc(second: AlteryxNode) -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        second,
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+def test_scaffold_sort_reads_nested_field_rows() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            config={
+                "SortInfo": {
+                    "@locale": "2631851",
+                    "Field": {"@field": "工事完了予定日(p)", "@order": "Descending"},
+                }
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert 'df_2 = df_1.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
+
+
+def test_scaffold_sort_multiple_fields() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            config={
+                "SortInfo": {
+                    "Field": [
+                        {"@field": "A", "@order": "Ascending"},
+                        {"@field": "B", "@order": "Descending"},
+                    ]
+                }
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert 'df_2 = df_1.sort_values(["A", "B"], ascending=[True, False])' in code
+
+
+def test_scaffold_unique_uses_subset() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Unique", x=10, y=0,
+            config={"UniqueFields": {"Field": {"@field": "EL_ID"}}},
+        )
+    )
+    code = scaffold(doc)
+    assert 'df_2 = df_1.drop_duplicates(subset=["EL_ID"])' in code
+
+
+def test_scaffold_unique_without_fields_keeps_default() -> None:
+    doc = _chain_doc(
+        AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0)
+    )
+    code = scaffold(doc)
+    assert "df_2 = df_1.drop_duplicates()" in code
+
+
+# ── Text Input ─────────────────────────────────────────────────────────────
+
+
+def test_scaffold_text_input_builds_dataframe() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="TextInput", x=0, y=0,
+            config={
+                "NumRows": {"@value": "3"},
+                "Fields": {"Field": {"@name": "進捗"}},
+                "Data": {
+                    "r": [
+                        {"c": {"#text": "No Progress-Initial Design"}},
+                        {"c": "TSS-TI Ready"},
+                        {"c": "On Air"},
+                    ]
+                },
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert "df_1 = pd.DataFrame({" in code
+    assert (
+        '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
+    )
+
+
+# ── Find Replace ───────────────────────────────────────────────────────────
+
+
+def _two_input_doc(
+    tool_type: str,
+    config: dict,
+    anchor_a: str,
+    anchor_b: str,
+) -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=10),
+        AlteryxNode(
+            tool_id=ToolID(3), tool_type=tool_type, x=10, y=0, config=config
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3), dst_anchor=AnchorName(anchor_a),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3), dst_anchor=AnchorName(anchor_b),
+            ),
+        ),
+    )
+
+
+def test_scaffold_findreplace_append_mode_left_join() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "EL_ID",
+            "FieldSearch": "EL_ID",
+            "ReplaceFoundField": "所有者 ID",
+            "FindMode": "FindWhole",
+            "ReplaceMode": "Append",
+            "ReplaceAppendFields": {
+                "Field": [{"@field": "閉業/閉店日"}, {"@field": "開業/開店日"}],
+            },
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert 'df_2[["EL_ID", "閉業/閉店日", "開業/開店日"]]' in code
+    assert 'on="EL_ID"' in code
+    assert 'how="left"' in code
+    assert "unsupported tool type" not in code
+
+
+def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "Code",
+            "FieldSearch": "OldCode",
+            "ReplaceFoundField": "NewCode",
+            "FindMode": "FindWhole",
+            "ReplaceMode": "Replace",
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert '_MAP_3 = dict(zip(df_2["OldCode"], df_2["NewCode"]))' in code
+    assert 'df_3["Code"]' in code
+
+
+def test_scaffold_findreplace_partial_match_falls_back() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "Name",
+            "FieldSearch": "Fragment",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Replace",
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert "TODO: Find Replace" in code
+
+
+# ── Append Fields ──────────────────────────────────────────────────────────
+
+
+def test_scaffold_appendfields_cross_join() -> None:
+    doc = _two_input_doc(
+        "AppendFields",
+        {"CartesianMode": "Error"},
+        "Targets",
+        "Sources",
+    )
+    code = scaffold(doc)
+    assert 'df_3 = pd.merge(df_1, df_2, how="cross")' in code
+    assert "unsupported tool type" not in code
+
+
+# ── Spatial (CreatePoints / SpatialMatch) ──────────────────────────────────
+
+
+def test_scaffold_createpoints_geopandas() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="CreatePoints", x=10, y=0,
+            config={
+                "Fields": {"@fieldX": "Longitude", "@fieldY": "Latitude"},
+                "Mode": "Double",
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert "import geopandas as gpd" in code
+    assert (
+        'geometry=gpd.points_from_xy(df_1["Longitude"], df_1["Latitude"])' in code
+    )
+
+
+def test_scaffold_spatialmatch_sjoin() -> None:
+    doc = _two_input_doc(
+        "SpatialMatch",
+        {"Method": {"@method": "Intersects"}},
+        "Targets",
+        "Universe",
+    )
+    code = scaffold(doc)
+    assert "import geopandas as gpd" in code
+    assert "gpd.sjoin(" in code
+    assert 'predicate="intersects"' in code
+
+
 # ── Unsupported ────────────────────────────────────────────────────────────
 
 
 def test_scaffold_unsupported_tool_todo() -> None:
-    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="SpatialMatch", x=0, y=0))
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="DynamicRename", x=0, y=0))
     code = scaffold(doc)
     assert "TODO" in code
     assert "df_1 = ..." in code
