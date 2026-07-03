@@ -34,7 +34,7 @@ _TOKEN_RE = re.compile(
     | (?P<str>'[^']*'|"[^"]*")
     | (?P<field>\[[^\]]+\])
     | (?P<ident>[^\W\d]\w*)
-    | (?P<op><=|>=|!=|<>|==|=|<|>|\+|-|\*|/|%)
+    | (?P<op><=|>=|!=|<>|==|=|<|>|\+|-|\*|/|%|!)
     | (?P<lparen>\()
     | (?P<rparen>\))
     | (?P<comma>,)
@@ -115,6 +115,16 @@ def _emit_iif(args: list[_Emitted]) -> str:
     return f"np.where({args[0][0]}, {args[1][0]}, {args[2][0]})"
 
 
+def _emit_datetimeadd(args: list[_Emitted]) -> str:
+    _check_args("DateTimeAdd", args, 3)
+    dt = args[0][0]
+    amount = args[1][0]
+    unit_raw = args[2][0].strip("'\"")
+    _OFFSET_UNITS = {"years", "months", "days", "hours", "minutes", "seconds"}
+    pandas_unit = unit_raw.lower() if unit_raw.lower() in _OFFSET_UNITS else unit_raw
+    return f"{dt} + pd.DateOffset({pandas_unit}={amount})"
+
+
 def _emit_isempty(args: list[_Emitted]) -> str:
     _check_args("IsEmpty", args, 1)
     return f'({_series(args[0])}.isna() | ({args[0][0]} == ""))'
@@ -171,6 +181,10 @@ _FUNCTIONS: dict[str, Callable[[list[_Emitted]], str]] = {
     ),
     "datetimenow": lambda args: "pd.Timestamp.now()",
     "datetimetoday": lambda args: "pd.Timestamp.today().normalize()",
+    "datetimeadd": _emit_datetimeadd,
+    "todate": lambda args: (
+        f"pd.to_datetime({args[0][0]})" if args else _raise("ToDate expects 1 argument")
+    ),
 }
 
 
@@ -261,6 +275,11 @@ class _Parser:
 
     def not_expr(self) -> _Emitted:
         if self.keyword() == "not":
+            self.advance()
+            operand = self.not_expr()
+            return f"~{_paren(operand, _UNARY)}", _UNARY
+        token = self.peek()
+        if token.kind == "op" and token.value == "!":
             self.advance()
             operand = self.not_expr()
             return f"~{_paren(operand, _UNARY)}", _UNARY

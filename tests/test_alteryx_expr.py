@@ -48,6 +48,17 @@ def test_not() -> None:
     assert t("NOT [a] = 1") == '~(df["a"] == 1)'
 
 
+def test_bang_not() -> None:
+    assert t('!Contains([x], "abc")') == "~df[\"x\"].str.contains('abc', case=False, na=False)"
+
+
+def test_bang_not_combined_with_and() -> None:
+    assert (
+        t('!Contains([a], "x") AND Contains([b], "y")')
+        == "~df[\"a\"].str.contains('x', case=False, na=False) & df[\"b\"].str.contains('y', case=False, na=False)"
+    )
+
+
 def test_keywords_case_insensitive() -> None:
     assert t("[a] = 1 and [b] = 2") == '(df["a"] == 1) & (df["b"] == 2)'
 
@@ -129,6 +140,24 @@ def test_substring_without_length() -> None:
 def test_substring_zero_indexed_denver() -> None:
     # Regression: Substring("DENVER", 2, 3) == "NVE", not "ENV"
     assert t("Substring([City], 2, 3)") == 'df["City"].str[2:2+3]'
+
+
+def test_datetimeadd_months() -> None:
+    assert (
+        t('DateTimeAdd(DateTimeToday(), -2, "months")')
+        == "pd.Timestamp.today().normalize() + pd.DateOffset(months=-2)"
+    )
+
+
+def test_datetimeadd_days() -> None:
+    assert (
+        t('DateTimeAdd([dt], 7, "days")')
+        == 'df["dt"] + pd.DateOffset(days=7)'
+    )
+
+
+def test_todate() -> None:
+    assert t('ToDate("2024-01-01")') == "pd.to_datetime('2024-01-01')"
 
 
 def test_unknown_function_kept_verbatim() -> None:
