@@ -27,6 +27,7 @@ from yxray.config_utils import (
 from yxray.models.workflow import WorkflowDoc
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
+    SCAFFOLD_BROWSE_SEGMENTS,
     SCAFFOLD_CREATEPOINTS_SEGMENTS,
     SCAFFOLD_FILTER_SEGMENTS,
     SCAFFOLD_FINDREPLACE_SEGMENTS,
@@ -200,13 +201,13 @@ def _gen_filter(
     if expr:
         pandas_expr = _translate_expr(expr, df_in)
         return (
-            f"# NOTE: Alteryx expression — review translation\n"
+            "# NOTE: Alteryx expression — review translation\n"
             f"{df_out} = {df_in}[{pandas_expr}]"
         )
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
         return (
-            f"# NOTE: from Simple-mode filter settings — review translation\n"
+            "# NOTE: from Simple-mode filter settings — review translation\n"
             f"{df_out} = {df_in}[{simple_expr}]"
         )
     return f"{df_out} = {df_in}  # TODO: Filter expression missing"
@@ -247,13 +248,21 @@ def _gen_select(
         and edits[0][1] is None
         and edits[0][2] is True
     )
+    unknown_deselected = any(
+        name == "*Unknown" and not selected for name, _, selected in edits
+    )
 
     var = f"_COLS_{tool_id}"
     col_lines: list[str] = []
     if only_unknown:
         col_lines.append(
-            f"# WARNING: Select only specifies *Unknown — no explicit column edits;"
+            "# WARNING: Select only specifies *Unknown — no explicit column edits;"
             " likely a source-file issue (passthrough)"
+        )
+    if unknown_deselected:
+        col_lines.append(
+            "# WARNING: *Unknown=False — apply_select_edits keeps only explicitly"
+            " selected columns; verify column list matches Alteryx output"
         )
     col_lines.append(f"{var} = [")
     for name, new_name, selected in edits:
@@ -266,6 +275,19 @@ def _gen_select(
     col_lines.append("]")
     col_lines.append(f"{df_out} = apply_select_edits({df_in}, {var})")
     return "\n".join(col_lines)
+
+
+def _gen_browse(
+    tool_id: int,
+    segment: str,
+    config: dict[str, Any],
+    preds: list[int],
+    _anchors: dict[str, int],
+    names: dict[int, str],
+) -> str:
+    src = preds[0] if preds else None
+    df_in = names.get(src, "df_?")
+    return f'logger.info("ToolID {tool_id} (Browse): rows=%d", len({df_in}))'
 
 
 def _gen_formula(
@@ -713,6 +735,7 @@ def _gen_spatialmatch(
 # ── Generator registry ─────────────────────────────────────────────────────
 
 _GENERATORS: dict[str, Any] = {
+    **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, _gen_browse),
     **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, _gen_filter),
     **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
     **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
@@ -896,13 +919,20 @@ def _emit_select_helpers() -> list[str]:
         "        df: pd.DataFrame,",
         "        columns: list[SelectColumnEdit],",
         ") -> pd.DataFrame:",
-        "    drop_columns = {c.name for c in columns if not c.selected}",
+        '    wildcard = next((c for c in columns if c.name == "*Unknown"), None)',
+        '    explicit = [c for c in columns if c.name != "*Unknown"]',
+        "    if wildcard is not None and not wildcard.selected:",
+        "        keep = [c.name for c in explicit if c.selected and c.name in df.columns]",
+        "        df = df[keep]",
+        "    else:",
+        "        drop = {c.name for c in explicit if not c.selected} & set(df.columns)",
+        "        df = df.drop(columns=drop)",
         "    rename_map = {",
         "        c.name: c.new_name",
-        "        for c in columns",
-        "        if c.selected and c.new_name and c.new_name != c.name",
+        "        for c in explicit",
+        "        if c.selected and c.new_name and c.name in df.columns",
         "    }",
-        "    return df.drop(columns=drop_columns).rename(columns=rename_map)",
+        "    return df.rename(columns=rename_map)",
     ]
 
 
@@ -999,7 +1029,7 @@ def scaffold_simple(
             path = first_text(node.config, "File", "FileName")
             if path:
                 ext = pathlib.Path(path).suffix.lower()
-                path_expr = f'"{path}"'
+                path_expr = f'r"{path}"'
                 code = f"{names[tool_id]} = {_file_read(path_expr, ext)}"
             else:
                 code = f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
@@ -1009,7 +1039,7 @@ def scaffold_simple(
             path = first_text(node.config, "File", "FileName")
             if path:
                 ext = pathlib.Path(path).suffix.lower()
-                path_expr = f'"{path}"'
+                path_expr = f'r"{path}"'
                 code = _file_write(path_expr, df_in, ext)
             else:
                 code = f"{df_in}.to_csv(...)  # TODO: set file path"

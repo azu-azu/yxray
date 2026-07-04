@@ -31,7 +31,7 @@ class ExplainStep:
     category: str  # "input" | "transform" | "output" | "unknown"
     description: str
     python_hint: str
-    supported: bool
+    supported: str  # "yes", "partial", or "no"
 
 
 # ---------------------------------------------------------------------------

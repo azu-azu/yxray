@@ -25,7 +25,7 @@ def test_explain_input_data_hint() -> None:
     steps = explain(doc)
     assert len(steps) == 1
     assert "pd.read_csv" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_dbfileinput_hint() -> None:
@@ -39,34 +39,34 @@ def test_explain_dbfileinput_hint() -> None:
     )
     steps = explain(doc)
     assert "pd.read_csv" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_join_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Join", x=0, y=0))
     steps = explain(doc)
     assert "pd.merge" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_summarize_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Summarize", x=0, y=0))
     steps = explain(doc)
     assert "groupby" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_unsupported_tool_flagged() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="MultiFieldFormula", x=0, y=0))
     steps = explain(doc)
-    assert steps[0].supported is False
+    assert steps[0].supported == "no"
     assert "TODO" in steps[0].python_hint
 
 
 def test_explain_unknown_tool_falls_back() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="SomeFutureTool", x=0, y=0))
     steps = explain(doc)
-    assert steps[0].supported is False
+    assert steps[0].supported == "no"
     assert "TODO" in steps[0].python_hint
 
 
@@ -94,18 +94,18 @@ def test_explain_filter_hint() -> None:
     steps = explain(doc)
     assert "mask" in steps[0].python_hint
     assert "str.contains" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_union_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="Union", x=0, y=0))
     steps = explain(doc)
     assert "pd.concat" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"
 
 
 def test_explain_output_data_hint() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="OutputData", x=0, y=0))
     steps = explain(doc)
     assert "to_csv" in steps[0].python_hint
-    assert steps[0].supported is True
+    assert steps[0].supported == "yes"

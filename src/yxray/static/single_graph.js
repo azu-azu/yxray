@@ -1888,7 +1888,7 @@ function _renderPanelEntry(entry, container) {
     hintKeyRow.appendChild(hintCopyBtn);
     var hintVal = document.createElement('div');
     hintVal.className = 'config-val';
-    hintVal.style.cssText = entry.supported
+    hintVal.style.cssText = entry.supported !== "no"
       ? 'color:var(--badge-formula-text);background:var(--badge-formula-bg);border:1px solid var(--badge-formula-border);'
       : 'color:var(--badge-filter-text);background:var(--badge-filter-bg);border:1px solid var(--badge-filter-border);';
     hintVal.textContent = entry.python_hint;
