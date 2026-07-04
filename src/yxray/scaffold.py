@@ -653,11 +653,12 @@ def _gen_findreplace(
                 f")"
             )
         guard = (
-            f'assert not {df_r}["{field_search}"].duplicated().any(), (\n'
-            f"    \"Find & Replace lookup key '{field_search}' is not unique\"\n"
-            f'    " — a left join would duplicate rows; verify Alteryx'
+            f'if {df_r}["{field_search}"].duplicated().any():\n'
+            f"    raise ValueError(\n"
+            f"        \"Find & Replace lookup key '{field_search}' is not unique\"\n"
+            f'        " — a left join would duplicate rows; verify Alteryx'
             f' semantics"\n'
-            f")"
+            f"    )"
         )
         return (
             f"{note} — review translation\n"

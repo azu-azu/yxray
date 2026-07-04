@@ -843,9 +843,11 @@ def test_scaffold_findreplace_findany_append_left_join() -> None:
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "TODO: Find Replace" not in code
-    # a left join duplicates rows when the lookup key repeats — the
+    # a left join duplicates rows when the lookup key repeats; the
     # scaffold must guard against that silently changing row counts
-    assert 'assert not df2["EL_ID"].duplicated().any()' in code
+    assert 'if df2["EL_ID"].duplicated().any():' in code
+    assert "raise ValueError(" in code
+    assert "Find & Replace lookup key 'EL_ID' is not unique" in code
 
 
 def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
@@ -863,7 +865,7 @@ def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
         "R",
     )
     code = scaffold(doc)
-    # drop_duplicates already makes the lookup unique; no assert needed
+    # drop_duplicates already makes the lookup unique; no guard needed
     assert "duplicated().any()" not in code
 
 
