@@ -84,7 +84,9 @@ def _tokenize(expr: str) -> list[_Token]:
 # Comparisons bind *looser* than & and | in Python, so a comparison used
 # as a boolean operand must be parenthesized.
 
-_DATEOFFSET_UNITS = frozenset({"years", "months", "days", "hours", "minutes", "seconds"})
+_DATEOFFSET_UNITS = frozenset(
+    {"years", "months", "days", "hours", "minutes", "seconds"}
+)
 
 _CMP = 1
 _OR = 2
@@ -143,6 +145,17 @@ def _emit_substring(args: list[_Emitted]) -> str:
     return f"{s}.str[{start}:]"
 
 
+def _emit_tostring(args: list[_Emitted]) -> str:
+    # .astype("string") keeps missing values as <NA> instead of the
+    # literal string "nan" that .astype(str) would produce.
+    _check_args("ToString", args, 1)
+    if len(args) > 1:
+        # Alteryx format arguments (decimal places, separators) have no
+        # astype equivalent; fall back so the reviewer ports it manually.
+        raise ExprTranslationError("ToString with format arguments")
+    return f'{_series(args[0])}.astype("string")'
+
+
 def _str_method(name: str, template: str, argc: int) -> Callable[..., str]:
     def emit(args: list[_Emitted]) -> str:
         _check_args(name, args, argc)
@@ -172,7 +185,7 @@ _FUNCTIONS: dict[str, Callable[[list[_Emitted]], str]] = {
     "left": _str_method("Left", ".str[:{}]", 2),
     "right": _str_method("Right", ".str[-{}:]", 2),
     "substring": _emit_substring,
-    "tostring": _str_method("ToString", ".astype(str)", 1),
+    "tostring": _emit_tostring,
     "tonumber": lambda args: (
         f'pd.to_numeric({args[0][0]}, errors="coerce")'
         if args

@@ -129,7 +129,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "df.melt(id_vars=[...], var_name=..., value_name=...)",
         "yes",
     ),
-    "Unique": ToolInfo("Unique", "transform", "df.drop_duplicates(subset=[...])", "yes"),
+    "Unique": ToolInfo(
+        "Unique", "transform", "df.drop_duplicates(subset=[...])", "yes"
+    ),
     "RecordID": ToolInfo(
         "Record ID",
         "transform",
@@ -201,7 +203,10 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "no",
     ),
     "ToolContainer": ToolInfo(
-        "Container", "unknown", "# Container — groups tools, no Python equivalent", "yes"
+        "Container",
+        "unknown",
+        "# Container — groups tools, no Python equivalent",
+        "yes",
     ),
 }
 

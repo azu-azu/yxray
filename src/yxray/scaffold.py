@@ -56,6 +56,9 @@ _FIELD_RE = re.compile(r"\[([^\]]+)\]")
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
 # Emissions of alteryx_expr that need "import numpy as np" in the preamble.
 _NUMPY_RE = re.compile(r"\bnp\.(where|select|nan)\b")
+# Translated filter expressions that compare against datetime values;
+# CSV-loaded columns are strings, so warn about the dtype mismatch.
+_DATE_EXPR_RE = re.compile(r"\bpd\.(to_datetime|Timestamp|DateOffset)\b")
 
 
 def _translate_expr(expr: str, df_var: str) -> str:
@@ -114,6 +117,17 @@ def _assign_frame_names(
     return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
+def _frame_name(
+    names: dict[int, str],
+    tool_id: int | None,
+    fallback: str = "df_?",
+) -> str:
+    """Frame variable for a source tool, or a placeholder when unresolved."""
+    if tool_id is None:
+        return fallback
+    return names.get(tool_id, fallback)
+
+
 # ── Per-tool code generators ───────────────────────────────────────────────
 
 
@@ -143,7 +157,7 @@ def _gen_output(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     if tool_id in output_paths:
         ext = pathlib.Path(output_paths[tool_id]).suffix.lower()
         path_expr = f'OUTPUTS["output_{tool_id}"]'
@@ -195,15 +209,20 @@ def _gen_filter(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         pandas_expr = _translate_expr(expr, df_in)
-        return (
-            "# NOTE: Alteryx expression — review translation\n"
-            f"{df_out} = {df_in}[{pandas_expr}]"
-        )
+        lines = ["# NOTE: Alteryx expression — review translation"]
+        if _DATE_EXPR_RE.search(pandas_expr):
+            lines += [
+                "# WARNING: date comparison — columns read from CSV are"
+                " strings; convert",
+                '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
+            ]
+        lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
+        return "\n".join(lines)
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
         return (
@@ -222,7 +241,7 @@ def _gen_select(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     rows = select_field_rows(config)
 
@@ -286,7 +305,7 @@ def _gen_browse(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     return f'logger.info("ToolID {tool_id} (Browse): rows=%d", len({df_in}))'
 
 
@@ -299,7 +318,7 @@ def _gen_formula(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     ffs = config.get("FormulaFields", {})
     formulas: list[tuple[str, str]] = []
@@ -337,8 +356,8 @@ def _gen_join(
     df_out = names[tool_id]
     left_id = anchors.get("Left")
     right_id = anchors.get("Right")
-    df_left = names.get(left_id, "df_left")
-    df_right = names.get(right_id, "df_right")
+    df_left = _frame_name(names, left_id, "df_left")
+    df_right = _frame_name(names, right_id, "df_right")
 
     expr = first_text(config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
@@ -403,7 +422,7 @@ def _gen_summarize(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     sf = config.get("SummarizeFields", {})
     if not isinstance(sf, dict):
@@ -453,7 +472,7 @@ def _gen_sort(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     rows = sort_field_rows(config)
     if rows:
@@ -475,7 +494,7 @@ def _gen_sample(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     for key in ("RecordLimit", "N", "@N"):
         val = config.get(key)
@@ -495,7 +514,7 @@ def _gen_unique(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     unique_fields = config.get("UniqueFields", {})
     field_names: list[str] = []
@@ -579,11 +598,12 @@ def _gen_findreplace(
 ) -> str:
     df_out = names[tool_id]
     # Alteryx FindReplace XML connection anchors: Targets = main stream (FieldFind),
-    # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks for test fixtures.
+    # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks
+    # for test fixtures.
     f_id = _anchor_src(anchors, preds, ("Targets", "F", "Find", "Input"), 0)
     r_id = _anchor_src(anchors, preds, ("Source", "R", "Replace"), 1)
-    df_f = names.get(f_id, "df_find")
-    df_r = names.get(r_id, "df_replace")
+    df_f = _frame_name(names, f_id, "df_find")
+    df_r = _frame_name(names, r_id, "df_replace")
 
     field_find = first_text(config, "FieldFind")
     field_search = first_text(config, "FieldSearch")
@@ -615,7 +635,10 @@ def _gen_findreplace(
         note = (
             "# NOTE: Find Replace (append fields on whole match) as a left join"
             if whole_match
-            else "# NOTE: Find Replace (FindAny — translated as left join; verify match semantics)"
+            else (
+                "# NOTE: Find Replace (FindAny — translated as left join;"
+                " verify match semantics)"
+            )
         )
         if any_match and not replace_multiple_found:
             lookup_var = f"_LOOKUP_{tool_id}"
@@ -629,8 +652,16 @@ def _gen_findreplace(
                 f'    how="left",\n'
                 f")"
             )
+        guard = (
+            f'assert not {df_r}["{field_search}"].duplicated().any(), (\n'
+            f"    \"Find & Replace lookup key '{field_search}' is not unique\"\n"
+            f'    " — a left join would duplicate rows; verify Alteryx'
+            f' semantics"\n'
+            f")"
+        )
         return (
             f"{note} — review translation\n"
+            f"{guard}\n"
             f"{df_out} = pd.merge(\n"
             f"    {df_f},\n"
             f"    {df_r}[[{cols}]],\n"
@@ -669,8 +700,8 @@ def _gen_appendfields(
     df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     s_id = _anchor_src(anchors, preds, ("Sources", "Source"), 1)
-    df_t = names.get(t_id, "df_targets")
-    df_s = names.get(s_id, "df_sources")
+    df_t = _frame_name(names, t_id, "df_targets")
+    df_s = _frame_name(names, s_id, "df_sources")
     return (
         "# NOTE: Append Fields — every source record is appended"
         " to every target record\n"
@@ -687,7 +718,7 @@ def _gen_createpoints(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = names.get(src, "df_?")
+    df_in = _frame_name(names, src)
     df_out = names[tool_id]
     fields = config.get("Fields", {})
     x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
@@ -715,8 +746,8 @@ def _gen_spatialmatch(
     df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     u_id = _anchor_src(anchors, preds, ("Universe",), 1)
-    df_t = names.get(t_id, "df_targets")
-    df_u = names.get(u_id, "df_universe")
+    df_t = _frame_name(names, t_id, "df_targets")
+    df_u = _frame_name(names, u_id, "df_universe")
     method = config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
@@ -922,7 +953,10 @@ def _emit_select_helpers() -> list[str]:
         '    wildcard = next((c for c in columns if c.name == "*Unknown"), None)',
         '    explicit = [c for c in columns if c.name != "*Unknown"]',
         "    if wildcard is not None and not wildcard.selected:",
-        "        keep = [c.name for c in explicit if c.selected and c.name in df.columns]",
+        "        keep = [",
+        "            c.name for c in explicit",
+        "            if c.selected and c.name in df.columns",
+        "        ]",
         "        df = df[keep]",
         "    else:",
         "        drop = {c.name for c in explicit if not c.selected} & set(df.columns)",
@@ -1009,6 +1043,10 @@ def scaffold_simple(
         tool_segment(node.tool_type) in SCAFFOLD_SPATIAL_SEGMENTS
         for node in node_map.values()
     )
+    has_browse = any(
+        tool_segment(node.tool_type) in SCAFFOLD_BROWSE_SEGMENTS
+        for node in node_map.values()
+    )
 
     lines: list[str] = []
 
@@ -1035,7 +1073,7 @@ def scaffold_simple(
                 code = f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
             src = preds[0] if preds else None
-            df_in = names.get(src, "df_?")
+            df_in = _frame_name(names, src)
             path = first_text(node.config, "File", "FileName")
             if path:
                 ext = pathlib.Path(path).suffix.lower()
@@ -1059,6 +1097,8 @@ def scaffold_simple(
         f'"""Scaffold generated by yxray from {source}"""',
         "",
     ]
+    if has_browse:
+        header += ["import logging", ""]
     if has_spatial:
         header.append("import geopandas as gpd")
     if any(_NUMPY_RE.search(line) for line in lines):
@@ -1067,6 +1107,8 @@ def scaffold_simple(
         "import pandas as pd",
         "",
     ]
+    if has_browse:
+        header += ["logger = logging.getLogger(__name__)", ""]
     return "\n".join(header + lines)
 
 

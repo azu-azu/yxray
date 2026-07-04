@@ -49,13 +49,16 @@ def test_not() -> None:
 
 
 def test_bang_not() -> None:
-    assert t('!Contains([x], "abc")') == "~df[\"x\"].str.contains('abc', case=False, na=False)"
+    assert t('!Contains([x], "abc")') == (
+        "~df[\"x\"].str.contains('abc', case=False, na=False)"
+    )
 
 
 def test_bang_not_combined_with_and() -> None:
     assert (
         t('!Contains([a], "x") AND Contains([b], "y")')
-        == "~df[\"a\"].str.contains('x', case=False, na=False) & df[\"b\"].str.contains('y', case=False, na=False)"
+        == "~df[\"a\"].str.contains('x', case=False, na=False)"
+        " & df[\"b\"].str.contains('y', case=False, na=False)"
     )
 
 
@@ -122,6 +125,18 @@ def test_trim_uppercase() -> None:
 
 def test_tonumber() -> None:
     assert t("ToNumber([x])") == 'pd.to_numeric(df["x"], errors="coerce")'
+
+
+def test_tostring_uses_string_dtype() -> None:
+    # .astype(str) would turn missing values into the literal "nan"
+    assert t("ToString([x])") == 'df["x"].astype("string")'
+
+
+def test_tostring_with_format_args_raises() -> None:
+    # Format arguments (decimals, separators) can't be reproduced by a
+    # plain cast — fall back so the expression stays visible verbatim.
+    with pytest.raises(ExprTranslationError):
+        t("ToString([x], 0, 1)")
 
 
 def test_in_list() -> None:

@@ -1,6 +1,13 @@
+import pytest
+
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
-from yxray.scaffold import node_code_snippets, scaffold
+from yxray.scaffold import (
+    _emit_select_helpers,
+    node_code_snippets,
+    scaffold,
+    scaffold_simple,
+)
 
 
 def _doc(
@@ -147,6 +154,43 @@ def test_scaffold_filter_translates_field_notation() -> None:
     code = scaffold(doc)
     assert 'df1["Age"] > 18' in code
     assert "df2 = df1[" in code
+
+
+def test_scaffold_filter_date_comparison_warning() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": '[閉業日] >= ToDate("2024-01-01")'},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: date comparison" in code
+    assert "pd.to_datetime" in code
+
+
+def test_scaffold_filter_no_date_warning_without_date_functions() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": "[Age] > 18"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: date comparison" not in code
 
 
 def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:
@@ -381,6 +425,128 @@ def test_scaffold_select_emits_helpers() -> None:
     assert "from dataclasses import dataclass" in code
     assert "class SelectColumnEdit:" in code
     assert "def apply_select_edits(" in code
+
+
+def test_scaffold_select_unknown_deselected_warning() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [
+                        {"@field": "Name", "@selected": "True"},
+                        {"@field": "*Unknown", "@selected": "False"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: *Unknown=False" in code
+
+
+# ── Select helper semantics ─────────────────────────────────────────────────
+# The helper is emitted as source text; exec it and check the runtime
+# behavior the generated scaffolds rely on.
+
+
+def _exec_select_helpers():
+    pd = pytest.importorskip("pandas")
+    ns: dict[str, object] = {}
+    src = (
+        "from dataclasses import dataclass\n"
+        "import pandas as pd\n" + "\n".join(_emit_select_helpers())
+    )
+    exec(src, ns)
+    return pd, ns["SelectColumnEdit"], ns["apply_select_edits"]
+
+
+def test_apply_select_edits_unknown_deselected_keeps_only_selected() -> None:
+    pd, edit, apply_edits = _exec_select_helpers()
+    df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
+    out = apply_edits(df, [
+        edit("a"),
+        edit("b", "b2"),
+        edit("*Unknown", selected=False),
+    ])
+    assert list(out.columns) == ["a", "b2"]
+
+
+def test_apply_select_edits_ignores_absent_deselected_column() -> None:
+    # Alteryx XML routinely carries stale field lists; dropping a column
+    # that no longer exists must not raise KeyError.
+    pd, edit, apply_edits = _exec_select_helpers()
+    df = pd.DataFrame({"a": [1], "unlisted": [2]})
+    out = apply_edits(df, [
+        edit("a", "id"),
+        edit("gone", selected=False),
+        edit("*Unknown"),
+    ])
+    assert list(out.columns) == ["id", "unlisted"]
+
+
+def test_apply_select_edits_unknown_selected_keeps_unlisted_columns() -> None:
+    pd, edit, apply_edits = _exec_select_helpers()
+    df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
+    out = apply_edits(df, [
+        edit("a"),
+        edit("b", selected=False),
+        edit("*Unknown"),
+    ])
+    assert list(out.columns) == ["a", "extra"]
+
+
+def test_apply_select_edits_unknown_deselected_skips_absent_selected() -> None:
+    pd, edit, apply_edits = _exec_select_helpers()
+    df = pd.DataFrame({"a": [1]})
+    out = apply_edits(df, [
+        edit("a"),
+        edit("renamed_away", "x"),
+        edit("*Unknown", selected=False),
+    ])
+    assert list(out.columns) == ["a"]
+
+
+# ── Browse ──────────────────────────────────────────────────────────────────
+
+
+def _browse_doc() -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="BrowseV2", x=10, y=0),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+def test_scaffold_browse_logs_row_count() -> None:
+    code = scaffold(_browse_doc())
+    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df1))' in code
+    assert "unsupported tool type" not in code
+
+
+def test_scaffold_simple_browse_defines_logger() -> None:
+    code = scaffold_simple(_browse_doc())
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
+    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df1))' in code
+
+
+def test_scaffold_simple_without_browse_has_no_logger() -> None:
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
+    code = scaffold_simple(doc)
+    assert "logging" not in code
 
 
 # ── Join ───────────────────────────────────────────────────────────────────
@@ -677,6 +843,28 @@ def test_scaffold_findreplace_findany_append_left_join() -> None:
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "TODO: Find Replace" not in code
+    # a left join duplicates rows when the lookup key repeats — the
+    # scaffold must guard against that silently changing row counts
+    assert 'assert not df2["EL_ID"].duplicated().any()' in code
+
+
+def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "key_a",
+            "FieldSearch": "key_b",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "False"},
+            "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    # drop_duplicates already makes the lookup unique; no assert needed
+    assert "duplicated().any()" not in code
 
 
 def test_scaffold_findreplace_findany_append_dedup_when_first_match_only() -> None:
