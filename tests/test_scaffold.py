@@ -693,6 +693,37 @@ def test_scaffold_findreplace_findany_replace_mode_falls_back() -> None:
     assert "TODO: Find Replace" in code
 
 
+def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
+    """Alteryx XML uses Targets/Source as FindReplace anchor names.
+
+    Targets = main stream (FieldFind column lives here),
+    Source  = lookup table (FieldSearch column lives here).
+    Verify that tool 1 (Targets/main) becomes the LEFT side of the merge
+    and tool 2 (Source/lookup) becomes the RIGHT side.
+    """
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "key_a",
+            "FieldSearch": "key_b",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "True"},
+            "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
+        },
+        "Targets",  # tool 1 → main stream
+        "Source",   # tool 2 → lookup table
+    )
+    code = scaffold(doc)
+    # tool 1 (Targets / main) must be the LEFT side
+    assert "pd.merge(\n    df1," in code
+    # tool 2 (Source / lookup) must supply the lookup columns
+    assert 'df2[["key_b", "val"]]' in code
+    assert 'left_on="key_a"' in code
+    assert 'right_on="key_b"' in code
+    assert 'how="left"' in code
+
+
 # ── Append Fields ──────────────────────────────────────────────────────────
 
 

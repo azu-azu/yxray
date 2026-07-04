@@ -549,8 +549,10 @@ def _gen_findreplace(
     names: dict[int, str],
 ) -> str:
     df_out = names[tool_id]
-    f_id = _anchor_src(anchors, preds, ("F", "Find", "Input"), 0)
-    r_id = _anchor_src(anchors, preds, ("R", "Replace"), 1)
+    # Alteryx FindReplace XML connection anchors: Targets = main stream (FieldFind),
+    # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks for test fixtures.
+    f_id = _anchor_src(anchors, preds, ("Targets", "F", "Find", "Input"), 0)
+    r_id = _anchor_src(anchors, preds, ("Source", "R", "Replace"), 1)
     df_f = names.get(f_id, "df_find")
     df_r = names.get(r_id, "df_replace")
 
