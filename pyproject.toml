@@ -26,6 +26,7 @@ acd = "yxray.cli:app"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pandas>=2.0",
     "mypy>=1.15",
     "lxml-stubs>=0.5",
     "ruff>=0.15",
@@ -36,6 +37,7 @@ dev = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pandas>=2.0",
     "mypy>=1.15",
     "lxml-stubs>=0.5",
     "ruff>=0.15",
