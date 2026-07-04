@@ -84,7 +84,9 @@ def _tokenize(expr: str) -> list[_Token]:
 # Comparisons bind *looser* than & and | in Python, so a comparison used
 # as a boolean operand must be parenthesized.
 
-_DATEOFFSET_UNITS = frozenset({"years", "months", "days", "hours", "minutes", "seconds"})
+_DATEOFFSET_UNITS = frozenset(
+    {"years", "months", "days", "hours", "minutes", "seconds"}
+)
 
 _CMP = 1
 _OR = 2

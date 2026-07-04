@@ -49,13 +49,16 @@ def test_not() -> None:
 
 
 def test_bang_not() -> None:
-    assert t('!Contains([x], "abc")') == "~df[\"x\"].str.contains('abc', case=False, na=False)"
+    assert t('!Contains([x], "abc")') == (
+        "~df[\"x\"].str.contains('abc', case=False, na=False)"
+    )
 
 
 def test_bang_not_combined_with_and() -> None:
     assert (
         t('!Contains([a], "x") AND Contains([b], "y")')
-        == "~df[\"a\"].str.contains('x', case=False, na=False) & df[\"b\"].str.contains('y', case=False, na=False)"
+        == "~df[\"a\"].str.contains('x', case=False, na=False)"
+        " & df[\"b\"].str.contains('y', case=False, na=False)"
     )
 
 
