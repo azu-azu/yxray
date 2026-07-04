@@ -40,7 +40,7 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
         ),
     )
     config_map = _config_map(doc)
-    assert 'df["Age"] > 18' in config_map["2"]["python_hint"]
+    assert 'df1["Age"] > 18' in config_map["2"]["python_hint"]
 
 
 def test_select_python_hint_stays_generic() -> None:

@@ -4,10 +4,8 @@ scaffold(doc) returns a .py file string with one code block per tool,
 in topological order. Supported tools get real (if partial) pandas code;
 unsupported tools get a TODO comment.
 
-Variable naming: plain `df`, reassigned in place along a chain. Numbered
-names (df2, df3, ...) appear only while several streams are alive at the
-same time (e.g. the two sides of a join); each tool's ToolID comment
-keeps the mapping back to the workflow.
+Variable naming: each tool's output is named df<tool_id> (e.g. df34, df108),
+matching the ToolID comment above each block so the mapping is unambiguous.
 """
 
 from __future__ import annotations
@@ -99,37 +97,13 @@ def _build_anchor_map(doc: WorkflowDoc) -> dict[int, dict[str, int]]:
 def _assign_frame_names(
     order: list[int],
     node_map: dict[int, Any],
-    pred_map: dict[int, list[int]],
 ) -> dict[int, str]:
-    """Name each tool's output frame, reusing plain "df" whenever possible.
+    """Name each tool's output frame df<tool_id> (e.g. df34, df108).
 
-    Liveness-based: a name is freed once its last consumer has been
-    emitted, so straight chains reassign `df` in place and numbered names
-    (df2, df3, ...) appear only while several streams are alive at once.
+    One-to-one with ToolIDs so variable names are stable, unambiguous,
+    and never collide between inputs and outputs of the same operation.
     """
-    remaining: dict[int, int] = {}
-    for tool_id in order:
-        for pred in pred_map.get(tool_id, []):
-            remaining[pred] = remaining.get(pred, 0) + 1
-
-    names: dict[int, str] = {}
-    in_use: set[str] = set()
-    for tool_id in order:
-        if tool_id not in node_map:
-            continue
-        for pred in pred_map.get(tool_id, []):
-            remaining[pred] -= 1
-            if remaining[pred] == 0 and pred in names:
-                in_use.discard(names[pred])
-        name = "df"
-        counter = 2
-        while name in in_use:
-            name = f"df{counter}"
-            counter += 1
-        names[tool_id] = name
-        if remaining.get(tool_id, 0) > 0:
-            in_use.add(name)
-    return names
+    return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
 # ── Per-tool code generators ───────────────────────────────────────────────
@@ -260,8 +234,21 @@ def _gen_select(
     if not edits:
         return f"{df_out} = {df_in}  # TODO: Select — no columns found"
 
+    only_unknown = (
+        len(edits) == 1
+        and edits[0][0] == "*Unknown"
+        and edits[0][1] is None
+        and edits[0][2] is True
+    )
+
     var = f"_COLS_{tool_id}"
-    col_lines: list[str] = [f"{var} = ["]
+    col_lines: list[str] = []
+    if only_unknown:
+        col_lines.append(
+            f"# WARNING: Select only specifies *Unknown — no explicit column edits;"
+            " likely a source-file issue (passthrough)"
+        )
+    col_lines.append(f"{var} = [")
     for name, new_name, selected in edits:
         if not selected:
             col_lines.append(f'    SelectColumnEdit("{name}", selected=False),')
@@ -755,7 +742,7 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     }
     pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
-    names = _assign_frame_names(topo_order(doc), node_map, pred_map)
+    names = _assign_frame_names(topo_order(doc), node_map)
 
     snippets: dict[int, str] = {}
     for tool_id, node in node_map.items():
@@ -978,7 +965,7 @@ def scaffold_simple(
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name
-    names = _assign_frame_names(order, node_map, pred_map)
+    names = _assign_frame_names(order, node_map)
     has_spatial = any(
         tool_segment(node.tool_type) in SCAFFOLD_SPATIAL_SEGMENTS
         for node in node_map.values()
@@ -1068,7 +1055,7 @@ def scaffold(
         node_map, order
     )
 
-    names = _assign_frame_names(order, node_map, pred_map)
+    names = _assign_frame_names(order, node_map)
     body = _emit_main_body(
         order, node_map, pred_map, anchor_map, input_paths, output_paths, names,
         warnings_by_tool=warnings_by_tool,
