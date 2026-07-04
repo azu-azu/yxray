@@ -101,6 +101,32 @@ def test_scaffold_output_csv() -> None:
     assert ".to_csv" in code
 
 
+def test_scaffold_input_shp_uses_gpd_read_file() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold(doc)
+    assert "gpd.read_file(" in code
+    assert "pd.read_csv(" not in code
+
+
+def test_scaffold_windows_path_extracts_filename_in_test_block() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\subdir\indoor4.csv"},
+        )
+    )
+    code = scaffold(doc)
+    # test block uses only filename, not the full Windows path
+    assert 'BASE_DIR / "input" / "indoor4.csv"' in code
+    # prod block keeps full path (intentional)
+    assert r'Path(r"C:\data\subdir\indoor4.csv")' in code
+
+
 # ── Filter ─────────────────────────────────────────────────────────────────
 
 
@@ -716,7 +742,7 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
     )
     code = scaffold(doc)
     # tool 1 (Targets / main) must be the LEFT side
-    assert "pd.merge(\n    df1," in code
+    assert "pd.merge(\n        df1," in code
     # tool 2 (Source / lookup) must supply the lookup columns
     assert 'df2[["key_b", "val"]]' in code
     assert 'left_on="key_a"' in code

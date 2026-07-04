@@ -69,15 +69,22 @@ def _translate_expr(expr: str, df_var: str) -> str:
         return _FIELD_RE.sub(lambda m: f'{df_var}["{m.group(1)}"]', expr)
 
 
+_SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
+
+
 def _file_read(path_expr: str, ext: str) -> str:
     if ext in (".xlsx", ".xlsm", ".xls"):
         return f"pd.read_excel({path_expr})"
+    if ext in _SPATIAL_EXTS:
+        return f"gpd.read_file({path_expr})"
     return f"pd.read_csv({path_expr})"
 
 
 def _file_write(path_expr: str, df_var: str, ext: str) -> str:
     if ext in (".xlsx", ".xlsm", ".xls"):
         return f"{df_var}.to_excel({path_expr}, index=False)"
+    if ext in _SPATIAL_EXTS:
+        return f"{df_var}.to_file({path_expr})"
     return f"{df_var}.to_csv({path_expr}, index=False)"
 
 
@@ -844,13 +851,13 @@ def _emit_paths_block(
     if input_paths:
         lines += ["", "    INPUTS = {"]
         for tid, path in input_paths.items():
-            fname = pathlib.Path(path).name
+            fname = pathlib.PureWindowsPath(path).name
             lines.append(f'        "input_{tid}": BASE_DIR / "input" / "{fname}",')
         lines.append("    }")
     if output_paths:
         lines += ["", "    OUTPUTS = {"]
         for tid, path in output_paths.items():
-            fname = pathlib.Path(path).name
+            fname = pathlib.PureWindowsPath(path).name
             lines.append(f'        "output_{tid}": BASE_DIR / "output" / "{fname}",')
         lines.append("    }")
     lines += ["", 'elif ENV == "prod":']
@@ -940,7 +947,7 @@ def _emit_main_body(
                 continue
             code = gen(tool_id, segment, node.config, preds, anchors, names)
 
-        body.append(code)
+        body.extend(code.split("\n"))
         body.append("")
 
     return ["    " + line if line else "" for line in body]
