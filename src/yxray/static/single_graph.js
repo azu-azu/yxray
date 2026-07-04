@@ -1749,10 +1749,13 @@ function renderSummarizeTable(entry, container) {
 
 function renderSortTable(entry, container) {
   var cfg = entry.config;
-  var sortInfo = cfg.SortInfo || [];
-  if (!Array.isArray(sortInfo)) sortInfo = sortInfo ? [sortInfo] : [];
+  var sortInfo = cfg.SortInfo || {};
+  var fieldList = (
+    sortInfo && typeof sortInfo === 'object' && sortInfo.Field
+  ) ? sortInfo.Field : sortInfo;
+  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
 
-  var rows = sortInfo.map(function(f, i) {
+  var rows = fieldList.map(function(f, i) {
     if (typeof f !== 'object') return [String(i + 1), String(f), ''];
     var field = f['@field'] || '';
     var order = f['@order'] || '';
