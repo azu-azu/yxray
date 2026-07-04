@@ -156,6 +156,43 @@ def test_scaffold_filter_translates_field_notation() -> None:
     assert "df2 = df1[" in code
 
 
+def test_scaffold_filter_date_comparison_warning() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": '[閉業日] >= ToDate("2024-01-01")'},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: date comparison" in code
+    assert "pd.to_datetime" in code
+
+
+def test_scaffold_filter_no_date_warning_without_date_functions() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": "[Age] > 18"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: date comparison" not in code
+
+
 def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:
     return _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
@@ -806,6 +843,28 @@ def test_scaffold_findreplace_findany_append_left_join() -> None:
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "TODO: Find Replace" not in code
+    # a left join duplicates rows when the lookup key repeats — the
+    # scaffold must guard against that silently changing row counts
+    assert 'assert not df2["EL_ID"].duplicated().any()' in code
+
+
+def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "key_a",
+            "FieldSearch": "key_b",
+            "FindMode": "FindAny",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "False"},
+            "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    # drop_duplicates already makes the lookup unique; no assert needed
+    assert "duplicated().any()" not in code
 
 
 def test_scaffold_findreplace_findany_append_dedup_when_first_match_only() -> None:

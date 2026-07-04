@@ -124,6 +124,18 @@ def test_tonumber() -> None:
     assert t("ToNumber([x])") == 'pd.to_numeric(df["x"], errors="coerce")'
 
 
+def test_tostring_uses_string_dtype() -> None:
+    # .astype(str) would turn missing values into the literal "nan"
+    assert t("ToString([x])") == 'df["x"].astype("string")'
+
+
+def test_tostring_with_format_args_raises() -> None:
+    # Format arguments (decimals, separators) can't be reproduced by a
+    # plain cast — fall back so the expression stays visible verbatim.
+    with pytest.raises(ExprTranslationError):
+        t("ToString([x], 0, 1)")
+
+
 def test_in_list() -> None:
     assert t('[x] IN ("a", "b")') == "df[\"x\"].isin(['a', 'b'])"
 

@@ -56,6 +56,9 @@ _FIELD_RE = re.compile(r"\[([^\]]+)\]")
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
 # Emissions of alteryx_expr that need "import numpy as np" in the preamble.
 _NUMPY_RE = re.compile(r"\bnp\.(where|select|nan)\b")
+# Translated filter expressions that compare against datetime values;
+# CSV-loaded columns are strings, so warn about the dtype mismatch.
+_DATE_EXPR_RE = re.compile(r"\bpd\.(to_datetime|Timestamp|DateOffset)\b")
 
 
 def _translate_expr(expr: str, df_var: str) -> str:
@@ -200,10 +203,15 @@ def _gen_filter(
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         pandas_expr = _translate_expr(expr, df_in)
-        return (
-            "# NOTE: Alteryx expression — review translation\n"
-            f"{df_out} = {df_in}[{pandas_expr}]"
-        )
+        lines = ["# NOTE: Alteryx expression — review translation"]
+        if _DATE_EXPR_RE.search(pandas_expr):
+            lines += [
+                "# WARNING: date comparison — columns read from CSV are"
+                " strings; convert",
+                '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
+            ]
+        lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
+        return "\n".join(lines)
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
         return (
@@ -629,8 +637,16 @@ def _gen_findreplace(
                 f'    how="left",\n'
                 f")"
             )
+        guard = (
+            f'assert not {df_r}["{field_search}"].duplicated().any(), (\n'
+            f"    \"Find & Replace lookup key '{field_search}' is not unique\"\n"
+            f'    " — a left join would duplicate rows; verify Alteryx'
+            f' semantics"\n'
+            f")"
+        )
         return (
             f"{note} — review translation\n"
+            f"{guard}\n"
             f"{df_out} = pd.merge(\n"
             f"    {df_f},\n"
             f"    {df_r}[[{cols}]],\n"
