@@ -141,18 +141,123 @@ function compareNumber(a, b) {
   return 0;
 }
 
-function sortedMemberIds(ids) {
-  return ids.slice().sort(function(a, b) {
-    var layerOrder = compareNumber(clusterMinLayer(a), clusterMinLayer(b));
-    if (layerOrder !== 0) return layerOrder;
-    var aPosition = memberPosition(a);
-    var bPosition = memberPosition(b);
-    var yOrder = compareNumber(aPosition.y, bPosition.y);
-    if (yOrder !== 0) return yOrder;
-    var xOrder = compareNumber(aPosition.x, bPosition.x);
-    if (xOrder !== 0) return xOrder;
-    return String(a).localeCompare(String(b), undefined, {numeric: true});
+function _fallbackMemberCompare(a, b) {
+  var layerOrder = compareNumber(clusterMinLayer(a), clusterMinLayer(b));
+  if (layerOrder !== 0) return layerOrder;
+  var aPosition = memberPosition(a);
+  var bPosition = memberPosition(b);
+  var yOrder = compareNumber(aPosition.y, bPosition.y);
+  if (yOrder !== 0) return yOrder;
+  var xOrder = compareNumber(aPosition.x, bPosition.x);
+  if (xOrder !== 0) return xOrder;
+  return String(a).localeCompare(String(b), undefined, {numeric: true});
+}
+
+// Recursively expands a cluster/container id to the raw tool IDs it ultimately
+// contains, so real EDGES_DATA connections (which only ever name raw tool
+// IDs) can be attributed back to whichever top-level member owns them.
+function _flattenMemberIds(id) {
+  if (typeof id === 'string' && id.indexOf('cluster:') === 0 && AppState.clusterMap[id]) {
+    var leaves = [];
+    AppState.clusterMap[id].memberIds.forEach(function(mid) {
+      leaves = leaves.concat(_flattenMemberIds(mid));
+    });
+    return leaves;
+  }
+  return [id];
+}
+
+// Builds the subgraph induced by `ids` from the real EDGES_DATA connections
+// (nested cluster/container ids are expanded to their raw tool IDs first, so
+// bridged/collapsed members still resolve correctly). Edges to nodes outside
+// the group are ignored. Shared by sortedMemberIds (ordering) and the flow
+// order text (merge-point annotation) so both agree on what "connected"
+// means for a given member set.
+function _inducedMemberGraph(ids) {
+  var rawToId = {};
+  ids.forEach(function(id) {
+    _flattenMemberIds(id).forEach(function(raw) { rawToId[raw] = id; });
   });
+
+  var successors = {};
+  var predecessors = {};
+  ids.forEach(function(id) { successors[id] = []; predecessors[id] = []; });
+
+  var seenPair = {};
+  EDGES_DATA.forEach(function(e) {
+    var src = rawToId[e.from];
+    var dst = rawToId[e.to];
+    if (src === undefined || dst === undefined || src === dst) return;
+    var key = src + '\x00' + dst;
+    if (seenPair[key]) return;
+    seenPair[key] = true;
+    successors[src].push(dst);
+    predecessors[dst].push(src);
+  });
+
+  return {successors: successors, predecessors: predecessors};
+}
+
+// Orders cluster/group members to read as a coherent flow. Sorting purely by
+// layer (as before) is topologically valid but interleaves parallel branches
+// that merely share a layer — e.g. two independent chains that later join
+// produce A, X, B, Y, C, Z instead of A, B, C, X, Y, Z. This walks the real
+// connections among the members depth-first, preferring to continue whatever
+// chain is already in progress, and only falls back to layer/position order
+// when the subgraph doesn't imply a strict sequence (branch points, or
+// members with no in-cluster edges at all).
+function sortedMemberIds(ids) {
+  if (ids.length <= 1) return ids.slice();
+
+  var graph = _inducedMemberGraph(ids);
+  var successors = graph.successors;
+  var inDegree = {};
+  ids.forEach(function(id) { inDegree[id] = graph.predecessors[id].length; });
+
+  var pending = {};
+  ids.forEach(function(id) { pending[id] = true; });
+  var ready = ids.filter(function(id) { return inDegree[id] === 0; });
+
+  function popSmallest(pool) {
+    var idx = 0;
+    for (var i = 1; i < pool.length; i++) {
+      if (_fallbackMemberCompare(pool[i], pool[idx]) < 0) idx = i;
+    }
+    return pool.splice(idx, 1)[0];
+  }
+
+  var result = [];
+  var current = null;
+  while (result.length < ids.length) {
+    var next = null;
+    if (current !== null) {
+      var candidates = successors[current].filter(function(s) {
+        return pending[s] && inDegree[s] === 0;
+      });
+      if (candidates.length > 0) {
+        candidates.sort(_fallbackMemberCompare);
+        next = candidates[0];
+        ready.splice(ready.indexOf(next), 1);
+      }
+    }
+    if (next === null) {
+      if (ready.length === 0) break;  // cycle guard; shouldn't happen for a DAG
+      next = popSmallest(ready);
+    }
+    result.push(next);
+    delete pending[next];
+    successors[next].forEach(function(s) {
+      inDegree[s] -= 1;
+      if (inDegree[s] === 0) ready.push(s);
+    });
+    current = next;
+  }
+
+  // Cycle guard: append anything left over (shouldn't happen for a DAG).
+  ids.forEach(function(id) {
+    if (pending[id]) result.push(id);
+  });
+  return result;
 }
 var MEMO_STORAGE_KEY           = 'yxray-memos-'           + (document.title || 'default');
 var CONTAINER_ORDER_KEY        = 'yxray-container-order-' + (document.title || 'default');
@@ -1937,9 +2042,21 @@ window.addEventListener('resize', function() {
 
 // ── Config panel ──────────────────────────────────────────────────────────
 // Builds "ToolID 1 → ToolID 3 → ToolID 6" from member IDs, which are already
-// stored in flow order (see sortedMemberIds: layer, then y, then x position).
+// stored in flow order (see sortedMemberIds: DFS over real connections,
+// falling back to layer/position order at branch points). A single "→" chain
+// can't show a member with more than one in-cluster predecessor (a branch
+// merge) as adjacent to all of them, so merge points are called out inline
+// instead of silently dropping the extra edge.
 function _flowOrderIdsText(memberIds) {
-  return memberIds.map(function(mid) { return 'ToolID ' + mid; }).join(' → ') + ' (' + memberIds.length + 'nodes)';
+  var predecessors = _inducedMemberGraph(memberIds).predecessors;
+  return memberIds.map(function(mid) {
+    var preds = predecessors[mid] || [];
+    var text = 'ToolID ' + mid;
+    if (preds.length > 1) {
+      text += ' (merge: ' + preds.map(function(p) { return 'ToolID ' + p; }).join(', ') + ')';
+    }
+    return text;
+  }).join(' → ') + ' (' + memberIds.length + 'nodes)';
 }
 
 function _flowOrderBareIdsText(memberIds) {
