@@ -72,6 +72,23 @@ def test_input_python_hint_stays_generic() -> None:
     assert config_map["1"]["python_hint"] == "pd.read_csv(...) / pd.read_excel(...)"
 
 
+def test_config_map_includes_declared_container_id() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(10), tool_type="ToolContainer", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=10,
+            y=10,
+            container_id=10,
+        ),
+    )
+
+    config_map = _config_map(doc)
+
+    assert config_map["1"]["containerId"] == 10
+
+
 def test_header_can_be_collapsed() -> None:
     html = SingleGraphRenderer().render(
         WorkflowDoc(filepath="fixture.yxmd"),
@@ -117,6 +134,8 @@ def test_manual_cluster_controls_are_available() -> None:
     assert "function buildManualClusters(config)" in html
     assert "function removeManualCluster(groupKey)" in html
     assert "function importManualClusterConfigFromFile(file)" in html
+    assert "function computeDeclaredContainerMembership()" in html
+    assert "isManualClusterConfigForWorkflow(stored) ? stored : null" in html
     assert "yxray-manual-clusters-" in html
     assert "multiselect: true" in html
     assert '"manual_clusters": [{"label": "prep", "tool_ids": [1, 2]}]' in html

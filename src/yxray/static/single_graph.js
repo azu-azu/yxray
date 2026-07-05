@@ -378,6 +378,16 @@ function computeContainerMembership() {
   return result;
 }
 
+function computeDeclaredContainerMembership() {
+  var result = {};
+  Object.keys(CONFIG_MAP).forEach(function(id) {
+    var entry = CONFIG_MAP[id];
+    if (!entry || entry.containerId === null || entry.containerId === undefined) return;
+    result[Number(id)] = Number(entry.containerId);
+  });
+  return result;
+}
+
 // ── Fill color helpers ────────────────────────────────────────────────────
 // Used by container cluster nodes to reflect their Alteryx fill color.
 
@@ -551,10 +561,23 @@ function manualClusterKey(cluster) {
   return (cluster.label || '') + '\x00' + (cluster.tool_ids || []).map(Number).sort(compareNumber).join(',');
 }
 
+function isManualClusterConfigForWorkflow(rawConfig) {
+  return !!rawConfig &&
+    rawConfig.workflow_fingerprint === WORKFLOW_FINGERPRINT &&
+    Array.isArray(rawConfig.manual_clusters);
+}
+
 function normalizeManualClusterConfig(rawConfig, membership) {
   var config = emptyManualClusterConfig();
-  if (!rawConfig || rawConfig.workflow_fingerprint !== WORKFLOW_FINGERPRINT ||
-      !Array.isArray(rawConfig.manual_clusters)) {
+  if (!rawConfig) {
+    return config;
+  }
+  if (rawConfig.workflow_fingerprint !== WORKFLOW_FINGERPRINT) {
+    console.warn('[yxray] manual cluster config ignored; workflow fingerprint does not match.');
+    return config;
+  }
+  if (!Array.isArray(rawConfig.manual_clusters)) {
+    console.warn('[yxray] manual cluster config ignored; manual_clusters must be an array.');
     return config;
   }
 
@@ -597,8 +620,24 @@ function normalizeManualClusterConfig(rawConfig, membership) {
 function loadManualClusterConfig(membership) {
   try {
     var raw = localStorage.getItem(MANUAL_CLUSTER_STORAGE_KEY);
-    var parsed = EMBEDDED_MANUAL_CLUSTER_CONFIG || (raw ? JSON.parse(raw) : null);
+    var stored = null;
+    if (raw) {
+      try {
+        stored = JSON.parse(raw);
+      } catch(e) {
+        console.warn('[yxray] stored manual cluster config ignored; JSON parse failed:', e);
+      }
+    }
+    var parsed = isManualClusterConfigForWorkflow(stored) ? stored : null;
+    var shouldSeedStorage = false;
+    if (!parsed && EMBEDDED_MANUAL_CLUSTER_CONFIG) {
+      parsed = EMBEDDED_MANUAL_CLUSTER_CONFIG;
+      shouldSeedStorage = isManualClusterConfigForWorkflow(EMBEDDED_MANUAL_CLUSTER_CONFIG);
+    }
     AppState.manualClusterConfig = normalizeManualClusterConfig(parsed, membership);
+    if (!isManualClusterConfigForWorkflow(stored) && shouldSeedStorage) {
+      saveManualClusterConfig();
+    }
   } catch(e) {
     console.warn('[yxray] manual cluster load failed:', e);
     AppState.manualClusterConfig = emptyManualClusterConfig();
@@ -1014,7 +1053,7 @@ function validateManualClusterCandidate(ids, label, membership, existingKey) {
       errors.push('ToolID ' + id + ' is inside a ToolContainer; manual clusters do not support container members yet.');
     }
     if (AppState.expandedGroups[id]) {
-      errors.push('ToolID ' + id + ' is currently inside an expanded cluster. Collapse it before creating a manual cluster.');
+      errors.push('ToolID ' + id + ' belongs to an automatic cluster and cannot join a manual cluster yet.');
     }
   });
 
@@ -1062,7 +1101,7 @@ function closeManualClusterModal() {
 function saveManualClusterFromModal() {
   var label = document.getElementById('manual-cluster-name-input').value.trim();
   var ids = AppState.manualClusterModalIds.slice();
-  var membership = computeContainerMembership();
+  var membership = computeDeclaredContainerMembership();
   var errors = validateManualClusterCandidate(ids, label, membership, null);
   if (errors.length > 0) {
     setManualClusterError(errors[0]);
@@ -1112,7 +1151,7 @@ function importManualClusterConfigFromFile(file) {
         alert('Cluster config does not match this workflow.');
         return;
       }
-      var normalized = normalizeManualClusterConfig(parsed, computeContainerMembership());
+      var normalized = normalizeManualClusterConfig(parsed, computeDeclaredContainerMembership());
       if (normalized.manual_clusters.length !== (parsed.manual_clusters || []).length) {
         var ok = confirm('Some clusters are invalid for this workflow and will be skipped. Continue?');
         if (!ok) return;
@@ -1475,11 +1514,12 @@ function initNetwork() {
   // Compute container membership by geometry before any clustering.
   // This gives type clustering a skipSet so container members stay intact.
   var containerMembership = computeContainerMembership();
+  var manualContainerMembership = computeDeclaredContainerMembership();
   var containerMemberSet = {};
   Object.keys(containerMembership).forEach(function(nid) {
     containerMemberSet[parseInt(nid)] = true;
   });
-  var manualConfig = loadManualClusterConfig(containerMembership);
+  var manualConfig = loadManualClusterConfig(manualContainerMembership);
   var manualMemberSet = manualClusterMemberSet(manualConfig);
   Object.keys(manualMemberSet).forEach(function(nid) {
     containerMemberSet[parseInt(nid)] = true;

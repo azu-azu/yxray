@@ -71,12 +71,12 @@ You can later reuse that JSON with:
 acd inspect workflow.yxmd --cluster-file manual_clusters_workflow_20260705_153012.json
 ```
 
-The report also supports **Import Clusters** to load an exported JSON back into browser `localStorage`. Imported files must match the current workflow fingerprint.
+The report also supports **Import Clusters** to load an exported JSON back into browser `localStorage`. Imported files must match the current workflow fingerprint. When a report is generated with `--cluster-file`, that embedded file seeds `localStorage` on first load; later browser edits and imports take precedence for the same workflow.
 
 Current limitations:
 
 - ToolContainer member nodes cannot be manual-clustered yet.
-- Expanded cluster members must be collapsed before creating a manual cluster.
+- Automatic cluster members cannot be added to manual clusters from the expanded live view yet.
 - Rectangle/rubber-band drag selection is not implemented; use Ctrl/Cmd-click.
 
 #### Manual cluster backups

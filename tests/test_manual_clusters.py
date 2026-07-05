@@ -123,7 +123,12 @@ def test_backup_and_restore_cluster_file(tmp_path: pathlib.Path) -> None:
         cluster_file,
         now=now,
     )
-    restored_from = restore_cluster_backup(cluster_file)
+    cluster_file.write_text('{"version": 3}', encoding="utf-8")
+    restore_now = datetime(2026, 7, 5, 16, 0, 0)
+    restored_from = restore_cluster_backup(cluster_file, now=restore_now)
+    restore_safety_backup = (
+        tmp_path / "clusters.backups" / "clusters_20260705_160000.json"
+    )
 
     assert backup == tmp_path / "clusters.backups" / "clusters_20260705_153012.json"
     assert second_backup == (
@@ -131,4 +136,9 @@ def test_backup_and_restore_cluster_file(tmp_path: pathlib.Path) -> None:
     )
     assert restored_from == second_backup
     assert cluster_file.read_text(encoding="utf-8") == '{"version": 2}'
-    assert list_cluster_backups(cluster_file) == [second_backup, backup]
+    assert restore_safety_backup.read_text(encoding="utf-8") == '{"version": 3}'
+    assert list_cluster_backups(cluster_file) == [
+        restore_safety_backup,
+        second_backup,
+        backup,
+    ]

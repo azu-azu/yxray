@@ -203,6 +203,7 @@ class SingleGraphRenderer:
             str(int(node.tool_id)): {
                 "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
                 "tool_type": node.tool_type.split(".")[-1],
+                "containerId": node.container_id,
                 "config": self._clean_config(node),
             }
             for node in data_nodes

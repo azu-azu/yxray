@@ -146,7 +146,10 @@ def list_cluster_backups(cluster_file: pathlib.Path) -> list[pathlib.Path]:
 
 
 def restore_cluster_backup(
-    cluster_file: pathlib.Path, backup_file: pathlib.Path | None = None
+    cluster_file: pathlib.Path,
+    backup_file: pathlib.Path | None = None,
+    *,
+    now: datetime | None = None,
 ) -> pathlib.Path:
     """Restore a backup into the cluster file path and return the restored backup."""
     selected_backup = backup_file
@@ -157,6 +160,8 @@ def restore_cluster_backup(
         selected_backup = backups[0]
     if not selected_backup.is_file():
         raise ValueError(f"Backup file not found: {selected_backup}")
+    if cluster_file.is_file():
+        backup_cluster_file(cluster_file, now=now)
     cluster_file.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(selected_backup, cluster_file)
     return selected_backup
