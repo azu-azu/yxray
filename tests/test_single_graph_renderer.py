@@ -70,3 +70,19 @@ def test_input_python_hint_stays_generic() -> None:
     )
     config_map = _config_map(doc)
     assert config_map["1"]["python_hint"] == "pd.read_csv(...) / pd.read_excel(...)"
+
+
+def test_header_can_be_collapsed() -> None:
+    html = SingleGraphRenderer().render(
+        WorkflowDoc(filepath="fixture.yxmd"),
+        key_insights=[{"role": "input", "tool_id": 1, "description": "Input source"}],
+    )
+
+    assert 'class="header-utility-row"' in html
+    assert 'id="search-input"' in html
+    assert 'id="io-primary-actions"' in html
+    assert 'id="io-add-memo-btn"' in html
+    assert 'id="header-collapse-btn"' in html
+    assert 'id="header-expand-btn"' in html
+    assert "setHeaderCollapsed" in html
+    assert "yxray-header-collapsed-" in html

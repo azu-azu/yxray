@@ -76,28 +76,58 @@
       padding: 12px 20px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
+      max-height: 120px;
+      overflow: hidden;
+      transition: max-height 0.2s ease, padding 0.2s ease, border-color 0.2s ease;
+    }
+    body.header-collapsed header {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      border-bottom-color: transparent;
     }
     .header-title { font-size: 15px; font-weight: 600; color: var(--text); }
     .header-meta { font-size: 12px; color: var(--text-muted); }
     .header-hints { font-size: 11px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
     .hint-item { opacity: 0.7; }
     .hint-sep { opacity: 0.35; }
-    .header-right { display: flex; align-items: center; gap: 10px; }
+    .header-right, .header-utility-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: 0;
+    }
     .ctrl-btn {
-      padding: 5px 12px;
+      height: 34px;
+      min-width: 72px;
+      padding: 0 12px;
       border: 1px solid var(--border);
       border-radius: 6px;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 12px;
+      line-height: 1;
+      text-align: center;
       background: var(--surface-2);
       color: var(--text);
       transition: background 0.15s;
+      white-space: nowrap;
     }
     .ctrl-btn:hover { background: var(--border); }
     .ctrl-btn-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+    #fullscreen-btn { min-width: 92px; }
+    #fit-btn, #theme-btn, #header-collapse-btn { min-width: 86px; }
+    #header-expand-btn {
+      display: none;
+      margin-left: auto;
+    }
+    body.header-collapsed #header-expand-btn { display: inline-flex; }
     .search-wrap { position: relative; display: flex; align-items: center; }
     .search-input {
-      width: 200px; padding: 5px 28px 5px 10px;
+      width: 240px; height: 34px; padding: 0 28px 0 10px;
       border: 1px solid var(--border); border-radius: 6px;
       background: var(--surface-2); color: var(--text);
       font-size: 12px; outline: none;
@@ -333,7 +363,7 @@
     }
     /* ---- IO stat bar (above graph) ---- */
     #io-stat-bar {
-      display: flex; gap: 8px; padding: 6px 16px;
+      display: flex; align-items: center; gap: 8px; padding: 6px 16px;
       background: var(--surface); border-bottom: 1px solid var(--border-subtle);
       flex-shrink: 0;
     }
@@ -349,6 +379,26 @@
     .io-stat-output { color: var(--badge-output-text);    border-color: var(--badge-output-border);    background: var(--badge-output-bg); }
     .io-stat-join   { color: var(--badge-join-text);      border-color: var(--badge-join-border);      background: var(--badge-join-bg); }
     .io-stat-count  { font-size: 12px; font-weight: 700; }
+    #io-primary-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 4px;
+    }
+    .io-primary-btn {
+      height: 34px;
+      min-width: 72px;
+      padding: 0 12px;
+      border-radius: 6px;
+      color: var(--text);
+      border-color: var(--border);
+      background: var(--surface-2);
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .io-primary-btn:hover { background: var(--border); opacity: 1; }
     /* ---- Left panels (summary + insights + search-results) ---- */
     #summary-panel, #insights-panel, #search-results-panel {
       position: fixed;
@@ -391,12 +441,6 @@
       border-radius: 3px; padding: 1px 7px; line-height: 1.5;
     }
     .panel-copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
-    #excel-dl-btn {
-      cursor: pointer; font-size: 11px; color: var(--text-muted);
-      background: none; border: 1px solid var(--border);
-      border-radius: 3px; padding: 1px 7px; line-height: 1.5;
-    }
-    #excel-dl-btn:hover { color: var(--text); border-color: var(--text-muted); }
     #summary-panel-body { padding: 10px 12px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
     #summary-panel-body > * { direction: ltr; }
     #insights-panel-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; direction: rtl; min-height: 0; }
@@ -505,32 +549,34 @@
       </div>
     </div>
     <div class="header-right">
-      {% if workflow_steps %}<button class="ctrl-btn" id="excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
-      <div class="search-wrap">
-        <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
-        <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
+      <div class="header-utility-row">
+        <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
+        <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
+        <button class="ctrl-btn" id="theme-btn">Light Mode</button>
+        <button class="ctrl-btn" id="header-collapse-btn" title="Hide header">Hide Header</button>
       </div>
-      {% if containers_for_panel %}<button class="ctrl-btn" id="containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
-      {% if key_insights %}<button class="ctrl-btn" id="insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
-      {% if workflow_steps %}<button class="ctrl-btn" id="summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
-      <button class="ctrl-btn" id="add-memo-btn">+ Memo</button>
-      <button class="ctrl-btn" id="fit-btn">Fit to Screen</button>
-      <button class="ctrl-btn" id="fullscreen-btn">Fullscreen</button>
-      <button class="ctrl-btn" id="theme-btn">Light Mode</button>
     </div>
   </header>
-  {% if key_insights %}
-  {% set _input_count = key_insights | selectattr('role', 'equalto', 'input') | list | length %}
-  {% set _output_count = key_insights | selectattr('role', 'equalto', 'output') | list | length %}
-  {% set _join_count = key_insights | selectattr('role', 'equalto', 'join') | list | length %}
-  {% if _input_count or _output_count or _join_count %}
+  {% set _input_count = (key_insights | selectattr('role', 'equalto', 'input') | list | length) if key_insights else 0 %}
+  {% set _output_count = (key_insights | selectattr('role', 'equalto', 'output') | list | length) if key_insights else 0 %}
+  {% set _join_count = (key_insights | selectattr('role', 'equalto', 'join') | list | length) if key_insights else 0 %}
   <div id="io-stat-bar">
     {% if _input_count %}<button class="io-stat-btn io-stat-input" onclick="openInsightsPanelFiltered('input')">Input <span class="io-stat-count">{{ _input_count }}</span></button>{% endif %}
     {% if _output_count %}<button class="io-stat-btn io-stat-output" onclick="openInsightsPanelFiltered('output')">Output <span class="io-stat-count">{{ _output_count }}</span></button>{% endif %}
     {% if _join_count %}<button class="io-stat-btn io-stat-join" onclick="openInsightsPanelFiltered('join')">Join <span class="io-stat-count">{{ _join_count }}</span></button>{% endif %}
+    <div class="search-wrap">
+      <input type="text" id="search-input" class="search-input" placeholder="Search node…" autocomplete="off" spellcheck="false" />
+      <button class="search-clear" id="search-clear-btn" aria-label="Clear">&times;</button>
+    </div>
+    <div id="io-primary-actions">
+      {% if workflow_steps %}<button class="io-stat-btn io-primary-btn" id="io-excel-dl-btn" onclick="downloadSummaryExcel()">&#8595; Excel</button>{% endif %}
+      {% if containers_for_panel %}<button class="io-stat-btn io-primary-btn" id="io-containers-btn" onclick="openContainersPanel()">Containers</button>{% endif %}
+      {% if key_insights %}<button class="io-stat-btn io-primary-btn" id="io-insights-btn" onclick="openInsightsPanel()">At a Glance</button>{% endif %}
+      {% if workflow_steps %}<button class="io-stat-btn io-primary-btn" id="io-summary-btn" onclick="openSummaryPanel()">Summary</button>{% endif %}
+      <button class="io-stat-btn io-primary-btn" id="io-add-memo-btn">+ Memo</button>
+    </div>
+    <button class="ctrl-btn" id="header-expand-btn" title="Show header">Show Header</button>
   </div>
-  {% endif %}
-  {% endif %}
   <div id="graph-wrapper">
     <div id="graph-canvas"></div>
     <div id="minimap-wrap">
@@ -743,9 +789,9 @@ function _syncPanelBtnState() {
     var ip = document.getElementById('insights-panel');
     var sp = document.getElementById('summary-panel');
     var cp = document.getElementById('containers-panel');
-    var ib = document.getElementById('insights-btn');
-    var sb = document.getElementById('summary-btn');
-    var cb = document.getElementById('containers-btn');
+    var ib = document.getElementById('io-insights-btn');
+    var sb = document.getElementById('io-summary-btn');
+    var cb = document.getElementById('io-containers-btn');
     var isInsightsOpen = !!(ip && ip.classList.contains('open'));
     // "At a Glance" button is active only when the panel is open without a role filter
     if (ib) ib.classList.toggle('ctrl-btn-active', isInsightsOpen && _insightsPanelActiveRole === null);
