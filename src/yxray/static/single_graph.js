@@ -2281,8 +2281,6 @@ function _setPanelBtn(mode) {
 function openPanel(nodeId) {
   _panelNodeId = nodeId;
   _setPanelBtn('copy');
-  var _pyBtn = document.getElementById('panel-copy-py-btn');
-  if (_pyBtn) _pyBtn.style.display = 'none';
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -2352,10 +2350,6 @@ function openPanel(nodeId) {
     if (_entry) {
       _renderPanelEntry(_entry, body);
     }
-    if (_pyBtn && _entry &&
-        (_entry.tool_type === 'Select' || _entry.tool_type === 'AlteryxSelect')) {
-      _pyBtn.style.display = '';
-    }
     document.getElementById('config-panel').classList.add('open');
     return;
   }
@@ -2363,9 +2357,6 @@ function openPanel(nodeId) {
   var entry = CONFIG_MAP[String(nodeId)];
   if (!entry) return;
   document.getElementById('panel-title-text').textContent = entry.label + ' (ID: ' + nodeId + ')';
-  if (_pyBtn && (entry.tool_type === 'Select' || entry.tool_type === 'AlteryxSelect')) {
-    _pyBtn.style.display = '';
-  }
   _renderPanelEntry(entry, body);
   document.getElementById('config-panel').classList.add('open');
 }
@@ -2801,48 +2792,6 @@ function copyPanelJSON() {
   _clipboardWrite(JSON.stringify(data, null, 2), document.getElementById('panel-copy-json-btn'), 'Copy JSON');
 }
 
-function copyPanelPython() {
-  if (_panelNodeId === null) return;
-  var entry = CONFIG_MAP[String(_panelNodeId)];
-  if (!entry) return;
-
-  // Find predecessor tool_id from edge list
-  var predId = null;
-  for (var i = 0; i < EDGES_DATA.length; i++) {
-    if (EDGES_DATA[i].to === _panelNodeId) { predId = EDGES_DATA[i].from; break; }
-  }
-
-  var cfg = entry.config;
-  if (!cfg) return;
-  var fields = cfg.SelectFields || cfg.Fields || {};
-  var fieldList = (typeof fields === 'object') ? (fields.SelectField || fields.Field || []) : [];
-  if (!Array.isArray(fieldList)) fieldList = fieldList ? [fieldList] : [];
-
-  var varName = '_COLS_' + _panelNodeId;
-  var dfOut = 'df_' + _panelNodeId;
-  var dfIn  = predId !== null ? 'df_' + predId : 'df_?';
-
-  var lines = [varName + ' = ['];
-  fieldList.forEach(function(f) {
-    if (typeof f !== 'object') return;
-    var name = f['@field'] || f['@name'] || f['@Field'] || f['@Name'] || '';
-    if (!name) return;
-    var selected = (f['@selected'] || f['@Selected'] || 'True').toLowerCase() !== 'false';
-    var rename = f['@rename'] || f['@Rename'] || '';
-    if (!selected) {
-      lines.push('    SelectColumnEdit("' + name + '", selected=False),');
-    } else if (rename && rename !== name) {
-      lines.push('    SelectColumnEdit("' + name + '", "' + rename + '"),');
-    } else {
-      lines.push('    SelectColumnEdit("' + name + '"),');
-    }
-  });
-  lines.push(']');
-  lines.push(dfOut + ' = apply_select_edits(' + dfIn + ', ' + varName + ')');
-
-  _clipboardWrite(lines.join('\n'), document.getElementById('panel-copy-py-btn'), 'Copy Python');
-}
-
 function copyInsightsPanel() {
   var ip = document.getElementById('insights-panel');
   if (!ip) return;
@@ -3024,7 +2973,6 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
   else copyPanelContent();
 });
 document.getElementById('panel-copy-json-btn').addEventListener('click', copyPanelJSON);
-document.getElementById('panel-copy-py-btn').addEventListener('click', copyPanelPython);
 document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
 document.getElementById('panel-copy-tool-id-btn').addEventListener('click', copyPanelToolId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);

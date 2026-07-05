@@ -784,14 +784,12 @@ _GENERATORS: dict[str, Any] = {
     **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, _gen_spatialmatch),
 }
 
-# Segments whose scaffold snippet is short and self-contained enough to show
-# as a single node's "python hint" (used by the inspect report's right pane).
-# Excludes Select (would enumerate every column — too long), Input/Output
-# (depend on file paths, which the panel already shows separately), and
-# Text Input (would enumerate every data row — the panel shows the data).
-_DETAIL_HINT_SEGMENTS = (
-    frozenset(_GENERATORS) - SCAFFOLD_SELECT_SEGMENTS - SCAFFOLD_TEXTINPUT_SEGMENTS
-)
+# Segments whose scaffold snippet is self-contained enough to show as a
+# single node's "python hint" (used by the inspect report's right pane).
+# Excludes Input/Output (depend on file paths, which the panel already shows
+# separately) and Text Input (would enumerate every data row — the panel
+# shows the data).
+_DETAIL_HINT_SEGMENTS = frozenset(_GENERATORS) - SCAFFOLD_TEXTINPUT_SEGMENTS
 
 
 def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:

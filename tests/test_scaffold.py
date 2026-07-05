@@ -1040,7 +1040,7 @@ def test_node_code_snippets_includes_filter() -> None:
     assert 'df1["Age"] > 18' in snippets[2]
 
 
-def test_node_code_snippets_excludes_select() -> None:
+def test_node_code_snippets_includes_select() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
@@ -1055,7 +1055,7 @@ def test_node_code_snippets_excludes_select() -> None:
         ),
     )
     snippets = node_code_snippets(doc)
-    assert 2 not in snippets
+    assert 'SelectColumnEdit("Age")' in snippets[2]
 
 
 def test_node_code_snippets_excludes_input_output() -> None:

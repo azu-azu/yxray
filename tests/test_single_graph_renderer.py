@@ -43,7 +43,7 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
     assert 'df1["Age"] > 18' in config_map["2"]["python_hint"]
 
 
-def test_select_python_hint_stays_generic() -> None:
+def test_select_python_hint_matches_scaffold_snippet() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
@@ -58,7 +58,8 @@ def test_select_python_hint_stays_generic() -> None:
         ),
     )
     config_map = _config_map(doc)
-    assert config_map["2"]["python_hint"] == "df = df[[...]].rename(columns={...})"
+    assert 'SelectColumnEdit("Age")' in config_map["2"]["python_hint"]
+    assert "apply_select_edits" in config_map["2"]["python_hint"]
 
 
 def test_input_python_hint_stays_generic() -> None:
