@@ -86,3 +86,13 @@ def test_header_can_be_collapsed() -> None:
     assert 'id="header-expand-btn"' in html
     assert "setHeaderCollapsed" in html
     assert "yxray-header-collapsed-" in html
+
+
+def test_node_panel_has_int_and_labeled_tool_id_copy_buttons() -> None:
+    html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
+
+    assert "function _renderToolIdCopyBlock(toolId, body)" in html
+    assert "copyIdBtn.textContent = 'Copy ID'" in html
+    assert "copyToolIdBtn.textContent = 'Copy ToolID'" in html
+    assert "var labeledText = 'ToolID ' + idText" in html
+    assert "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)" in html

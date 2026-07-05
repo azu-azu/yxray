@@ -1532,6 +1532,47 @@ function _renderClusterInfoBlock(toolType, memberIds, body) {
   body.appendChild(wrap);
 }
 
+function _renderToolIdCopyBlock(toolId, body) {
+  var row = document.createElement('div');
+  row.className = 'config-row';
+
+  var keyRow = document.createElement('div');
+  keyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+
+  var keyEl = document.createElement('div');
+  keyEl.className = 'config-key';
+  keyEl.textContent = 'Tool ID';
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+
+  var idText = String(toolId);
+  var labeledText = 'ToolID ' + idText;
+
+  var copyIdBtn = document.createElement('button');
+  copyIdBtn.className = 'panel-action-btn';
+  copyIdBtn.textContent = 'Copy ID';
+  copyIdBtn.onclick = function() { _clipboardWrite(idText, copyIdBtn, 'Copy ID'); };
+
+  var copyToolIdBtn = document.createElement('button');
+  copyToolIdBtn.className = 'panel-action-btn';
+  copyToolIdBtn.textContent = 'Copy ToolID';
+  copyToolIdBtn.onclick = function() { _clipboardWrite(labeledText, copyToolIdBtn, 'Copy ToolID'); };
+
+  actions.appendChild(copyIdBtn);
+  actions.appendChild(copyToolIdBtn);
+  keyRow.appendChild(keyEl);
+  keyRow.appendChild(actions);
+
+  var valEl = document.createElement('div');
+  valEl.className = 'config-val';
+  valEl.textContent = labeledText;
+
+  row.appendChild(keyRow);
+  row.appendChild(valEl);
+  body.appendChild(row);
+}
+
 // Shared render helper: builds Expand/Collapse button + member list for a cluster.
 // Called from openPanel() and from within the buttons themselves so the panel
 // stays open and its content flips between "Expand" and "Collapse" states.
@@ -1567,6 +1608,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
+      _renderToolIdCopyBlock(mid, body);
       _renderPanelEntry(entry, body);
     });
   } else if (AppState.groupMembers[groupKey]) {
@@ -1596,6 +1638,7 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
+      _renderToolIdCopyBlock(mid, body);
       _renderPanelEntry(entry, body);
     });
   }
@@ -1837,13 +1880,19 @@ function openPanel(nodeId) {
     var _entry = CONFIG_MAP[String(nodeId)];
     document.getElementById('panel-title-text').textContent =
       _entry ? _entry.label : 'Node ' + nodeId;
+    if (_group) {
+      _renderClusterInfoBlock(_group.toolType, _group.memberIds, body);
+    }
     var collapseBtn = document.createElement('button');
     collapseBtn.className = 'ctrl-btn';
     collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
     collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
-    if (_entry) _renderPanelEntry(_entry, body);
+    if (_entry) {
+      _renderToolIdCopyBlock(nodeId, body);
+      _renderPanelEntry(_entry, body);
+    }
     if (_pyBtn && _entry &&
         (_entry.tool_type === 'Select' || _entry.tool_type === 'AlteryxSelect')) {
       _pyBtn.style.display = '';
@@ -1858,6 +1907,7 @@ function openPanel(nodeId) {
   if (_pyBtn && (entry.tool_type === 'Select' || entry.tool_type === 'AlteryxSelect')) {
     _pyBtn.style.display = '';
   }
+  _renderToolIdCopyBlock(nodeId, body);
   _renderPanelEntry(entry, body);
   document.getElementById('config-panel').classList.add('open');
 }
