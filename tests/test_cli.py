@@ -28,6 +28,8 @@ from tests.fixtures.cli import (
     POSITION_YXMD_B,
 )
 from yxray.cli import app
+from yxray.manual_clusters import workflow_fingerprint
+from yxray.parser import parse_one
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +40,31 @@ def no_browser():
 
 
 runner = CliRunner()  # Click 8.2+ separates stdout/stderr by default
+
+TWO_NODE_YXMD = b"""<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2020.1">
+  <Nodes>
+    <Node ToolID="901">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter">
+        <Position x="60" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration/></Properties>
+    </Node>
+    <Node ToolID="902">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Select">
+        <Position x="160" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration/></Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="901" Connection="Output"/>
+      <Destination ToolID="902" Connection="Input"/>
+    </Connection>
+  </Connections>
+</AlteryxDocument>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +139,66 @@ def test_diff_malformed_xml_exit_code_2(tmp_path: pathlib.Path) -> None:
 
     assert result.exit_code == 2
     assert "Error" in result.stderr
+
+
+def test_inspect_cluster_file_embeds_manual_clusters(
+    tmp_path: pathlib.Path,
+) -> None:
+    workflow = tmp_path / "workflow.yxmd"
+    workflow.write_bytes(TWO_NODE_YXMD)
+    doc = parse_one(workflow)
+    cluster_file = tmp_path / "clusters.json"
+    cluster_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "workflow_fingerprint": workflow_fingerprint(doc),
+                "manual_clusters": [
+                    {"label": "prep", "tool_ids": [901, 902]},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.html"
+
+    result = runner.invoke(
+        app,
+        [
+            "inspect",
+            str(workflow),
+            "--cluster-file",
+            str(cluster_file),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    html = output.read_text(encoding="utf-8")
+    assert '"manual_clusters": [{"label": "prep", "tool_ids": [901, 902]}]' in html
+
+
+def test_cluster_backup_list_restore_commands(tmp_path: pathlib.Path) -> None:
+    cluster_file = tmp_path / "clusters.json"
+    cluster_file.write_text('{"version": 1}', encoding="utf-8")
+
+    backup_result = runner.invoke(app, ["cluster", "backup", str(cluster_file)])
+
+    assert backup_result.exit_code == 0
+    backup_path = pathlib.Path(backup_result.stdout.strip())
+    assert backup_path.is_file()
+
+    cluster_file.write_text('{"version": 2}', encoding="utf-8")
+    list_result = runner.invoke(app, ["cluster", "list-backups", str(cluster_file)])
+
+    assert list_result.exit_code == 0
+    assert str(backup_path) in list_result.stdout
+
+    restore_result = runner.invoke(app, ["cluster", "restore", str(cluster_file)])
+
+    assert restore_result.exit_code == 0
+    assert cluster_file.read_text(encoding="utf-8") == '{"version": 1}'
 
 
 # ---------------------------------------------------------------------------

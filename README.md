@@ -15,6 +15,7 @@ Alteryx workflow inspector and diff tool. Reads `.yxmd` files as structured data
 | `acd diff <a.yxmd> <b.yxmd>` | `d` | Compare two workflows and report field-level differences |
 | `acd explain <workflow.yxmd>` | `ex` | Show each tool's Python/pandas equivalent in topological order |
 | `acd scaffold <workflow.yxmd>` | `sc` | Generate a Python/pandas skeleton from a workflow |
+| `acd cluster backup <clusters.json>` | — | Back up manual cluster JSON before editing or reuse |
 
 ---
 
@@ -41,9 +42,66 @@ Include `AlteryxGuiToolkit.*` UI nodes (filtered by default):
 acd inspect workflow.yxmd --no-filter-ui-tools
 ```
 
+Start from a previously exported manual cluster file:
+
+```bash
+acd inspect workflow.yxmd --cluster-file manual_clusters_workflow_20260705_153012.json
+```
+
 The report contains an interactive vis-network graph. Click any node to view its configuration and Python/pandas equivalent. Supports light/dark theme, zoom, pan, and fullscreen.
 
 For **Select** and **AlteryxSelect** nodes, a **Copy Python** button appears in the panel action bar. Clicking it writes a ready-to-paste `SelectColumnEdit` snippet to the clipboard — the same format that `scaffold` emits.
+
+#### Manual clusters
+
+Use manual clusters when a large workflow needs human-defined grouping beyond the automatic same-type clusters and ToolContainer grouping.
+
+In the generated HTML report:
+
+1. Ctrl/Cmd-click two or more real tool nodes to multi-select them.
+2. Click **Cluster**.
+3. Enter a cluster name and save.
+4. Use **Export Clusters** to download the manual cluster JSON.
+
+Manual clusters are saved in browser `localStorage` while you work, keyed by a workflow fingerprint. They are not automatically written into the project directory. Exporting creates a JSON file through the browser download flow, usually in your Downloads folder.
+
+You can later reuse that JSON with:
+
+```bash
+acd inspect workflow.yxmd --cluster-file manual_clusters_workflow_20260705_153012.json
+```
+
+The report also supports **Import Clusters** to load an exported JSON back into browser `localStorage`. Imported files must match the current workflow fingerprint.
+
+Current limitations:
+
+- ToolContainer member nodes cannot be manual-clustered yet.
+- Expanded cluster members must be collapsed before creating a manual cluster.
+- Rectangle/rubber-band drag selection is not implemented; use Ctrl/Cmd-click.
+
+#### Manual cluster backups
+
+Manual cluster JSON files can be backed up and restored from the CLI:
+
+```bash
+acd cluster backup manual_clusters_workflow.json
+acd cluster list-backups manual_clusters_workflow.json
+acd cluster restore manual_clusters_workflow.json
+```
+
+Backups are written next to the JSON file:
+
+```text
+manual_clusters_workflow.json
+manual_clusters_workflow.backups/
+  manual_clusters_workflow_20260705_153012.json
+```
+
+To restore a specific backup:
+
+```bash
+acd cluster restore manual_clusters_workflow.json manual_clusters_workflow.backups/manual_clusters_workflow_20260705_153012.json
+```
 
 ---
 
@@ -219,6 +277,7 @@ yxray/
 │       ├── topology.py         # Graph helpers (topo_order, compute_node_layer)
 │       ├── summarizer.py       # Rule-based tool descriptions + key insights
 │       ├── explain.py          # Alteryx → Python/pandas hint engine
+│       ├── manual_clusters.py  # Manual cluster JSON validation and backups
 │       ├── scaffold.py         # Python/pandas skeleton generator
 │       ├── models/             # Frozen dataclasses (WorkflowDoc, DiffResult, ...)
 │       ├── normalizer/         # C14N, GUID stripping, config hashing

@@ -55,6 +55,7 @@ class SingleGraphRenderer:
         *,
         workflow_steps: list[Any] | None = None,
         key_insights: list[Any] | None = None,
+        manual_cluster_config: dict[str, Any] | None = None,
     ) -> str:
         """WorkflowDoc → standalone HTML string.
 
@@ -64,6 +65,8 @@ class SingleGraphRenderer:
                 a collapsible Summary panel is shown.
             key_insights: Optional list of KeyInsight objects shown as an
                 at-a-glance summary at the top of the Summary panel.
+            manual_cluster_config: Optional validated manual cluster config to
+                embed into the report.
         """
         nodes_list, edges_list, config_map, containers_list = self._build_graph_data(
             doc
@@ -77,7 +80,12 @@ class SingleGraphRenderer:
         return self._render_template(
             doc=doc,
             graph_data_json=self._graph_data_json(
-                doc, nodes_list, edges_list, config_map, containers_list
+                doc,
+                nodes_list,
+                edges_list,
+                config_map,
+                containers_list,
+                manual_cluster_config,
             ),
             workflow_steps=self._workflow_steps_to_dicts(workflow_steps),
             key_insights=self._key_insights_to_dicts(key_insights),
@@ -118,6 +126,7 @@ class SingleGraphRenderer:
         edges_list: list[dict[str, Any]],
         config_map: dict[str, Any],
         containers_list: list[dict[str, Any]],
+        manual_cluster_config: dict[str, Any] | None,
     ) -> str:
         return _safe_json(
             {
@@ -126,6 +135,7 @@ class SingleGraphRenderer:
                 "config_map": config_map,
                 "containers": containers_list,
                 "node_layer": compute_node_layer(doc),
+                "manual_clusters": manual_cluster_config,
             },
             ensure_ascii=False,
         )

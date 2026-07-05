@@ -96,3 +96,27 @@ def test_node_panel_has_int_and_labeled_tool_id_copy_buttons() -> None:
     assert "copyToolIdBtn.textContent = 'Copy ToolID'" in html
     assert "var labeledText = 'ToolID ' + idText" in html
     assert "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)" in html
+
+
+def test_manual_cluster_controls_are_available() -> None:
+    manual_config = {
+        "schema_version": 1,
+        "workflow_fingerprint": "abc",
+        "manual_clusters": [{"label": "prep", "tool_ids": [1, 2]}],
+    }
+    html = SingleGraphRenderer().render(
+        WorkflowDoc(filepath="fixture.yxmd"),
+        manual_cluster_config=manual_config,
+    )
+
+    assert 'id="io-create-cluster-btn"' in html
+    assert 'id="io-import-clusters-btn"' in html
+    assert 'id="io-export-clusters-btn"' in html
+    assert 'id="manual-cluster-import-input"' in html
+    assert 'id="manual-cluster-modal"' in html
+    assert "function buildManualClusters(config)" in html
+    assert "function removeManualCluster(groupKey)" in html
+    assert "function importManualClusterConfigFromFile(file)" in html
+    assert "yxray-manual-clusters-" in html
+    assert "multiselect: true" in html
+    assert '"manual_clusters": [{"label": "prep", "tool_ids": [1, 2]}]' in html

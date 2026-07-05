@@ -11,6 +11,12 @@ import typer
 from rich.console import Console
 
 from yxray.exceptions import MalformedXMLError, ParseError
+from yxray.manual_clusters import (
+    backup_cluster_file,
+    list_cluster_backups,
+    load_manual_cluster_config,
+    restore_cluster_backup,
+)
 from yxray.models import DiffResult
 from yxray.parser import parse_one
 from yxray.pipeline import DiffRequest, DiffResponse, run
@@ -22,6 +28,8 @@ from yxray.renderers import (
 from yxray.summarizer import extract_key_insights, summarize
 
 app = typer.Typer(no_args_is_help=True)
+cluster_app = typer.Typer(no_args_is_help=True)
+app.add_typer(cluster_app, name="cluster", help="Manage manual cluster JSON files")
 # Spinner + summary go to stderr so stdout stays clean for --json
 _err_console = Console(stderr=True)
 
@@ -78,6 +86,53 @@ def _resolve_output(path: pathlib.Path | None, default_name: str) -> pathlib.Pat
         out = path
     out.parent.mkdir(parents=True, exist_ok=True)
     return out
+
+
+def _cluster_backup_impl(  # noqa: B008
+    cluster_file: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help="Manual cluster JSON file to back up"
+    ),
+) -> None:
+    try:
+        backup_path = backup_cluster_file(cluster_file)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2) from None
+    typer.echo(str(backup_path))
+
+
+def _cluster_list_backups_impl(  # noqa: B008
+    cluster_file: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help="Manual cluster JSON file"
+    ),
+) -> None:
+    backups = list_cluster_backups(cluster_file)
+    if not backups:
+        typer.echo("No backups found", err=True)
+        return
+    for backup in backups:
+        typer.echo(str(backup))
+
+
+def _cluster_restore_impl(  # noqa: B008
+    cluster_file: pathlib.Path = typer.Argument(  # noqa: B008
+        ..., help="Manual cluster JSON file to restore into"
+    ),
+    backup_file: pathlib.Path | None = typer.Argument(  # noqa: B008
+        None, help="Backup file to restore; omit to use the newest backup"
+    ),
+) -> None:
+    try:
+        restored_from = restore_cluster_backup(cluster_file, backup_file)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2) from None
+    typer.echo(f"Restored {cluster_file} from {restored_from}")
+
+
+cluster_app.command("backup")(_cluster_backup_impl)
+cluster_app.command("list-backups")(_cluster_list_backups_impl)
+cluster_app.command("restore")(_cluster_restore_impl)
 
 
 def _execute_diff(
@@ -299,6 +354,11 @@ def _inspect_impl(  # noqa: B008
             " (Tab, TextBox, Action, etc.) filtered by default"
         ),
     ),
+    cluster_file: pathlib.Path | None = typer.Option(  # noqa: B008
+        None,
+        "--cluster-file",
+        help="Manual cluster JSON exported from an inspect report",
+    ),
 ) -> None:
     """Inspect a single Alteryx workflow and generate an interactive HTML report.
 
@@ -321,8 +381,18 @@ def _inspect_impl(  # noqa: B008
     out_path = _resolve_output(output, workflow.stem + "_report.html")
     steps = summarize(doc)
     insights = extract_key_insights(doc)
+    manual_cluster_config = None
+    if cluster_file is not None:
+        try:
+            manual_cluster_config = load_manual_cluster_config(cluster_file, doc)
+        except ValueError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=2) from None
     html = SingleGraphRenderer().render(
-        doc, workflow_steps=steps, key_insights=insights
+        doc,
+        workflow_steps=steps,
+        key_insights=insights,
+        manual_cluster_config=manual_cluster_config,
     )
     out_path.write_text(html, encoding="utf-8")
     typer.echo(

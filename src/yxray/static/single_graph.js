@@ -14,6 +14,7 @@ var EDGES_DATA = __d.edges;
 var CONFIG_MAP = __d.config_map;
 var CONTAINERS_DATA = __d.containers;
 var NODE_LAYER = __d.node_layer;
+var EMBEDDED_MANUAL_CLUSTER_CONFIG = __d.manual_clusters || null;
 var NODE_POS = {};
 NODES_DATA.forEach(function(n) { NODE_POS[n.id] = {x: n.x, y: n.y}; });
 
@@ -72,6 +73,14 @@ var CLUSTER_STYLE = {
     matchBg: '#991b1b',
     stroke: '#ef4444', fill: 'rgba(239,68,68,0.07)', label: '#fca5a5',
   },
+  manual: {
+    normal: {background:'#0f766e', border:'#14b8a6',
+             highlight:{background:'#92400e', border:'#f59e0b'},
+             hover:    {background:'#0d9488', border:'#14b8a6'}},
+    dim:    {background:'#134e4a', border:'#0f766e'},
+    matchBg: '#0d9488',
+    stroke: '#14b8a6', fill: 'rgba(20,184,166,0.08)', label: '#5eead4',
+  },
 };
 
 // ── Application state ─────────────────────────────────────────────────────
@@ -92,6 +101,8 @@ var AppState = {
   connectSourceId: null,  // memo ID initiating the connection
   memoHandles: {},        // memoId -> {x,y} bottom-right corner in canvas coords (updated each afterDrawing)
   resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
+  manualClusterConfig: null,
+  manualClusterModalIds: [],
 };
 
 function clusterMinLayer(id) {
@@ -146,6 +157,9 @@ function sortedMemberIds(ids) {
 var MEMO_STORAGE_KEY           = 'yxray-memos-'           + (document.title || 'default');
 var CONTAINER_ORDER_KEY        = 'yxray-container-order-' + (document.title || 'default');
 var HEADER_COLLAPSED_KEY       = 'yxray-header-collapsed-' + (document.title || 'default');
+var MANUAL_CLUSTER_SCHEMA_VERSION = 1;
+var WORKFLOW_FINGERPRINT = workflowFingerprint();
+var MANUAL_CLUSTER_STORAGE_KEY = 'yxray-manual-clusters-' + WORKFLOW_FINGERPRINT;
 
 var options = {
   physics: {enabled: false},
@@ -163,7 +177,7 @@ var options = {
     color: {color: '#475569', highlight: '#94a3b8', hover: '#94a3b8'},
     width: 1.5, hoverWidth: 2.5, selectionWidth: 2.5
   },
-  interaction: {zoomView: true, dragView: true, hover: true, tooltipDelay: 150}
+  interaction: {zoomView: true, dragView: true, hover: true, tooltipDelay: 150, multiselect: true}
 };
 
 // ── Centroid helper ───────────────────────────────────────────────────────
@@ -503,6 +517,201 @@ function buildContainerClusters(membership) {
   });
 }
 
+// ── Manual cluster persistence and clustering ─────────────────────────────
+function workflowFingerprint() {
+  var parts = [];
+  NODES_DATA.slice().sort(function(a, b) { return compareNumber(a.id, b.id); }).forEach(function(n) {
+    parts.push('n:' + n.id + ':' + (n.title || ''));
+  });
+  EDGES_DATA.slice().sort(function(a, b) {
+    var fromOrder = compareNumber(a.from, b.from);
+    if (fromOrder !== 0) return fromOrder;
+    return compareNumber(a.to, b.to);
+  }).forEach(function(e) {
+    parts.push('e:' + e.from + '>' + e.to);
+  });
+  var input = parts.join('|');
+  var hash = 2166136261;
+  for (var i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function emptyManualClusterConfig() {
+  return {
+    schema_version: MANUAL_CLUSTER_SCHEMA_VERSION,
+    workflow_fingerprint: WORKFLOW_FINGERPRINT,
+    manual_clusters: []
+  };
+}
+
+function manualClusterKey(cluster) {
+  return (cluster.label || '') + '\x00' + (cluster.tool_ids || []).map(Number).sort(compareNumber).join(',');
+}
+
+function normalizeManualClusterConfig(rawConfig, membership) {
+  var config = emptyManualClusterConfig();
+  if (!rawConfig || rawConfig.workflow_fingerprint !== WORKFLOW_FINGERPRINT ||
+      !Array.isArray(rawConfig.manual_clusters)) {
+    return config;
+  }
+
+  var used = {};
+  rawConfig.manual_clusters.forEach(function(cluster) {
+    var label = String(cluster.label || '').trim();
+    var rawIds = Array.isArray(cluster.tool_ids) ? cluster.tool_ids : [];
+    var ids = [];
+    var local = {};
+    rawIds.forEach(function(rawId) {
+      var id = Number(rawId);
+      if (!Number.isFinite(id) || local[id]) return;
+      if (!CONFIG_MAP[String(id)]) {
+        console.warn('[yxray] manual cluster skipped missing ToolID:', id);
+        return;
+      }
+      if (membership && membership[id] !== undefined) {
+        console.warn('[yxray] manual cluster skipped container member ToolID:', id);
+        return;
+      }
+      if (used[id]) {
+        console.warn('[yxray] manual cluster skipped duplicate ToolID:', id);
+        return;
+      }
+      local[id] = true;
+      ids.push(id);
+    });
+    if (!label) label = 'Manual Cluster ' + (config.manual_clusters.length + 1);
+    if (ids.length < MIN_CLUSTER_SIZE) {
+      if (rawIds.length > 0) console.warn('[yxray] manual cluster skipped; fewer than 2 valid nodes:', label);
+      return;
+    }
+    ids = sortedMemberIds(ids);
+    ids.forEach(function(id) { used[id] = true; });
+    config.manual_clusters.push({label: label, tool_ids: ids});
+  });
+  return config;
+}
+
+function loadManualClusterConfig(membership) {
+  try {
+    var raw = localStorage.getItem(MANUAL_CLUSTER_STORAGE_KEY);
+    var parsed = EMBEDDED_MANUAL_CLUSTER_CONFIG || (raw ? JSON.parse(raw) : null);
+    AppState.manualClusterConfig = normalizeManualClusterConfig(parsed, membership);
+  } catch(e) {
+    console.warn('[yxray] manual cluster load failed:', e);
+    AppState.manualClusterConfig = emptyManualClusterConfig();
+  }
+  return AppState.manualClusterConfig;
+}
+
+function saveManualClusterConfig() {
+  if (!AppState.manualClusterConfig) AppState.manualClusterConfig = emptyManualClusterConfig();
+  try {
+    localStorage.setItem(MANUAL_CLUSTER_STORAGE_KEY, JSON.stringify(AppState.manualClusterConfig));
+  } catch(e) {
+    console.warn('[yxray] manual cluster save failed:', e);
+  }
+}
+
+function manualClusterMemberSet(config) {
+  var set = {};
+  ((config && config.manual_clusters) || []).forEach(function(cluster) {
+    (cluster.tool_ids || []).forEach(function(id) { set[Number(id)] = true; });
+  });
+  return set;
+}
+
+function _manualClusterNodeStyle() {
+  return {
+    color: CLUSTER_STYLE.manual.normal,
+    fontColor: contrastColor(CLUSTER_STYLE.manual.normal.background)
+  };
+}
+
+function buildManualClusters(config) {
+  var clusters = (config && config.manual_clusters) || [];
+  if (clusters.length === 0) return;
+
+  var clusterDefs = [];
+  var memberToCluster = {};
+
+  clusters.forEach(function(cluster) {
+    var memberIds = sortedMemberIds((cluster.tool_ids || []).map(Number).filter(function(id) {
+      return nodesDataset.get(id) !== null;
+    }));
+    if (memberIds.length < MIN_CLUSTER_SIZE) return;
+    var clusterId = 'cluster:' + (++AppState.clusterCounter);
+    memberIds.forEach(function(mid) { memberToCluster[mid] = clusterId; });
+    clusterDefs.push({
+      cid: clusterId,
+      memberIds: memberIds,
+      label: String(cluster.label || 'Manual Cluster'),
+      manualKey: manualClusterKey(cluster)
+    });
+  });
+
+  if (clusterDefs.length === 0) return;
+
+  var allMemberIds = [];
+  clusterDefs.forEach(function(c) { allMemberIds = allMemberIds.concat(c.memberIds); });
+  nodesDataset.remove(allMemberIds);
+
+  clusterDefs.forEach(function(c) {
+    var pos = centroid(c.memberIds);
+    var ns = _manualClusterNodeStyle();
+    nodesDataset.add({
+      id: c.cid,
+      label: c.label + ' \xd7' + c.memberIds.length,
+      title: c.label + ' manual cluster \u2014 Click to expand/collapse',
+      shape: 'box',
+      borderDashes: [5, 3],
+      x: pos.x, y: pos.y,
+      color: ns.color,
+      font: {color: ns.fontColor, size: 13}
+    });
+  });
+
+  var currentEdges = edgesDataset.get();
+  var edgesToRemove = [], edgesToAdd = [], seenKey = {}, clusterBridges = {};
+
+  currentEdges.forEach(function(e) {
+    var src = memberToCluster[e.from] !== undefined ? memberToCluster[e.from] : e.from;
+    var dst = memberToCluster[e.to]   !== undefined ? memberToCluster[e.to]   : e.to;
+    if (src !== e.from || dst !== e.to) {
+      edgesToRemove.push(e.id);
+      if (src === dst) return;
+      var key = String(src) + '\x00' + String(dst);
+      if (seenKey[key]) return;
+      seenKey[key] = true;
+      var eid = 'br:' + (++AppState.clusterCounter);
+      edgesToAdd.push({id: eid, from: src, to: dst});
+      [src, dst].forEach(function(ep) {
+        if (typeof ep === 'string' && ep.indexOf('cluster:') === 0) {
+          if (!clusterBridges[ep]) clusterBridges[ep] = [];
+          clusterBridges[ep].push(eid);
+        }
+      });
+    }
+  });
+
+  edgesDataset.remove(edgesToRemove);
+  edgesDataset.add(edgesToAdd);
+
+  clusterDefs.forEach(function(c) {
+    var ns = _manualClusterNodeStyle();
+    AppState.clusterMap[c.cid] = {
+      memberIds: c.memberIds,
+      toolType: c.label,
+      bridgeEdgeIds: clusterBridges[c.cid] || [],
+      isManual: true,
+      manualKey: c.manualKey,
+      fontColorHex: ns.fontColor,
+    };
+  });
+}
+
 // Returns the node ID (or cluster ID) currently representing nodeId in the
 // DataSet. Returns null if nodeId is not reachable (removed and unclustered).
 function resolveNode(nodeId) {
@@ -533,12 +742,17 @@ function recollapseGroup(groupKey) {
 
   // Re-add cluster node with appropriate colors
   var isContainer = group.isContainer || false;
+  var isManual = group.isManual || false;
   var clusterTitle = isContainer
     ? group.toolType + ' \u2014 Click to expand/collapse'
+    : isManual
+    ? group.toolType + ' manual cluster \u2014 Click to expand/collapse'
     : group.toolType + ' cluster \u2014 Click to expand/collapse';
   var cPos = centroid(group.memberIds);
   var ns = isContainer
     ? _containerNodeStyle(group.fillColorHex || null)
+    : isManual
+    ? _manualClusterNodeStyle()
     : {color: CLUSTER_STYLE.type.normal, fontColor: contrastColor('#4c1d95')};
   nodesDataset.add({
     id: groupKey,
@@ -586,9 +800,11 @@ function recollapseGroup(groupKey) {
     toolType: group.toolType,
     bridgeEdgeIds: bridgeEdgeIds,
     isContainer: group.isContainer || false,
+    isManual: group.isManual || false,
+    manualKey: group.manualKey,
     containerNodeId: group.containerNodeId,
     fillColorHex: group.fillColorHex || null,
-    fontColorHex: group.fontColorHex || (group.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95')),
+    fontColorHex: group.fontColorHex || (group.isContainer ? contrastColor('#7f1d1d') : (group.isManual ? _manualClusterNodeStyle().fontColor : contrastColor('#4c1d95'))),
   };
 
   // Clean up expanded state
@@ -641,15 +857,19 @@ function expandCluster(cid) {
   var expandedMemberIds = c.memberIds.slice();
   var expandedToolType = c.toolType;
   var expandedIsContainer = c.isContainer || false;
+  var expandedIsManual = c.isManual || false;
   var expandedContainerNodeId = c.containerNodeId;
+  var expandedManualKey = c.manualKey;
   var expandedFillColorHex = c.fillColorHex || null;
-  var expandedFontColorHex = c.fontColorHex || (c.isContainer ? contrastColor('#7f1d1d') : contrastColor('#4c1d95'));
+  var expandedFontColorHex = c.fontColorHex || (c.isContainer ? contrastColor('#7f1d1d') : (c.isManual ? _manualClusterNodeStyle().fontColor : contrastColor('#4c1d95')));
   delete AppState.clusterMap[cid];
   AppState.groupMembers[cid] = {
     memberIds: expandedMemberIds,
     toolType: expandedToolType,
     isContainer: expandedIsContainer,
+    isManual: expandedIsManual,
     containerNodeId: expandedContainerNodeId,
+    manualKey: expandedManualKey,
     fillColorHex: expandedFillColorHex,
     fontColorHex: expandedFontColorHex,
   };
@@ -703,6 +923,36 @@ function expandCluster(cid) {
   network.moveTo({position: cPos, animation: {duration: 300, easingFunction: 'easeInOutQuad'}});
 }
 
+function removeManualCluster(groupKey) {
+  var group = AppState.clusterMap[groupKey] || AppState.groupMembers[groupKey];
+  if (!group || !group.isManual) return;
+  if (!confirm('Remove manual cluster "' + group.toolType + '"?')) return;
+
+  var manualKey = group.manualKey;
+  if (AppState.clusterMap[groupKey]) {
+    expandCluster(groupKey);
+    group = AppState.groupMembers[groupKey];
+  }
+
+  if (group) {
+    group.memberIds.forEach(function(mid) { delete AppState.expandedGroups[mid]; });
+    delete AppState.groupMembers[groupKey];
+  }
+
+  if (AppState.manualClusterConfig && manualKey) {
+    AppState.manualClusterConfig.manual_clusters = AppState.manualClusterConfig.manual_clusters.filter(function(cluster) {
+      return manualClusterKey(cluster) !== manualKey;
+    });
+    saveManualClusterConfig();
+  }
+
+  if (network) {
+    network.selectNodes([]);
+    network.redraw();
+  }
+  closePanel();
+}
+
 // ── Memo helpers ──────────────────────────────────────────────────────────
 function _memoNodeDef(id, text, x, y, w, h) {
   var def = {
@@ -739,6 +989,152 @@ function saveMemos() {
   } catch(e) {
     console.warn('[yxray] memo save failed:', e);
   }
+}
+
+function selectedRealNodeIds() {
+  if (!network) return [];
+  var ids = [];
+  network.getSelectedNodes().forEach(function(id) {
+    if (typeof id === 'number' && CONFIG_MAP[String(id)]) ids.push(id);
+  });
+  return sortedMemberIds(ids);
+}
+
+function validateManualClusterCandidate(ids, label, membership, existingKey) {
+  var errors = [];
+  var seen = {};
+  if (ids.length < MIN_CLUSTER_SIZE) errors.push('Select at least 2 real tool nodes.');
+  if (!label || !label.trim()) errors.push('Cluster name is required.');
+
+  ids.forEach(function(id) {
+    if (seen[id]) errors.push('Duplicate ToolID in selection: ' + id);
+    seen[id] = true;
+    if (!CONFIG_MAP[String(id)]) errors.push('Unknown ToolID: ' + id);
+    if (membership && membership[id] !== undefined) {
+      errors.push('ToolID ' + id + ' is inside a ToolContainer; manual clusters do not support container members yet.');
+    }
+    if (AppState.expandedGroups[id]) {
+      errors.push('ToolID ' + id + ' is currently inside an expanded cluster. Collapse it before creating a manual cluster.');
+    }
+  });
+
+  var activeConfig = AppState.manualClusterConfig || emptyManualClusterConfig();
+  var candidateKey = label.trim() + '\x00' + ids.slice().sort(compareNumber).join(',');
+  (activeConfig.manual_clusters || []).forEach(function(cluster) {
+    var key = manualClusterKey(cluster);
+    if (existingKey && key === existingKey) return;
+    (cluster.tool_ids || []).forEach(function(id) {
+      if (seen[Number(id)]) errors.push('ToolID ' + id + ' is already in manual cluster "' + cluster.label + '".');
+    });
+    if (key === candidateKey) errors.push('This manual cluster already exists.');
+  });
+
+  return errors;
+}
+
+function setManualClusterError(message) {
+  var el = document.getElementById('manual-cluster-error');
+  if (!el) return;
+  el.textContent = message || '';
+  el.style.display = message ? 'block' : 'none';
+}
+
+function openManualClusterModal() {
+  var ids = selectedRealNodeIds();
+  AppState.manualClusterModalIds = ids;
+  var nameInput = document.getElementById('manual-cluster-name-input');
+  var preview = document.getElementById('manual-cluster-members-preview');
+  nameInput.value = '';
+  preview.textContent = ids.length > 0 ? 'ToolIDs: ' + ids.join(', ') : 'No real tool nodes selected. Use Ctrl/Cmd+click to select nodes.';
+  setManualClusterError('');
+  document.getElementById('manual-cluster-modal').classList.add('open');
+  document.getElementById('memo-modal-overlay').classList.add('open');
+  setTimeout(function() { nameInput.focus(); }, 50);
+}
+
+function closeManualClusterModal() {
+  document.getElementById('manual-cluster-modal').classList.remove('open');
+  document.getElementById('memo-modal-overlay').classList.remove('open');
+  AppState.manualClusterModalIds = [];
+  setManualClusterError('');
+}
+
+function saveManualClusterFromModal() {
+  var label = document.getElementById('manual-cluster-name-input').value.trim();
+  var ids = AppState.manualClusterModalIds.slice();
+  var membership = computeContainerMembership();
+  var errors = validateManualClusterCandidate(ids, label, membership, null);
+  if (errors.length > 0) {
+    setManualClusterError(errors[0]);
+    return;
+  }
+
+  var cluster = {label: label, tool_ids: sortedMemberIds(ids)};
+  if (!AppState.manualClusterConfig) AppState.manualClusterConfig = emptyManualClusterConfig();
+  AppState.manualClusterConfig.manual_clusters.push(cluster);
+  saveManualClusterConfig();
+  buildManualClusters({manual_clusters: [cluster]});
+  closeManualClusterModal();
+  if (network) {
+    network.selectNodes([]);
+    network.redraw();
+  }
+}
+
+function exportManualClusterConfig() {
+  var config = AppState.manualClusterConfig || emptyManualClusterConfig();
+  var payload = JSON.stringify(config, null, 2);
+  var now = new Date();
+  var ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+  var title = (document.title || 'workflow').replace(/[^A-Za-z0-9_\-.]/g, '_');
+  var blob = new Blob([payload], {type: 'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'manual_clusters_' + title + '_' + ts + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function importManualClusterConfigFromFile(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    try {
+      var parsed = JSON.parse(String(reader.result || ''));
+      if (!parsed || parsed.workflow_fingerprint !== WORKFLOW_FINGERPRINT) {
+        alert('Cluster config does not match this workflow.');
+        return;
+      }
+      var normalized = normalizeManualClusterConfig(parsed, computeContainerMembership());
+      if (normalized.manual_clusters.length !== (parsed.manual_clusters || []).length) {
+        var ok = confirm('Some clusters are invalid for this workflow and will be skipped. Continue?');
+        if (!ok) return;
+      }
+      AppState.manualClusterConfig = normalized;
+      saveManualClusterConfig();
+      location.reload();
+    } catch(e) {
+      alert('Could not import cluster JSON: ' + e.message);
+    }
+  };
+  reader.onerror = function() {
+    alert('Could not read cluster JSON.');
+  };
+  reader.readAsText(file);
+}
+
+function openManualClusterImportPicker() {
+  var input = document.getElementById('manual-cluster-import-input');
+  if (!input) return;
+  input.value = '';
+  input.click();
 }
 
 function loadMemos() {
@@ -1083,8 +1479,14 @@ function initNetwork() {
   Object.keys(containerMembership).forEach(function(nid) {
     containerMemberSet[parseInt(nid)] = true;
   });
+  var manualConfig = loadManualClusterConfig(containerMembership);
+  var manualMemberSet = manualClusterMemberSet(manualConfig);
+  Object.keys(manualMemberSet).forEach(function(nid) {
+    containerMemberSet[parseInt(nid)] = true;
+  });
 
-  buildClusters(containerMemberSet);           // type-based BFS (skips container members)
+  buildClusters(containerMemberSet);           // type-based BFS (skips container/manual members)
+  buildManualClusters(manualConfig);           // user-defined clusters over surviving nodes
   buildContainerClusters(containerMembership); // geometry-based container collapse
 
   network = new vis.Network(canvas, {nodes: nodesDataset, edges: edgesDataset}, options);
@@ -1270,6 +1672,9 @@ function initNetwork() {
       exitConnectMode();
       return;
     }
+    var srcEvent = params.event && params.event.srcEvent;
+    var isMultiSelectClick = !!(srcEvent && (srcEvent.ctrlKey || srcEvent.metaKey));
+    if (isMultiSelectClick) return;
     if (params.nodes.length === 0) { closePanel(); return; }
     openPanel(params.nodes[0]);
   });
@@ -1324,7 +1729,7 @@ function initNetwork() {
         var h = maxY - minY + BOX_PAD_Y * 2;
         var r = BOX_RADIUS;
 
-        var bs = group.isContainer ? CLUSTER_STYLE.container : CLUSTER_STYLE.type;
+        var bs = group.isContainer ? CLUSTER_STYLE.container : (group.isManual ? CLUSTER_STYLE.manual : CLUSTER_STYLE.type);
 
         ctx.beginPath();
         ctx.moveTo(x + r, y);
@@ -1599,6 +2004,14 @@ function _refreshClusterPanel(groupKey) {
     jsonBtn.textContent = '↓ JSON';
     jsonBtn.onclick = function() { downloadClusterJSON(); };
     body.appendChild(jsonBtn);
+    if (c.isManual) {
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'ctrl-btn';
+      removeBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';
+      removeBtn.textContent = 'Remove manual cluster';
+      removeBtn.onclick = function() { removeManualCluster(groupKey); };
+      body.appendChild(removeBtn);
+    }
     // Select the cluster node so vis-network applies the amber highlight color
     if (network) network.selectNodes([groupKey]);
     c.memberIds.forEach(function(mid) {
@@ -1630,6 +2043,14 @@ function _refreshClusterPanel(groupKey) {
     jsonBtn2.textContent = '↓ JSON';
     jsonBtn2.onclick = function() { downloadClusterJSON(); };
     body.appendChild(jsonBtn2);
+    if (group.isManual) {
+      var removeBtn2 = document.createElement('button');
+      removeBtn2.className = 'ctrl-btn';
+      removeBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';
+      removeBtn2.textContent = 'Remove manual cluster';
+      removeBtn2.onclick = function() { removeManualCluster(groupKey); };
+      body.appendChild(removeBtn2);
+    }
     if (network) network.selectNodes([]);
     group.memberIds.forEach(function(mid) {
       var entry = CONFIG_MAP[String(mid)];
@@ -1889,6 +2310,14 @@ function openPanel(nodeId) {
     collapseBtn.textContent = 'Collapse: ' + (_group ? _group.toolType : 'group');
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
+    if (_group && _group.isManual) {
+      var removeManualBtn = document.createElement('button');
+      removeManualBtn.className = 'ctrl-btn';
+      removeManualBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';
+      removeManualBtn.textContent = 'Remove manual cluster';
+      removeManualBtn.onclick = (function(gk) { return function() { removeManualCluster(gk); }; })(_groupKey);
+      body.appendChild(removeManualBtn);
+    }
     if (_entry) {
       _renderToolIdCopyBlock(nodeId, body);
       _renderPanelEntry(_entry, body);
@@ -2568,6 +2997,7 @@ document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     if (AppState.connectMode) { exitConnectMode(); return; }
+    closeManualClusterModal();
     closeMemoModal();
     closePanel();
     return;
@@ -2581,9 +3011,25 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ── Memo modal events ─────────────────────────────────────────────────────
+document.getElementById('io-create-cluster-btn').addEventListener('click', openManualClusterModal);
+document.getElementById('io-import-clusters-btn').addEventListener('click', openManualClusterImportPicker);
+document.getElementById('io-export-clusters-btn').addEventListener('click', exportManualClusterConfig);
+document.getElementById('manual-cluster-import-input').addEventListener('change', function(e) {
+  var file = e.target.files && e.target.files[0];
+  importManualClusterConfigFromFile(file);
+});
+document.getElementById('manual-cluster-save-btn').addEventListener('click', saveManualClusterFromModal);
+document.getElementById('manual-cluster-cancel-btn').addEventListener('click', closeManualClusterModal);
+document.getElementById('manual-cluster-name-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { e.stopPropagation(); closeManualClusterModal(); }
+  if (e.key === 'Enter') { e.preventDefault(); saveManualClusterFromModal(); }
+});
 document.getElementById('memo-save-btn').addEventListener('click', saveMemoFromModal);
 document.getElementById('memo-cancel-btn').addEventListener('click', closeMemoModal);
-document.getElementById('memo-modal-overlay').addEventListener('click', closeMemoModal);
+document.getElementById('memo-modal-overlay').addEventListener('click', function() {
+  closeManualClusterModal();
+  closeMemoModal();
+});
 document.getElementById('memo-delete-btn').addEventListener('click', function() {
   if (AppState.memoEditTarget) deleteMemoNode(AppState.memoEditTarget);
   closeMemoModal();
