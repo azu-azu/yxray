@@ -1942,6 +1942,10 @@ function _flowOrderIdsText(memberIds) {
   return memberIds.map(function(mid) { return 'ToolID ' + mid; }).join(' → ') + ' (' + memberIds.length + 'nodes)';
 }
 
+function _flowOrderBareIdsText(memberIds) {
+  return memberIds.map(function(mid) { return String(mid); }).join(' → ') + ' (' + memberIds.length + 'nodes)';
+}
+
 // Shared "Cluster Name" / "Flow Order IDs" info block, shown for both
 // collapsed clusters and expanded groups so the values stay copy-able and
 // visible on the pane without digging into the member list below.
@@ -1972,50 +1976,42 @@ function _renderClusterInfoBlock(toolType, memberIds, body) {
     wrap.appendChild(row);
   }
 
+  function addFlowOrderRow() {
+    var row = document.createElement('div');
+    row.className = 'config-row';
+    var keyRow = document.createElement('div');
+    keyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    var keyEl = document.createElement('div');
+    keyEl.className = 'config-key';
+    keyEl.textContent = 'Flow Order IDs';
+    var actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    var idsText = _flowOrderBareIdsText(memberIds);
+    var labeledText = _flowOrderIdsText(memberIds);
+    var copyIdsBtn = document.createElement('button');
+    copyIdsBtn.className = 'panel-action-btn';
+    copyIdsBtn.id = 'panel-copy-flow-ids-btn';
+    copyIdsBtn.textContent = 'Copy IDs';
+    copyIdsBtn.onclick = function() { _clipboardWrite(idsText, copyIdsBtn, 'Copy IDs'); };
+    var copyToolIdsBtn = document.createElement('button');
+    copyToolIdsBtn.className = 'panel-action-btn';
+    copyToolIdsBtn.textContent = 'Copy ToolIDs';
+    copyToolIdsBtn.onclick = function() { _clipboardWrite(labeledText, copyToolIdsBtn, 'Copy ToolIDs'); };
+    actions.appendChild(copyIdsBtn);
+    actions.appendChild(copyToolIdsBtn);
+    keyRow.appendChild(keyEl);
+    keyRow.appendChild(actions);
+    var valEl = document.createElement('div');
+    valEl.className = 'config-val';
+    valEl.textContent = labeledText;
+    row.appendChild(keyRow);
+    row.appendChild(valEl);
+    wrap.appendChild(row);
+  }
+
   addRow('Cluster Name', toolType, 'panel-copy-cluster-name-btn');
-  addRow('Flow Order IDs', _flowOrderIdsText(memberIds), 'panel-copy-flow-ids-btn');
+  addFlowOrderRow();
   body.appendChild(wrap);
-}
-
-function _renderToolIdCopyBlock(toolId, body) {
-  var row = document.createElement('div');
-  row.className = 'config-row';
-
-  var keyRow = document.createElement('div');
-  keyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
-
-  var keyEl = document.createElement('div');
-  keyEl.className = 'config-key';
-  keyEl.textContent = 'Tool ID';
-
-  var actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
-
-  var idText = String(toolId);
-  var labeledText = 'ToolID ' + idText;
-
-  var copyIdBtn = document.createElement('button');
-  copyIdBtn.className = 'panel-action-btn';
-  copyIdBtn.textContent = 'Copy ID';
-  copyIdBtn.onclick = function() { _clipboardWrite(idText, copyIdBtn, 'Copy ID'); };
-
-  var copyToolIdBtn = document.createElement('button');
-  copyToolIdBtn.className = 'panel-action-btn';
-  copyToolIdBtn.textContent = 'Copy ToolID';
-  copyToolIdBtn.onclick = function() { _clipboardWrite(labeledText, copyToolIdBtn, 'Copy ToolID'); };
-
-  actions.appendChild(copyIdBtn);
-  actions.appendChild(copyToolIdBtn);
-  keyRow.appendChild(keyEl);
-  keyRow.appendChild(actions);
-
-  var valEl = document.createElement('div');
-  valEl.className = 'config-val';
-  valEl.textContent = labeledText;
-
-  row.appendChild(keyRow);
-  row.appendChild(valEl);
-  body.appendChild(row);
 }
 
 // Shared render helper: builds Expand/Collapse button + member list for a cluster.
@@ -2061,7 +2057,6 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      _renderToolIdCopyBlock(mid, body);
       _renderPanelEntry(entry, body);
     });
   } else if (AppState.groupMembers[groupKey]) {
@@ -2099,7 +2094,6 @@ function _refreshClusterPanel(groupKey) {
       hdr.className = 'cluster-member-header';
       hdr.textContent = entry.label;
       body.appendChild(hdr);
-      _renderToolIdCopyBlock(mid, body);
       _renderPanelEntry(entry, body);
     });
   }
@@ -2341,9 +2335,6 @@ function openPanel(nodeId) {
     var _entry = CONFIG_MAP[String(nodeId)];
     document.getElementById('panel-title-text').textContent =
       _entry ? _entry.label : 'Node ' + nodeId;
-    if (_group) {
-      _renderClusterInfoBlock(_group.toolType, _group.memberIds, body);
-    }
     var collapseBtn = document.createElement('button');
     collapseBtn.className = 'ctrl-btn';
     collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
@@ -2359,7 +2350,6 @@ function openPanel(nodeId) {
       body.appendChild(removeManualBtn);
     }
     if (_entry) {
-      _renderToolIdCopyBlock(nodeId, body);
       _renderPanelEntry(_entry, body);
     }
     if (_pyBtn && _entry &&
@@ -2376,7 +2366,6 @@ function openPanel(nodeId) {
   if (_pyBtn && (entry.tool_type === 'Select' || entry.tool_type === 'AlteryxSelect')) {
     _pyBtn.style.display = '';
   }
-  _renderToolIdCopyBlock(nodeId, body);
   _renderPanelEntry(entry, body);
   document.getElementById('config-panel').classList.add('open');
 }
@@ -2785,6 +2774,11 @@ function copyPanelId() {
   _clipboardWrite(String(_panelNodeId), document.getElementById('panel-copy-id-btn'), 'Copy ID');
 }
 
+function copyPanelToolId() {
+  if (_panelNodeId === null) return;
+  _clipboardWrite('ToolID ' + String(_panelNodeId), document.getElementById('panel-copy-tool-id-btn'), 'Copy ToolID');
+}
+
 function copyPanelJSON() {
   if (_panelNodeId === null) return;
   var data;
@@ -3032,6 +3026,7 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
 document.getElementById('panel-copy-json-btn').addEventListener('click', copyPanelJSON);
 document.getElementById('panel-copy-py-btn').addEventListener('click', copyPanelPython);
 document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
+document.getElementById('panel-copy-tool-id-btn').addEventListener('click', copyPanelToolId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
 document.getElementById('panel-overlay').addEventListener('click', closePanel);
 document.addEventListener('keydown', function(e) {

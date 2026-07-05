@@ -108,11 +108,17 @@ def test_header_can_be_collapsed() -> None:
 def test_node_panel_has_int_and_labeled_tool_id_copy_buttons() -> None:
     html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
 
-    assert "function _renderToolIdCopyBlock(toolId, body)" in html
-    assert "copyIdBtn.textContent = 'Copy ID'" in html
-    assert "copyToolIdBtn.textContent = 'Copy ToolID'" in html
-    assert "var labeledText = 'ToolID ' + idText" in html
-    assert "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)" in html
+    assert 'id="panel-copy-tool-id-btn"' in html
+    assert "function copyPanelToolId()" in html
+    assert "document.getElementById('panel-copy-tool-id-btn')" in html
+    assert "function _flowOrderBareIdsText(memberIds)" in html
+    assert "copyIdsBtn.textContent = 'Copy IDs'" in html
+    assert "copyToolIdsBtn.textContent = 'Copy ToolIDs'" in html
+    assert (
+        "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)"
+        not in html
+    )
+    assert "function _renderToolIdCopyBlock(toolId, body)" not in html
 
 
 def test_manual_cluster_controls_are_available() -> None:
