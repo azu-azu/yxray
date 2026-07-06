@@ -145,6 +145,14 @@ def _emit_substring(args: list[_Emitted]) -> str:
     return f"{s}.str[{start}:]"
 
 
+def _emit_right(args: list[_Emitted]) -> str:
+    # The unary minus must bind to the whole length expression:
+    # Right([f], 1+1) as .str[-1 + 1:] is .str[0:] — the full string.
+    _check_args("Right", args, 2)
+    length = _paren(args[1], _ATOM)
+    return f"{_series(args[0])}.str[-{length}:]"
+
+
 def _emit_tostring(args: list[_Emitted]) -> str:
     # .astype("string") keeps missing values as <NA> instead of the
     # literal string "nan" that .astype(str) would produce.
@@ -183,7 +191,7 @@ _FUNCTIONS: dict[str, Callable[[list[_Emitted]], str]] = {
     "length": _str_method("Length", ".str.len()", 1),
     "replace": _str_method("Replace", ".str.replace({}, {}, regex=False)", 3),
     "left": _str_method("Left", ".str[:{}]", 2),
-    "right": _str_method("Right", ".str[-{}:]", 2),
+    "right": _emit_right,
     "substring": _emit_substring,
     "tostring": _emit_tostring,
     "tonumber": lambda args: (

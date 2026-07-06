@@ -157,6 +157,19 @@ def test_substring_zero_indexed_denver() -> None:
     assert t("Substring([City], 2, 3)") == 'df["City"].str[2:2+3]'
 
 
+def test_left() -> None:
+    assert t("Left([field], 3)") == 'df["field"].str[:3]'
+
+
+def test_right() -> None:
+    assert t("Right([field], 2)") == 'df["field"].str[-2:]'
+
+
+def test_right_expression_length_parenthesized() -> None:
+    # Regression: str[-1 + 1:] is str[0:] — the whole string, silently wrong
+    assert t("Right([field], 1 + 1)") == 'df["field"].str[-(1 + 1):]'
+
+
 def test_datetimeadd_months() -> None:
     assert (
         t('DateTimeAdd(DateTimeToday(), -2, "months")')

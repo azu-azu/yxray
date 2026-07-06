@@ -216,6 +216,30 @@ df["col"] = df["col"].str.strip()
 
 ---
 
+## 12. `Substring` — 0-indexed（SQL の 1-indexed とは異なる）
+
+| | 挙動 |
+|---|---|
+| **Alteryx** `Substring(col, start, length)` | `start` は **0-indexed**（最初の文字が位置 0） |
+| **SQL** `SUBSTRING(col, start, length)` | `start` は 1-indexed（最初の文字が位置 1） |
+| **pandas** `df[col].str[start:start+length]` | 0-indexed（Python スライスと同じ） |
+
+Alteryx が 0-indexed であることの確認例：`Substring("DENVER", 2, 3)` → `"NVE"`（位置 2 から3文字）。もし 1-indexed なら `"ENV"` になるはず。
+
+```python
+# Alteryx: Substring([col], 5, 2)  →  位置5から2文字
+df[col].str[5:5+2]   # = [5:7]
+
+# Alteryx: Substring([col], 3)  →  位置3から末尾まで
+df[col].str[3:]
+```
+
+SQL（1-indexed）から移植した変換式に `-1` 補正を入れると、全出力が1文字ずれてエラーなく誤動作するため注意。
+
+エッジケース：`start` が式の評価で**負**になった場合、Python のスライスは「末尾から数える」意味に化けるため、Alteryx と挙動が分岐する。生成コードの start が負になり得る式はレビューで確認する。
+
+---
+
 ## 13. `DateTimeAdd` — 日時加減算
 
 | | 挙動 |
@@ -296,28 +320,6 @@ df = pd.merge(
 | `ToDate(val)` | `pd.to_datetime(val)` |
 | FindReplace FindAny + Append | `pd.merge(how="left")` に変換。部分一致の意味論は要確認 |
 | FindReplace FindAny + ReplaceMultipleFound=False | 右側を `drop_duplicates()` してから merge |
-
----
-
-## 12. `Substring` — 0-indexed（SQL の 1-indexed とは異なる）
-
-| | 挙動 |
-|---|---|
-| **Alteryx** `Substring(col, start, length)` | `start` は **0-indexed**（最初の文字が位置 0） |
-| **SQL** `SUBSTRING(col, start, length)` | `start` は 1-indexed（最初の文字が位置 1） |
-| **pandas** `df[col].str[start:start+length]` | 0-indexed（Python スライスと同じ） |
-
-Alteryx が 0-indexed であることの確認例：`Substring("DENVER", 2, 3)` → `"NVE"`（位置 2 から3文字）。もし 1-indexed なら `"ENV"` になるはず。
-
-```python
-# Alteryx: Substring([col], 5, 2)  →  位置5から2文字
-df[col].str[5:5+2]   # = [5:7]
-
-# Alteryx: Substring([col], 3)  →  位置3から末尾まで
-df[col].str[3:]
-```
-
-SQL（1-indexed）から移植した変換式に `-1` 補正を入れると、全出力が1文字ずれてエラーなく誤動作するため注意。
 
 ---
 
