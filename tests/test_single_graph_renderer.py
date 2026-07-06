@@ -40,7 +40,11 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
         ),
     )
     config_map = _config_map(doc)
-    assert 'df1["Age"] > 18' in config_map["2"]["python_hint"]
+    hint = config_map["2"]["python_hint"]
+    assert hint.startswith("# ToolID 2\n")
+    assert "# Alteryx expression — review translation" in hint
+    assert "NOTE" not in hint
+    assert 'df1["Age"] > 18' in hint
 
 
 def test_select_python_hint_matches_scaffold_snippet() -> None:
@@ -70,7 +74,9 @@ def test_input_python_hint_stays_generic() -> None:
         ),
     )
     config_map = _config_map(doc)
-    assert config_map["1"]["python_hint"] == "pd.read_csv(...) / pd.read_excel(...)"
+    assert config_map["1"]["python_hint"] == (
+        "# ToolID 1\npd.read_csv(...) / pd.read_excel(...)"
+    )
 
 
 def test_config_map_includes_declared_container_id() -> None:

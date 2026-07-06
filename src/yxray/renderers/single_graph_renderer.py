@@ -97,10 +97,18 @@ class SingleGraphRenderer:
         for step in _explain_workflow(doc):
             entry = config_map.get(str(step.tool_id))
             if entry is not None:
-                entry["python_hint"] = detail_snippets.get(
-                    step.tool_id, step.python_hint
-                )
+                hint = detail_snippets.get(step.tool_id, step.python_hint)
+                entry["python_hint"] = self._format_hint(step.tool_id, hint)
                 entry["supported"] = step.supported
+
+    @staticmethod
+    def _format_hint(tool_id: int, hint: str) -> str:
+        """Panel-only hint format: a '# ToolID <id>' header, NOTE labels dropped."""
+        lines = [
+            "# " + line[len("# NOTE: "):] if line.startswith("# NOTE: ") else line
+            for line in hint.split("\n")
+        ]
+        return "\n".join([f"# ToolID {tool_id}", *lines])
 
     def _workflow_steps_to_dicts(
         self, workflow_steps: list[Any] | None
