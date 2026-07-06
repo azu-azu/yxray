@@ -437,6 +437,19 @@ def _build_pyproject(workflow: pathlib.Path, code: str) -> str:
 
 
 
+def _md_code_cell(code: str) -> str:
+    """Render a (possibly multi-line) code snippet inside a markdown table cell.
+
+    Each line becomes its own inline-code span, joined with <br> so GFM keeps
+    the line structure without breaking the table row.
+    """
+    rendered: list[str] = []
+    for line in code.split("\n"):
+        escaped = line.replace("|", "\\|")
+        rendered.append(f"`{escaped}`" if escaped.strip() else "")
+    return "<br>".join(rendered)
+
+
 def _write_explain_outputs(
     workflow: pathlib.Path,
     steps: list[Any],
@@ -444,6 +457,7 @@ def _write_explain_outputs(
     md_code: str,
     out_dir: pathlib.Path | None = None,
     warnings: list[Any] | None = None,
+    detail_snippets: dict[int, str] | None = None,
 ) -> None:
     from yxray.staleness import StaleFieldWarning
 
@@ -453,6 +467,7 @@ def _write_explain_outputs(
     py_path = out_dir / f"{workflow.stem}.py"
     pyproject_path = out_dir / "pyproject.toml"
 
+    snippets = detail_snippets or {}
     md_lines: list[str] = [
         f"# {workflow.name}",
         "",
@@ -463,11 +478,11 @@ def _write_explain_outputs(
     ]
     for step in steps:
         desc = (step.description or "").replace("|", "\\|")
-        hint = step.python_hint.replace("|", "\\|").replace("\n", " ")
+        hint = _md_code_cell(snippets.get(step.tool_id, step.python_hint))
         supported = step.supported
         md_lines.append(
             f"| {step.tool_id} | {step.short_type} | {step.category}"
-            f" | {desc} | `{hint}` | {supported} |"
+            f" | {desc} | {hint} | {supported} |"
         )
 
     if warnings:
@@ -532,7 +547,7 @@ def _explain_impl(  # noqa: B008
       acd ex workflow.yxmd -o build/
     """
     from yxray.explain import explain
-    from yxray.scaffold import scaffold, scaffold_simple
+    from yxray.scaffold import node_code_snippets, scaffold, scaffold_simple
     from yxray.staleness import detect_stale_select_fields
 
     if workflow is None:
@@ -558,6 +573,7 @@ def _explain_impl(  # noqa: B008
         md_code=scaffold_simple(doc, warnings_by_tool=warnings_by_tool),
         out_dir=output,
         warnings=stale_warnings,
+        detail_snippets=node_code_snippets(doc),
     )
 
 

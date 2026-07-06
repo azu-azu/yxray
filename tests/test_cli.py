@@ -378,6 +378,55 @@ def test_explain_output_flag_writes_to_custom_dir(tmp_path: pathlib.Path) -> Non
     assert (out_dir / "pyproject.toml").exists()
 
 
+FILTER_EXPR_YXMD = b"""<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2020.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput">
+        <Position x="60" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration>
+        <File>C:\\Data\\sales.csv</File>
+      </Configuration></Properties>
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter">
+        <Position x="160" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration>
+        <Expression>[Country] = "Japan"</Expression>
+      </Configuration></Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="Output"/>
+      <Destination ToolID="2" Connection="Input"/>
+    </Connection>
+  </Connections>
+</AlteryxDocument>
+"""
+
+
+def test_explain_md_table_uses_config_driven_hints(tmp_path: pathlib.Path) -> None:
+    """The Tool Summary table shows the same per-node snippet as the scaffold
+    section (and the inspect panel), not the generic tool-registry hint."""
+    workflow = tmp_path / "wf.yxmd"
+    workflow.write_bytes(FILTER_EXPR_YXMD)
+    out_dir = tmp_path / "out"
+
+    result = runner.invoke(app, ["explain", str(workflow), "--output", str(out_dir)])
+
+    assert result.exit_code == 0
+    md = (out_dir / "wf.md").read_text(encoding="utf-8")
+    table = md.split("## Python Scaffold")[0]
+    # Config-driven snippet (multi-line → <br>-joined code spans) in the table
+    assert "df2 = df1[df1[\"Country\"] == 'Japan']" in table
+    assert "<br>" in table
+    # Generic registry hint is gone for the filter row
+    assert "df = df[mask]" not in table
+
+
 def test_explain_output_flag_existing_dir_writes_files(tmp_path: pathlib.Path) -> None:
     """--output pointing at an existing directory still writes all three files."""
     workflow = tmp_path / "wf.yxmd"

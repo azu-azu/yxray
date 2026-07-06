@@ -785,7 +785,8 @@ _GENERATORS: dict[str, Any] = {
 }
 
 # Segments whose scaffold snippet is self-contained enough to show as a
-# single node's "python hint" (used by the inspect report's right pane).
+# single node's "python hint" (used by the inspect report's right pane and
+# the explain .md Tool Summary table).
 # Excludes Input/Output (depend on file paths, which the panel already shows
 # separately) and Text Input (would enumerate every data row — the panel
 # shows the data).
