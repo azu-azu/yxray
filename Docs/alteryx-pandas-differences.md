@@ -298,6 +298,32 @@ df = pd.merge(
 )
 ```
 
+### NOTE コメントを見て手動で substring join を書く場合の注意
+
+`pd.merge` は等価結合しかできないため、FindAny の部分一致を忠実に再現するには
+`lookup_value in search_value` のような contains 判定を自前で書くことになる。その際、
+素朴な実装だと以下の2点で誤マッチしやすい。
+
+- **NaN は `str(nan)` で `"nan"` という文字列になる** — lookup 側に偶然 `"nan"` という
+  値があると誤マッチする。`pd.isna()` で事前に弾く。
+- **空文字はすべての文字列に含まれる** — `"" in "ABC-123"` は `True`。lookup 側に
+  空文字の行があると全行にマッチしてしまう。空文字をマッチ対象から除外するか、
+  Alteryx の実挙動（全件マッチ/無視）を確認したうえで扱いを決める。
+
+```python
+def is_find_any_match(source_value: object, lookup_value: object) -> bool:
+    if pd.isna(source_value) or pd.isna(lookup_value):
+        return False
+    lookup_text = str(lookup_value)
+    if not lookup_text:
+        return False  # 空文字の扱いはAlteryx実測で確認
+    return lookup_text in str(source_value)
+```
+
+複数マッチ時に出力行が何行になるか（`ReplaceMultipleFound=True` と `ReplaceMode=Append`
+の組み合わせ）は Alteryx 側の実測でしか確定できないため、scaffold はそこまで踏み込まず
+`pd.merge(how="left")` + NOTE コメントに留めている。
+
 ---
 
 ## まとめ: 変換レビューのチェックポイント
@@ -320,6 +346,7 @@ df = pd.merge(
 | `ToDate(val)` | `pd.to_datetime(val)` |
 | FindReplace FindAny + Append | `pd.merge(how="left")` に変換。部分一致の意味論は要確認 |
 | FindReplace FindAny + ReplaceMultipleFound=False | 右側を `drop_duplicates()` してから merge |
+| FindReplace FindAny を自前で substring join 実装する場合 | `pd.isna()` で NaN 除外、空文字 lookup は全件マッチしうるので要ガード |
 
 ---
 

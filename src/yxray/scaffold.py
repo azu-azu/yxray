@@ -637,7 +637,7 @@ def _gen_findreplace(
             if whole_match
             else (
                 "# Find Replace (FindAny — translated as left join;"
-                " verify match semantics)"
+                " verify match semantics, incl. NaN/empty-string handling)"
             )
         )
         if any_match and not replace_multiple_found:
