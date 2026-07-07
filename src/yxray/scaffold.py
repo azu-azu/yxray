@@ -288,7 +288,7 @@ def _gen_select(
         if not selected:
             col_lines.append(f'    SelectColumnEdit("{name}", selected=False),')
         elif new_name:
-            col_lines.append(f'    SelectColumnEdit("{name}", "{new_name}"),')
+            col_lines.append(f'    SelectColumnEdit("{name}", new_name="{new_name}"),')
         else:
             col_lines.append(f'    SelectColumnEdit("{name}"),')
     col_lines.append("]")
