@@ -47,6 +47,27 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
     assert 'df1["Age"] > 18' in hint
 
 
+def test_python_hint_copy_indents_for_def_body() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": "[Age] > 18"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+    html = SingleGraphRenderer().render(doc)
+
+    assert "function _indentForFunctionBody(text)" in html
+    assert "_clipboardWrite(_indentForFunctionBody(entry.python_hint)" in html
+
+
 def test_select_python_hint_matches_scaffold_snippet() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),

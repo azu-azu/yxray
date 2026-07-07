@@ -2503,7 +2503,9 @@ function _renderPanelEntry(entry, container) {
     var hintCopyBtn = document.createElement('button');
     hintCopyBtn.className = 'panel-action-btn';
     hintCopyBtn.textContent = 'Copy';
-    hintCopyBtn.onclick = function() { _clipboardWrite(entry.python_hint, hintCopyBtn, 'Copy'); };
+    hintCopyBtn.onclick = function() {
+      _clipboardWrite(_indentForFunctionBody(entry.python_hint), hintCopyBtn, 'Copy');
+    };
     hintKeyRow.appendChild(hintKey);
     hintKeyRow.appendChild(hintCopyBtn);
     var hintVal = document.createElement('div');
@@ -2821,6 +2823,13 @@ function downloadClusterJSON() {
   document.body.appendChild(a);
   a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+
+function _indentForFunctionBody(text) {
+  return String(text || '').split('\n').map(function(line) {
+    return line ? '    ' + line : '';
+  }).join('\n');
 }
 
 

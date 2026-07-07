@@ -453,6 +453,7 @@ def _write_explain_outputs(
     pyproject_path = out_dir / "pyproject.toml"
 
     md_lines: list[str] = [f"# {workflow.name}"]
+    indented_md_code = _indent_for_function_body(md_code.rstrip("\n"))
 
     if warnings:
         md_lines += [
@@ -475,7 +476,7 @@ def _write_explain_outputs(
         "## Python Scaffold",
         "",
         "```python",
-        md_code.rstrip("\n"),
+        indented_md_code,
         "```",
         "",
     ]
@@ -486,6 +487,11 @@ def _write_explain_outputs(
     typer.echo(f"Report     → {out_path}", err=True)
     typer.echo(f"Template   → {py_path}", err=True)
     typer.echo(f"Pyproject  → {pyproject_path}", err=True)
+
+
+def _indent_for_function_body(code: str) -> str:
+    """Indent code so the whole block can be pasted under a def statement."""
+    return "\n".join(f"    {line}" if line else "" for line in code.splitlines())
 
 
 def _explain_impl(  # noqa: B008
