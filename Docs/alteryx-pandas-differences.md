@@ -280,20 +280,29 @@ Alteryx の **FindReplace ツール**には `FindWhole`（完全一致）と `Fi
 | モード | 挙動 | scaffold の翻訳 |
 |--------|------|-----------------|
 | **FindWhole** | FieldFind の値が FieldSearch に完全一致する行を結合 | `pd.merge(how="left")` |
-| **FindAny** | FieldFind の値が FieldSearch の中に含まれる行を結合 | `pd.merge(how="left")`（※意味論的差異あり） |
+| **FindAny** | 部分一致（含意の向きは未検証。下記参照） | `pd.merge(how="left")`（※意味論的差異あり） |
 
 FindAny は本来「部分一致（substring）ジョイン」だが、ID ベースのジョインでは実質的に完全一致と同等になる場合が多い。scaffold は `pd.merge` に変換し、NOTEコメントで意味論の確認を促す。
+
+**含意の向き（どちらの値がどちらに含まれるか）は repo 内では未検証**。確認できているのは anchor と config タグの対応関係だけ。
+
+- `Targets`（メインストリーム）⇔ `FieldFind`
+- `Source`（ルックアップテーブル）⇔ `FieldSearch`
+
+（`e8121044` で実 Alteryx XML から確定し、`test_scaffold_findreplace_targets_source_anchors_route_correctly` で固定されている）
+
+一般的な Find & Replace 系ツールの UI 挙動（ルックアップ側が「探す値」を供給し、メイン側フィールドの中を検索する）に従うなら、含意は「FieldSearch（ルックアップ側）の値が FieldFind（メイン側）に含まれる」になるはずだが、**この向き自体は実 Alteryx の出力で確認したものではない**。以下のコード例はこの推定に従っているが、Alteryx 実測で向きが反転する可能性があるため鵜呑みにしないこと。
 
 `ReplaceMultipleFound="False"` のとき（最初のマッチのみ保持）は、右側 DataFrame を先に `drop_duplicates()` してから merge する。
 
 ```python
 # FindAny + ReplaceMultipleFound=False の例
-_LOOKUP_81 = df_replace[["ELID", "col_a", "col_b"]].drop_duplicates("ELID")
+_LOOKUP_12 = df_replace[["key_b", "col_a", "col_b"]].drop_duplicates("key_b")
 df = pd.merge(
     df,
-    _LOOKUP_81,
-    left_on="EL_ID",
-    right_on="ELID",
+    _LOOKUP_12,
+    left_on="key_a",
+    right_on="key_b",
     how="left",
 )
 ```
@@ -301,23 +310,28 @@ df = pd.merge(
 ### NOTE コメントを見て手動で substring join を書く場合の注意
 
 `pd.merge` は等価結合しかできないため、FindAny の部分一致を忠実に再現するには
-`lookup_value in search_value` のような contains 判定を自前で書くことになる。その際、
-素朴な実装だと以下の2点で誤マッチしやすい。
+`search_value in find_value` のような contains 判定を自前で書くことになる（`find_value`
+は `FieldFind` の値＝Targets/メイン側、`search_value` は `FieldSearch` の値＝Source/
+ルックアップ側。Alteryx の anchor 名 "Source" はルックアップ側を指すため、ここで
+「メイン側」の意味で "source" を使うと `scaffold.py` の anchor 名と衝突して誤読を招く）。
+上述の通りこの向き（needle=search_value）は推定であり未検証。素朴な実装だと、向きに
+かかわらず以下の2点で誤マッチしやすい。
 
-- **NaN は `str(nan)` で `"nan"` という文字列になる** — lookup 側に偶然 `"nan"` という
+- **NaN は `str(nan)` で `"nan"` という文字列になる** — 相手側に偶然 `"nan"` という
   値があると誤マッチする。`pd.isna()` で事前に弾く。
-- **空文字はすべての文字列に含まれる** — `"" in "ABC-123"` は `True`。lookup 側に
-  空文字の行があると全行にマッチしてしまう。空文字をマッチ対象から除外するか、
-  Alteryx の実挙動（全件マッチ/無視）を確認したうえで扱いを決める。
+- **空文字はすべての文字列に含まれる** — `"" in "ABC-123"` は `True`。needle 側
+  （下記の例では `search_value`）が空文字だと全行にマッチしてしまう。空文字を
+  マッチ対象から除外するか、Alteryx の実挙動（全件マッチ/無視）を確認したうえで
+  扱いを決める。
 
 ```python
-def is_find_any_match(source_value: object, lookup_value: object) -> bool:
-    if pd.isna(source_value) or pd.isna(lookup_value):
+def is_find_any_match(find_value: object, search_value: object) -> bool:
+    if pd.isna(find_value) or pd.isna(search_value):
         return False
-    lookup_text = str(lookup_value)
-    if not lookup_text:
+    needle = str(search_value)
+    if not needle:
         return False  # 空文字の扱いはAlteryx実測で確認
-    return lookup_text in str(source_value)
+    return needle in str(find_value)
 ```
 
 複数マッチ時に出力行が何行になるか（`ReplaceMultipleFound=True` と `ReplaceMode=Append`
@@ -346,7 +360,7 @@ def is_find_any_match(source_value: object, lookup_value: object) -> bool:
 | `ToDate(val)` | `pd.to_datetime(val)` |
 | FindReplace FindAny + Append | `pd.merge(how="left")` に変換。部分一致の意味論は要確認 |
 | FindReplace FindAny + ReplaceMultipleFound=False | 右側を `drop_duplicates()` してから merge |
-| FindReplace FindAny を自前で substring join 実装する場合 | `pd.isna()` で NaN 除外、空文字 lookup は全件マッチしうるので要ガード |
+| FindReplace FindAny を自前で substring join 実装する場合 | `pd.isna()` で NaN 除外、空文字 needle は全件マッチしうるので要ガード。含意の向き自体も未検証 |
 
 ---
 
