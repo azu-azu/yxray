@@ -408,9 +408,9 @@ FILTER_EXPR_YXMD = b"""<?xml version="1.0"?>
 """
 
 
-def test_explain_md_table_uses_config_driven_hints(tmp_path: pathlib.Path) -> None:
-    """The Tool Summary table shows the same per-node snippet as the scaffold
-    section (and the inspect panel), not the generic tool-registry hint."""
+def test_explain_md_omits_tool_summary(tmp_path: pathlib.Path) -> None:
+    """The .md report no longer emits the Tool Summary table; it goes straight
+    to the Python Scaffold (warnings section aside)."""
     workflow = tmp_path / "wf.yxmd"
     workflow.write_bytes(FILTER_EXPR_YXMD)
     out_dir = tmp_path / "out"
@@ -419,12 +419,11 @@ def test_explain_md_table_uses_config_driven_hints(tmp_path: pathlib.Path) -> No
 
     assert result.exit_code == 0
     md = (out_dir / "wf.md").read_text(encoding="utf-8")
-    table = md.split("## Python Scaffold")[0]
-    # Config-driven snippet (multi-line → <br>-joined code spans) in the table
-    assert "df2 = df1[df1[\"Country\"] == 'Japan']" in table
-    assert "<br>" in table
-    # Generic registry hint is gone for the filter row
-    assert "df = df[mask]" not in table
+    assert "## Tool Summary" not in md
+    assert "| ToolID | Type | Category |" not in md
+    # The Python Scaffold section is still produced
+    assert "## Python Scaffold" in md
+    assert "df2 = df1[df1[\"Country\"] == 'Japan']" in md
 
 
 def test_explain_output_flag_existing_dir_writes_files(tmp_path: pathlib.Path) -> None:
