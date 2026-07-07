@@ -214,7 +214,7 @@ def _gen_filter(
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         pandas_expr = _translate_expr(expr, df_in)
-        lines = ["# NOTE: Alteryx expression — review translation"]
+        lines = ["# Alteryx expression — review translation"]
         if _DATE_EXPR_RE.search(pandas_expr):
             lines += [
                 "# WARNING: date comparison — columns read from CSV are"
@@ -226,7 +226,7 @@ def _gen_filter(
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
         return (
-            "# NOTE: from Simple-mode filter settings — review translation\n"
+            "# from Simple-mode filter settings — review translation\n"
             f"{df_out} = {df_in}[{simple_expr}]"
         )
     return f"{df_out} = {df_in}  # TODO: Filter expression missing"
@@ -339,7 +339,7 @@ def _gen_formula(
         f'{f} = {_translate_expr(e, df_in)}'
         for f, e in formulas
     )
-    note = "# NOTE: Alteryx expressions — review translation\n"
+    note = "# Alteryx expressions — review translation\n"
     if len(formulas) == 1:
         return f"{note}{df_out} = {df_in}.assign({assigns})"
     return f"{note}{df_out} = {df_in}.assign(\n    {assigns},\n)"
@@ -576,7 +576,7 @@ def _gen_text_input(
         rows.append(cells)
 
     lines = [
-        "# NOTE: Text Input values are strings — cast dtypes if needed",
+        "# Text Input values are strings — cast dtypes if needed",
         f"{df_out} = pd.DataFrame({{",
     ]
     for i, name in enumerate(field_names):
@@ -633,10 +633,10 @@ def _gen_findreplace(
             else f'    left_on="{field_find}",\n    right_on="{field_search}",'
         )
         note = (
-            "# NOTE: Find Replace (append fields on whole match) as a left join"
+            "# Find Replace (append fields on whole match) as a left join"
             if whole_match
             else (
-                "# NOTE: Find Replace (FindAny — translated as left join;"
+                "# Find Replace (FindAny — translated as left join;"
                 " verify match semantics)"
             )
         )
@@ -674,7 +674,7 @@ def _gen_findreplace(
     if whole_match and replace_field:
         map_var = f"_MAP_{tool_id}"
         return (
-            "# NOTE: Find Replace (whole match) via lookup map"
+            "# Find Replace (whole match) via lookup map"
             " — review translation\n"
             f'{map_var} = dict(zip({df_r}["{field_search}"],'
             f' {df_r}["{replace_field}"]))\n'
@@ -704,7 +704,7 @@ def _gen_appendfields(
     df_t = _frame_name(names, t_id, "df_targets")
     df_s = _frame_name(names, s_id, "df_sources")
     return (
-        "# NOTE: Append Fields — every source record is appended"
+        "# Append Fields — every source record is appended"
         " to every target record\n"
         f'{df_out} = pd.merge({df_t}, {df_s}, how="cross")'
     )
@@ -726,7 +726,7 @@ def _gen_createpoints(
     y = fields.get("@fieldY", "") if isinstance(fields, dict) else ""
     if x and y:
         return (
-            "# NOTE: spatial tool — requires geopandas\n"
+            "# spatial tool — requires geopandas\n"
             f"{df_out} = gpd.GeoDataFrame(\n"
             f"    {df_in},\n"
             f'    geometry=gpd.points_from_xy({df_in}["{x}"], {df_in}["{y}"]),\n'
@@ -753,7 +753,7 @@ def _gen_spatialmatch(
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
     return (
-        "# NOTE: spatial tool — requires geopandas;"
+        "# spatial tool — requires geopandas;"
         " review predicate and output fields\n"
         f"{df_out} = gpd.sjoin(\n"
         f"    {df_t},\n"
@@ -785,8 +785,7 @@ _GENERATORS: dict[str, Any] = {
 }
 
 # Segments whose scaffold snippet is self-contained enough to show as a
-# single node's "python hint" (used by the inspect report's right pane and
-# the explain .md Tool Summary table).
+# single node's "python hint" (used by the inspect report's right pane).
 # Excludes Input/Output (depend on file paths, which the panel already shows
 # separately) and Text Input (would enumerate every data row — the panel
 # shows the data).

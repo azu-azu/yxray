@@ -137,7 +137,7 @@ _COLS_108 = [
 
 ### Markdown レポート（`.md` ファイル）
 
-Tool Summary テーブルの下に `## Warnings` セクションが追加される。
+レポート冒頭の見出しの下に `## Warnings` セクションが追加される。
 
 | ToolID | Field | Renamed To | Renamed At | Message |
 |--------|-------|------------|------------|---------|
