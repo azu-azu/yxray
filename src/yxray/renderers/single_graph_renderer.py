@@ -103,12 +103,8 @@ class SingleGraphRenderer:
 
     @staticmethod
     def _format_hint(tool_id: int, hint: str) -> str:
-        """Panel-only hint format: a '# ToolID <id>' header, NOTE labels dropped."""
-        lines = [
-            "# " + line[len("# NOTE: "):] if line.startswith("# NOTE: ") else line
-            for line in hint.split("\n")
-        ]
-        return "\n".join([f"# ToolID {tool_id}", *lines])
+        """Panel-only hint format: prepend a '# ToolID <id>' header."""
+        return "\n".join([f"# ToolID {tool_id}", hint])
 
     def _workflow_steps_to_dicts(
         self, workflow_steps: list[Any] | None
