@@ -472,19 +472,24 @@ def _write_explain_outputs(
                     f" | {w.renamed_at} | {msg} |"
                 )
 
-    # Python code is emitted bare (indented for a def body, which Markdown
-    # renders as an indented code block); only the original <Node> XML gets
-    # a fenced block, placed right after each ToolID's code.
+    # One fenced python block per tool (indented for a def body), each
+    # followed by the original <Node> XML in a fenced xml block. An extra
+    # blank line after the xml fence leaves a two-line gap before the next
+    # tool.
     md_lines += [
         "",
         "## Python Scaffold",
         "",
+        "```python",
         _indent_for_function_body("\n".join(md_header).rstrip("\n")),
+        "```",
     ]
     for block in md_blocks:
         md_lines += [
             "",
+            "```python",
             _indent_for_function_body("\n".join(block.lines)),
+            "```",
         ]
         node_xml = xml_by_tool.get(block.tool_id, "")
         if node_xml:
@@ -493,6 +498,7 @@ def _write_explain_outputs(
                 "```xml",
                 _indent_for_function_body(node_xml),
                 "```",
+                "",
             ]
     md_lines.append("")
 
