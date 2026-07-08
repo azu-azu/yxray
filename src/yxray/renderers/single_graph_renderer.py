@@ -209,6 +209,7 @@ class SingleGraphRenderer:
                 "tool_type": node.tool_type.split(".")[-1],
                 "containerId": node.container_id,
                 "config": self._clean_config(node),
+                "raw_xml": node.raw_xml,
             }
             for node in data_nodes
         }

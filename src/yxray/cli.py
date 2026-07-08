@@ -440,7 +440,9 @@ def _build_pyproject(workflow: pathlib.Path, code: str) -> str:
 def _write_explain_outputs(
     workflow: pathlib.Path,
     py_code: str,
-    md_code: str,
+    md_header: list[str],
+    md_blocks: list[Any],
+    xml_by_tool: dict[int, str],
     out_dir: pathlib.Path | None = None,
     warnings: list[Any] | None = None,
 ) -> None:
@@ -453,7 +455,6 @@ def _write_explain_outputs(
     pyproject_path = out_dir / "pyproject.toml"
 
     md_lines: list[str] = [f"# {workflow.name}"]
-    indented_md_code = _indent_for_function_body(md_code.rstrip("\n"))
 
     if warnings:
         md_lines += [
@@ -471,15 +472,35 @@ def _write_explain_outputs(
                     f" | {w.renamed_at} | {msg} |"
                 )
 
+    # One fenced python block per tool (indented for a def body), each
+    # followed by the original <Node> XML in a fenced xml block. An extra
+    # blank line after the xml fence leaves a two-line gap before the next
+    # tool.
     md_lines += [
         "",
         "## Python Scaffold",
         "",
         "```python",
-        indented_md_code,
+        _indent_for_function_body("\n".join(md_header).rstrip("\n")),
         "```",
-        "",
     ]
+    for block in md_blocks:
+        md_lines += [
+            "",
+            "```python",
+            _indent_for_function_body("\n".join(block.lines)),
+            "```",
+        ]
+        node_xml = xml_by_tool.get(block.tool_id, "")
+        if node_xml:
+            md_lines += [
+                "",
+                "```xml",
+                _indent_for_function_body(node_xml),
+                "```",
+                "",
+            ]
+    md_lines.append("")
 
     out_path.write_text("\n".join(md_lines), encoding="utf-8")
     py_path.write_text(py_code, encoding="utf-8")
@@ -521,7 +542,7 @@ def _explain_impl(  # noqa: B008
       acd explain workflow.yxmd
       acd ex workflow.yxmd -o build/
     """
-    from yxray.scaffold import scaffold, scaffold_simple
+    from yxray.scaffold import scaffold, scaffold_simple_blocks
     from yxray.staleness import detect_stale_select_fields
 
     if workflow is None:
@@ -540,10 +561,15 @@ def _explain_impl(  # noqa: B008
     for w in stale_warnings:
         warnings_by_tool.setdefault(w.tool_id, []).append(w.message)
 
+    md_header, md_blocks = scaffold_simple_blocks(
+        doc, warnings_by_tool=warnings_by_tool
+    )
     _write_explain_outputs(
         workflow,
         py_code=scaffold(doc, warnings_by_tool=warnings_by_tool),
-        md_code=scaffold_simple(doc, warnings_by_tool=warnings_by_tool),
+        md_header=md_header,
+        md_blocks=md_blocks,
+        xml_by_tool={int(n.tool_id): n.raw_xml for n in doc.nodes},
         out_dir=output,
         warnings=stale_warnings,
     )

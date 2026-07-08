@@ -2524,6 +2524,30 @@ function _renderPanelEntry(entry, container) {
   } else {
     renderConfigRows(entry, container);
   }
+  // Original <Node> XML, always the last section of the panel.
+  if (entry.raw_xml) {
+    var srcRow = document.createElement('div');
+    srcRow.className = 'config-row';
+    var srcKeyRow = document.createElement('div');
+    srcKeyRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    var srcKey = document.createElement('div');
+    srcKey.className = 'config-key';
+    srcKey.textContent = 'source (Node XML)';
+    var srcCopyBtn = document.createElement('button');
+    srcCopyBtn.className = 'panel-action-btn';
+    srcCopyBtn.textContent = 'Copy';
+    srcCopyBtn.onclick = function() {
+      _clipboardWrite(entry.raw_xml, srcCopyBtn, 'Copy');
+    };
+    srcKeyRow.appendChild(srcKey);
+    srcKeyRow.appendChild(srcCopyBtn);
+    var srcVal = document.createElement('div');
+    srcVal.className = 'config-val';
+    srcVal.textContent = entry.raw_xml;
+    srcRow.appendChild(srcKeyRow);
+    srcRow.appendChild(srcVal);
+    container.appendChild(srcRow);
+  }
 }
 
 function closePanel() {

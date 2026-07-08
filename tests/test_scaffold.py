@@ -427,6 +427,53 @@ def test_scaffold_select_emits_helpers() -> None:
     assert "def apply_select_edits(" in code
 
 
+def test_scaffold_select_always_warns_about_stale_xml() -> None:
+    """Every Select block — scaffold, simple scaffold, and the panel's python
+    hint — carries the always-on warning that Select XML can be stale and
+    must be verified against the Alteryx GUI."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [{"@field": "Name", "@selected": "True"}]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    expected = "# WARNING: Select XML may be stale"
+    assert expected in scaffold(doc)
+    assert expected in scaffold_simple(doc)
+    assert expected in node_code_snippets(doc)[2]
+    assert "Always verify in the GUI" in scaffold(doc)
+
+
+def test_scaffold_select_stale_warning_even_without_columns() -> None:
+    """The stale-XML warning appears even when no columns could be parsed."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0, config={},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# WARNING: Select XML may be stale" in code
+    assert "# TODO: Select — no columns found" in code
+
+
 def test_scaffold_select_unknown_deselected_warning() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),

@@ -150,6 +150,28 @@ def _parse_one(path: pathlib.Path, *, filter_ui_tools: bool = True) -> WorkflowD
     return _tree_to_workflow(tree, filepath=str(path), filter_ui_tools=filter_ui_tools)
 
 
+def _node_raw_xml(elem: etree._Element) -> str:
+    """Serialize a <Node> element back to XML, dedented to column 0.
+
+    lxml keeps the original whitespace, so child lines carry the file's
+    absolute indentation while the opening tag starts at column 0.
+    Strip the common indent of the continuation lines so the block reads
+    as a standalone snippet.
+    """
+    raw = etree.tostring(elem, encoding="unicode", with_tail=False).rstrip()
+    lines = raw.splitlines()
+    rest = [line for line in lines[1:] if line.strip()]
+    if not rest:
+        return raw
+    indent = min(len(line) - len(line.lstrip()) for line in rest)
+    if indent == 0:
+        return raw
+    dedented = [lines[0]] + [
+        line[indent:] if line.strip() else "" for line in lines[1:]
+    ]
+    return "\n".join(dedented)
+
+
 def _parse_nodes(
     root: etree._Element,
     *,
@@ -216,6 +238,7 @@ def _parse_nodes(
                 height=height,
                 config=config,
                 container_id=container_id,
+                raw_xml=_node_raw_xml(node_elem),
             )
         )
     return nodes_list

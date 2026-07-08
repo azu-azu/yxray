@@ -308,3 +308,36 @@ def test_parse_error_is_parse_error_subclass(tmp_path: pathlib.Path) -> None:
 
     with pytest.raises(ParseError):
         parse(path_a, path_b)
+
+
+# ---------------------------------------------------------------------------
+# Raw <Node> XML capture
+# ---------------------------------------------------------------------------
+
+
+def test_parse_captures_raw_node_xml(tmp_path: pathlib.Path) -> None:
+    """Each parsed node keeps its original <Node> XML source, dedented so the
+    opening and closing tags sit at column 0."""
+    path_a = write_fixture(tmp_path, "workflow_a.yxmd", MINIMAL_YXMD)
+    path_b = write_fixture(tmp_path, "workflow_b.yxmd", MINIMAL_YXMD)
+
+    doc_a, _ = parse(path_a, path_b)
+
+    node1 = next(n for n in doc_a.nodes if int(n.tool_id) == 1)
+    assert node1.raw_xml.startswith('<Node ToolID="1">')
+    assert node1.raw_xml.rstrip().endswith("</Node>")
+    # Dedented: closing tag at column 0, children keep relative indentation
+    lines = node1.raw_xml.splitlines()
+    assert lines[-1] == "</Node>"
+    assert any(line.startswith("  <GuiSettings") for line in lines)
+    # Original configuration content is preserved
+    assert 'File RecordLimit="0"' in node1.raw_xml
+    assert "data.csv" in node1.raw_xml
+
+
+def test_programmatic_node_has_empty_raw_xml() -> None:
+    """AlteryxNode built without XML defaults to raw_xml == ''."""
+    from yxray.models.types import ToolID
+
+    node = AlteryxNode(tool_id=ToolID(1), tool_type="Filter", x=0.0, y=0.0)
+    assert node.raw_xml == ""
