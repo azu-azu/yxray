@@ -491,7 +491,7 @@ def _write_explain_outputs(
             md_lines += [
                 "",
                 "```xml",
-                node_xml,
+                _indent_for_function_body(node_xml),
                 "```",
             ]
     md_lines.append("")
