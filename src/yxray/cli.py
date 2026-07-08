@@ -472,22 +472,19 @@ def _write_explain_outputs(
                     f" | {w.renamed_at} | {msg} |"
                 )
 
+    # Python code is emitted bare (indented for a def body, which Markdown
+    # renders as an indented code block); only the original <Node> XML gets
+    # a fenced block, placed right after each ToolID's code.
     md_lines += [
         "",
         "## Python Scaffold",
         "",
-        "```python",
         _indent_for_function_body("\n".join(md_header).rstrip("\n")),
-        "```",
     ]
-    # One python block per tool, each followed by the original <Node> XML so
-    # generated code and its Alteryx source can be compared per ToolID.
     for block in md_blocks:
         md_lines += [
             "",
-            "```python",
             _indent_for_function_body("\n".join(block.lines)),
-            "```",
         ]
         node_xml = xml_by_tool.get(block.tool_id, "")
         if node_xml:
