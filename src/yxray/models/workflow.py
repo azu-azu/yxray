@@ -28,6 +28,12 @@ class AlteryxNode:
     """ToolContainer that owns this node, or None if the node is not inside a container.
     Parsed from Properties/EngineSettings/@ToolContainerID.
     """
+    raw_xml: str = ""
+    """Original <Node>...</Node> XML source for this tool, dedented.
+    Used for side-by-side display next to generated Python (explain .md,
+    inspect report panel). Empty for programmatically-built nodes.
+    Not part of diff/normalization — those operate on `config` only.
+    """
 
     def __post_init__(self) -> None:
         if self.tool_id <= 0:

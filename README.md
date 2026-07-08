@@ -165,6 +165,8 @@ acd explain workflow.yxmd --json | jq '.[].python_hint'
 
 Unsupported tools are flagged with a `# TODO` comment.
 
+The `.md` report follows each ToolID's Python snippet with the original Alteryx `<Node>…</Node>` XML, so generated code and its source configuration can be compared per tool. The inspect report's right pane shows the same XML as a **source (Node XML)** section at the bottom.
+
 Also writes `output/pyproject.toml` — a `[project]` scaffold with detected dependencies (`pandas`, `openpyxl` when Excel I/O is present) and a `[project.scripts]` entry keyed by the workflow filename.
 
 Use `--output`/`-o` to write the `.md`/`.py`/`pyproject.toml` trio into a different directory instead of `output/` (created if missing):

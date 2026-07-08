@@ -173,3 +173,24 @@ def test_manual_cluster_controls_are_available() -> None:
     assert "yxray-manual-clusters-" in html
     assert "multiselect: true" in html
     assert '"manual_clusters": [{"label": "prep", "tool_ids": [1, 2]}]' in html
+
+
+def test_config_map_includes_raw_node_xml() -> None:
+    """The panel's config map carries each node's original <Node> XML so the
+    report can show it as a 'source' section at the bottom of the right pane."""
+    raw = '<Node ToolID="1">\n  <GuiSettings Plugin="X"/>\n</Node>'
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="InputData", x=0, y=0, raw_xml=raw
+        ),
+    )
+    config_map = _config_map(doc)
+    assert config_map["1"]["raw_xml"] == raw
+
+
+def test_panel_renders_source_xml_section() -> None:
+    """The JS bundle renders the raw XML as the last panel section."""
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
+    html = SingleGraphRenderer().render(doc)
+    assert "source (Node XML)" in html
+    assert "entry.raw_xml" in html
