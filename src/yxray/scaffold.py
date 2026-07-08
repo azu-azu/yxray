@@ -239,6 +239,17 @@ def _gen_filter(
     return f"{df_out} = {df_in}  # TODO: Filter expression missing"
 
 
+# Select tools always carry this warning: the .yxmd XML keeps the Select
+# state as of some earlier save, so it can silently disagree with what the
+# Alteryx GUI actually shows (e.g. a field the GUI flags as "not found" /
+# 見つかりません still looks like a regular entry in the XML).
+_SELECT_STALE_XML_WARNING = (
+    "# WARNING: Select XML may be stale (saved-state) and can differ from the\n"
+    '# actual Select contents — fields shown as "not found" in the Alteryx GUI\n'
+    "# may still appear here as regular entries. Always verify in the GUI."
+)
+
+
 def _gen_select(
     tool_id: int,
     segment: str,
@@ -266,7 +277,10 @@ def _gen_select(
         edits.append((name, new_name, selected))
 
     if not edits:
-        return f"{df_out} = {df_in}  # TODO: Select — no columns found"
+        return (
+            f"{_SELECT_STALE_XML_WARNING}\n"
+            f"{df_out} = {df_in}  # TODO: Select — no columns found"
+        )
 
     only_unknown = (
         len(edits) == 1
@@ -279,7 +293,7 @@ def _gen_select(
     )
 
     var = f"_COLS_{tool_id}"
-    col_lines: list[str] = []
+    col_lines: list[str] = [_SELECT_STALE_XML_WARNING]
     if only_unknown:
         col_lines.append(
             "# WARNING: Select only specifies *Unknown — no explicit column edits;"
