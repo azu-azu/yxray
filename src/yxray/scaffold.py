@@ -197,10 +197,11 @@ def _simple_filter_pandas(config: dict[str, Any], df_var: str) -> str:
         return f'({col}.isna() | ({col} == ""))'
     if operator == "IsNotEmpty":
         return f'({col}.notna() & ({col} != ""))'
+    # Alteryx Contains is a literal (non-regex) substring match: regex=False.
     if operator == "Contains":
-        return f'{col}.str.contains("{operand}", na=False)'
+        return f'{col}.str.contains("{operand}", regex=False, na=False)'
     if operator == "NotContains":
-        return f'~{col}.str.contains("{operand}", na=False)'
+        return f'~{col}.str.contains("{operand}", regex=False, na=False)'
     op = _SIMPLE_FILTER_OPS.get(operator)
     if op is None:
         return ""
