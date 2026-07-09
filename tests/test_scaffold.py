@@ -278,6 +278,117 @@ def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
     assert "df2 = df1  # TODO: Filter expression missing" in code
 
 
+# ── Filter mask splitting (issue #33) ──────────────────────────────────────
+
+
+def _expr_filter_doc(expr: str) -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": expr},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+def test_scaffold_filter_three_operands_split_into_masks() -> None:
+    code = scaffold_simple(_expr_filter_doc("[a] = 1 AND [b] = 2 AND [c] = 3"))
+    assert "# [a] = 1" in code
+    assert 'cond_1 = df1["a"] == 1' in code
+    assert "# [b] = 2" in code
+    assert 'cond_2 = df1["b"] == 2' in code
+    assert "# [c] = 3" in code
+    assert 'cond_3 = df1["c"] == 3' in code
+    assert "df2 = df1[cond_1 & cond_2 & cond_3]" in code
+
+
+def test_scaffold_filter_or_chain_split_joins_with_pipe() -> None:
+    code = scaffold_simple(_expr_filter_doc("[a] = 1 OR [b] = 2 OR [c] = 3"))
+    assert "df2 = df1[cond_1 | cond_2 | cond_3]" in code
+
+
+def test_scaffold_filter_two_long_operands_split_into_masks() -> None:
+    # The issue #33 headline example: two negated conditions whose one-line
+    # form exceeds the 88-column limit.
+    code = scaffold_simple(
+        _expr_filter_doc('!Contains([Status], "drop") AND !IsEmpty([Status])')
+    )
+    assert '# !Contains([Status], "drop")' in code
+    assert (
+        "cond_1 = ~df1[\"Status\"].str.contains('drop', case=False,"
+        " regex=False, na=False)" in code
+    )
+    assert "# !IsEmpty([Status])" in code
+    assert 'cond_2 = ~(df1["Status"].isna() | (df1["Status"] == ""))' in code
+    assert "df2 = df1[cond_1 & cond_2]" in code
+
+
+def test_scaffold_filter_two_short_operands_stay_one_line() -> None:
+    code = scaffold_simple(_expr_filter_doc('[Age] > 18 AND [Status] = "Active"'))
+    assert "df2 = df1[(df1[\"Age\"] > 18) & (df1[\"Status\"] == 'Active')]" in code
+    assert "cond_1" not in code
+
+
+def test_scaffold_filter_line_length_boundary_88_stays_one_line() -> None:
+    # One-line form is exactly 88 columns — at the limit, not over it.
+    field = "x" * 33
+    code = scaffold_simple(
+        _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
+    )
+    line = f"df2 = df1[(df1[\"{field}\"] > 18) & (df1[\"Status\"] == 'Active')]"
+    assert len(line) == 88
+    assert line in code
+    assert "cond_1" not in code
+
+
+def test_scaffold_filter_line_length_boundary_89_splits() -> None:
+    # One character longer than the previous test: 89 columns — splits.
+    field = "x" * 34
+    code = scaffold_simple(
+        _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
+    )
+    assert f'cond_1 = df1["{field}"] > 18' in code
+    assert "cond_2 = df1[\"Status\"] == 'Active'" in code
+    assert "df2 = df1[cond_1 & cond_2]" in code
+
+
+def test_scaffold_filter_multiline_expression_comment_not_broken() -> None:
+    expr = '!Contains([Status],\n    "drop")\nAND !IsEmpty([Status])\nAND [a] = 1'
+    code = scaffold_simple(_expr_filter_doc(expr))
+    assert '# !Contains([Status], "drop")' in code
+    assert "df2 = df1[cond_1 & cond_2 & cond_3]" in code
+    # every comment line stays a comment (no raw fragment lines)
+    for line in code.splitlines():
+        if "drop" in line and "cond_1" not in line:
+            assert line.startswith("#")
+
+
+def test_scaffold_filter_if_expression_never_splits() -> None:
+    # np.where filters are a single operand — excluded from mask splitting
+    # even when the line is long.
+    expr = (
+        'IF [status_flag_long_name] > 100 THEN [category_column] = "keep"'
+        ' ELSE [category_column] = "discard" ENDIF'
+    )
+    code = scaffold_simple(_expr_filter_doc(expr))
+    assert "cond_1" not in code
+    assert "np.where" in code
+
+
+def test_scaffold_filter_untranslatable_expression_never_splits() -> None:
+    code = scaffold_simple(
+        _expr_filter_doc("[a] ?? weird AND [b] ?? syntax AND [c] ?? here")
+    )
+    assert "cond_1" not in code
+    assert 'df1["a"] ?? weird AND df1["b"] ?? syntax' in code
+
+
 # ── Formula ────────────────────────────────────────────────────────────────
 
 

@@ -340,6 +340,51 @@ def is_find_any_match(find_value: object, search_value: object) -> bool:
 
 ---
 
+## 16. Filter 複合条件のマスク分割と、レビュー時の `fillna("")` 整理
+
+Expression モードの Filter でトップレベルが AND/OR 連鎖の場合、scaffold は条件を
+`cond_1`, `cond_2`, … の名前付きマスクに分割して出力する（オペランド3個以上、
+または2個で1行版が88桁を超えるとき）。各マスクには元の Alteryx 式フラグメントが
+コメントで添えられる。
+
+```python
+# !Contains([Status], "drop")
+cond_1 = ~df1["Status"].str.contains('drop', case=False, regex=False, na=False)
+# !IsEmpty([Status])
+cond_2 = ~(df1["Status"].isna() | (df1["Status"] == ""))
+
+df2 = df1[cond_1 & cond_2]
+```
+
+これは同じ式の「見せ方」の変更であり、変換そのものは変えていない。
+
+### レビュー時に人間が整理してよいパターン: `fillna("")` による NULL/空文字の一本化
+
+文字列列だと分かっているなら、レビューで次のように書き換えると読みやすくなる。
+
+```python
+status = df1["Status"].fillna("")
+is_drop = status.str.contains("drop", case=False, regex=False)
+is_empty = status.eq("")
+
+df2 = df1[~is_drop & ~is_empty]
+```
+
+**scaffold はこの形を生成しない。** 理由:
+
+1. `fillna("")` は文字列列でしか成立しない型依存の書き換えで、翻訳ツールは列の型を
+   知らないまま適用することになる。
+2. Alteryx 側で `IsNull()` と `IsEmpty()` を使い分けているワークフローでは、その
+   区別自体が作者の意図かもしれない。翻訳機が勝手に潰すのは忠実な翻訳に反する。
+3. 「構文ごとの忠実な翻訳 + review translation コメントで人間がレビュー」が scaffold
+   の方針。一本化してよいかの判断はレビューする人間の責任範囲。
+
+意味のある名前（`is_drop` など）を付けて否定 `~` を結合行に残すのも同じくレビュー時の
+整理。`is_drop = ~(...)` のような「名前と中身が逆」の定義は事故のもとなので、semantic
+名を使うならマスクは肯定形で定義する。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -367,5 +412,6 @@ def is_find_any_match(find_value: object, search_value: object) -> bool:
 ## 関連実装
 
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
-- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）
+- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）、`_gen_filter`（複合条件のマスク分割）
+- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

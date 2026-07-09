@@ -15,7 +15,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from yxray.alteryx_expr import ExprTranslationError, translate_expr
+from yxray.alteryx_expr import (
+    ExprTranslationError,
+    FilterTranslation,
+    translate_expr,
+    translate_filter_masks,
+)
 from yxray.config_utils import (
     as_list,
     field_name,
@@ -208,6 +213,43 @@ def _simple_filter_pandas(config: dict[str, Any], df_var: str) -> str:
     return f"{col} {op} {operand_literal(operand)}"
 
 
+# Split an Expression-mode Filter into named masks when the top-level
+# AND/OR chain has this many operands or more; with exactly 2 operands,
+# split only when the one-line form exceeds _MASK_SPLIT_LINE_LIMIT.
+_MASK_SPLIT_MIN_OPERANDS = 3
+_MASK_SPLIT_LINE_LIMIT = 88  # ruff line-length
+
+
+def _filter_mask_lines(
+    translation: FilterTranslation,
+    df_in: str,
+    df_out: str,
+) -> list[str] | None:
+    """Split-form lines for an Expression Filter, or None to keep one line.
+
+    Two-pass rule (mechanical, so output stays stable): 3+ top-level
+    operands always split; exactly 2 split only when the rendered
+    one-line form exceeds the line-length limit as generated (the .py
+    scaffold's main() indent is not counted).
+    """
+    masks = translation.masks
+    if len(masks) < 2:
+        return None
+    if len(masks) < _MASK_SPLIT_MIN_OPERANDS:
+        one_line = f"{df_out} = {df_in}[{translation.combined}]"
+        if len(one_line) <= _MASK_SPLIT_LINE_LIMIT:
+            return None
+    lines: list[str] = []
+    for i, mask in enumerate(masks, 1):
+        lines.append(f"# {mask.fragment}")
+        lines.append(f"cond_{i} = {mask.code}")
+    joined = f" {translation.joiner} ".join(
+        f"cond_{i}" for i in range(1, len(masks) + 1)
+    )
+    lines += ["", f"{df_out} = {df_in}[{joined}]"]
+    return lines
+
+
 def _gen_filter(
     tool_id: int,
     segment: str,
@@ -221,7 +263,15 @@ def _gen_filter(
     df_out = names[tool_id]
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
-        pandas_expr = _translate_expr(expr, df_in)
+        translation: FilterTranslation | None
+        try:
+            translation = translate_filter_masks(expr, df_in)
+            pandas_expr = translation.combined
+        except ExprTranslationError:
+            translation = None
+            pandas_expr = _FIELD_RE.sub(
+                lambda m: f'{df_in}["{m.group(1)}"]', expr
+            )
         lines = ["# Alteryx expression — review translation"]
         if _DATE_EXPR_RE.search(pandas_expr):
             lines += [
@@ -229,7 +279,15 @@ def _gen_filter(
                 " strings; convert",
                 '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
             ]
-        lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
+        mask_lines = (
+            _filter_mask_lines(translation, df_in, df_out)
+            if translation is not None
+            else None
+        )
+        if mask_lines is not None:
+            lines += mask_lines
+        else:
+            lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
         return "\n".join(lines)
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
