@@ -17,7 +17,13 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-__all__ = ["ExprTranslationError", "translate_expr"]
+__all__ = [
+    "ExprTranslationError",
+    "FilterMask",
+    "FilterTranslation",
+    "translate_expr",
+    "translate_filter_masks",
+]
 
 
 class ExprTranslationError(ValueError):
@@ -62,6 +68,10 @@ _COMPARE_OPS = {
 class _Token:
     kind: str
     value: str
+    # Source offsets, so operand fragments can be reconstructed for the
+    # comments translate_filter_masks emits.
+    start: int = 0
+    end: int = 0
 
 
 def _tokenize(expr: str) -> list[_Token]:
@@ -71,12 +81,13 @@ def _tokenize(expr: str) -> list[_Token]:
         m = _TOKEN_RE.match(expr, pos)
         if not m:
             raise ExprTranslationError(f"unexpected character {expr[pos]!r}")
+        start = pos
         pos = m.end()
         kind = m.lastgroup or ""
         if kind in ("ws", "comment"):
             continue
-        tokens.append(_Token(kind, m.group()))
-    tokens.append(_Token("end", ""))
+        tokens.append(_Token(kind, m.group(), start, pos))
+    tokens.append(_Token("end", "", len(expr), len(expr)))
     return tokens
 
 
@@ -107,6 +118,14 @@ def _paren(emitted: _Emitted, min_prec: int) -> str:
 def _series(emitted: _Emitted) -> str:
     """Operand of a method call (attribute access binds tightest)."""
     return _paren(emitted, _ATOM)
+
+
+def _join_or(left: _Emitted, right: _Emitted) -> _Emitted:
+    return f"{_paren(left, _OR)} | {_paren(right, _AND)}", _OR
+
+
+def _join_and(left: _Emitted, right: _Emitted) -> _Emitted:
+    return f"{_paren(left, _AND)} & {_paren(right, _ADD)}", _AND
 
 
 def _check_args(name: str, args: list[_Emitted], count: int) -> None:
@@ -220,6 +239,21 @@ def _raise(message: str) -> str:
 
 # ── Parser ─────────────────────────────────────────────────────────────────
 
+# One top-level boolean operand: its emitted code plus the [start, stop)
+# token-index range it was parsed from (for source-fragment reconstruction).
+_Operand = tuple[_Emitted, int, int]
+
+
+def _fold_operands(
+    operands: list[_Operand],
+    join: Callable[[_Emitted, _Emitted], _Emitted],
+) -> _Operand:
+    emitted, start, stop = operands[0]
+    for right, _, right_stop in operands[1:]:
+        emitted = join(emitted, right)
+        stop = right_stop
+    return emitted, start, stop
+
 
 class _Parser:
     def __init__(self, tokens: list[_Token], df_var: str) -> None:
@@ -262,6 +296,33 @@ class _Parser:
             return self.if_expr()
         return self.or_expr()
 
+    def _operand_span(self, parse: Callable[[], _Emitted]) -> _Operand:
+        start = self.pos
+        emitted = parse()
+        return emitted, start, self.pos
+
+    def top_level_operands(self) -> tuple[list[_Operand], str]:
+        """Operands of the top-level AND/OR chain, plus the joiner (& or |).
+
+        Splits one level only: `A OR (B AND C)` yields two operands, and a
+        top-level AND chain interrupted by OR folds back into a single OR
+        operand (`A AND B OR C` yields two). IF expressions and single
+        conditions come back as one operand.
+        """
+        if self.keyword() == "if":
+            return [self._operand_span(self.if_expr)], "&"
+        operands = [self._operand_span(self.not_expr)]
+        while self.keyword() == "and":
+            self.advance()
+            operands.append(self._operand_span(self.not_expr))
+        if self.keyword() != "or":
+            return operands, "&"
+        operands = [_fold_operands(operands, _join_and)]
+        while self.keyword() == "or":
+            self.advance()
+            operands.append(self._operand_span(self.and_expr))
+        return operands, "|"
+
     def if_expr(self) -> _Emitted:
         self.expect_keyword("if")
         conditions = [self.expr()[0]]
@@ -287,16 +348,14 @@ class _Parser:
         emitted = self.and_expr()
         while self.keyword() == "or":
             self.advance()
-            right = self.and_expr()
-            emitted = (f"{_paren(emitted, _OR)} | {_paren(right, _AND)}", _OR)
+            emitted = _join_or(emitted, self.and_expr())
         return emitted
 
     def and_expr(self) -> _Emitted:
         emitted = self.not_expr()
         while self.keyword() == "and":
             self.advance()
-            right = self.not_expr()
-            emitted = (f"{_paren(emitted, _AND)} & {_paren(right, _ADD)}", _AND)
+            emitted = _join_and(emitted, self.not_expr())
         return emitted
 
     def not_expr(self) -> _Emitted:
@@ -419,3 +478,74 @@ def translate_expr(expr: str, df_var: str) -> str:
     if tokens[0].kind == "end":
         raise ExprTranslationError("empty expression")
     return _Parser(tokens, df_var).parse()
+
+
+# ── Filter mask splitting ──────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class FilterMask:
+    """One top-level boolean operand of a Filter expression.
+
+    code is the translated pandas expression; fragment is the operand's
+    original Alteryx source (comments dropped, whitespace collapsed to
+    single spaces so it is safe inside a one-line ``#`` comment).
+    """
+
+    code: str
+    fragment: str
+
+
+@dataclass(frozen=True, slots=True)
+class FilterTranslation:
+    """Result of translate_filter_masks().
+
+    combined is the whole expression as one pandas expression — identical
+    to translate_expr() output. masks/joiner carry the same expression
+    split at the top-level AND/OR chain (one level only); a single mask
+    means the expression has no top-level chain to split.
+    """
+
+    combined: str
+    masks: tuple[FilterMask, ...]
+    joiner: str  # "&" or "|" ("&" when there is only one mask)
+
+
+def _fragment(tokens: list[_Token], start: int, stop: int) -> str:
+    """Reconstruct an operand's source from its tokens.
+
+    Token values are taken verbatim; inter-token gaps (whitespace and
+    comments — the tokenizer guarantees nothing else sits between tokens)
+    collapse to a single space. Newlines inside string literals are then
+    collapsed too, so the result never breaks a ``#`` comment line.
+    """
+    parts: list[str] = []
+    prev_end = -1
+    for token in tokens[start:stop]:
+        if prev_end >= 0 and token.start > prev_end:
+            parts.append(" ")
+        parts.append(token.value)
+        prev_end = token.end
+    return " ".join("".join(parts).split())
+
+
+def translate_filter_masks(expr: str, df_var: str) -> FilterTranslation:
+    """Translate a Filter expression, split at the top-level AND/OR chain.
+
+    Raises ExprTranslationError under exactly the same conditions as
+    translate_expr(); combined always matches translate_expr() output.
+    """
+    tokens = _tokenize(expr)
+    if tokens[0].kind == "end":
+        raise ExprTranslationError("empty expression")
+    parser = _Parser(tokens, df_var)
+    operands, joiner = parser.top_level_operands()
+    if parser.peek().kind != "end":
+        raise ExprTranslationError("unexpected trailing tokens")
+    join = _join_and if joiner == "&" else _join_or
+    combined, _, _ = _fold_operands(operands, join)
+    masks = tuple(
+        FilterMask(code=emitted[0], fragment=_fragment(tokens, start, stop))
+        for emitted, start, stop in operands
+    )
+    return FilterTranslation(combined=combined[0], masks=masks, joiner=joiner)

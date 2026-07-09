@@ -1,6 +1,10 @@
 import pytest
 
-from yxray.alteryx_expr import ExprTranslationError, translate_expr
+from yxray.alteryx_expr import (
+    ExprTranslationError,
+    translate_expr,
+    translate_filter_masks,
+)
 
 
 def t(expr: str) -> str:
@@ -199,6 +203,110 @@ def test_comments_stripped() -> None:
     assert t("[a] > 1 // check\n/* block */ AND [b] > 2") == (
         '(df["a"] > 1) & (df["b"] > 2)'
     )
+
+
+# ── translate_filter_masks: top-level AND/OR splitting ─────────────────────
+
+
+def test_masks_and_chain_splits_operands() -> None:
+    result = translate_filter_masks("[a] = 1 AND [b] = 2 AND [c] = 3", "df")
+    assert result.joiner == "&"
+    assert [m.code for m in result.masks] == [
+        'df["a"] == 1',
+        'df["b"] == 2',
+        'df["c"] == 3',
+    ]
+    assert [m.fragment for m in result.masks] == [
+        "[a] = 1",
+        "[b] = 2",
+        "[c] = 3",
+    ]
+
+
+def test_masks_or_chain_splits_operands() -> None:
+    result = translate_filter_masks("[a] = 1 OR [b] = 2", "df")
+    assert result.joiner == "|"
+    assert [m.fragment for m in result.masks] == ["[a] = 1", "[b] = 2"]
+
+
+def test_masks_split_one_level_only_or_wins() -> None:
+    # AND binds tighter, so the AND group is a single OR operand.
+    result = translate_filter_masks("[a] = 1 OR [b] = 2 AND [c] = 3", "df")
+    assert result.joiner == "|"
+    assert [m.fragment for m in result.masks] == [
+        "[a] = 1",
+        "[b] = 2 AND [c] = 3",
+    ]
+
+
+def test_masks_leading_and_group_folds_into_or_operand() -> None:
+    result = translate_filter_masks("[a] = 1 AND [b] = 2 OR [c] = 3", "df")
+    assert result.joiner == "|"
+    assert [m.fragment for m in result.masks] == [
+        "[a] = 1 AND [b] = 2",
+        "[c] = 3",
+    ]
+
+
+def test_masks_single_condition_is_one_mask() -> None:
+    result = translate_filter_masks("[Age] > 18", "df")
+    assert len(result.masks) == 1
+    assert result.combined == 'df["Age"] > 18'
+
+
+def test_masks_if_expression_is_one_mask() -> None:
+    expr = 'IF [x] > 1 THEN "hi" ELSE "lo" ENDIF'
+    result = translate_filter_masks(expr, "df")
+    assert len(result.masks) == 1
+    assert result.masks[0].fragment == expr
+
+
+def test_masks_parenthesized_chain_is_one_mask() -> None:
+    # Splitting is top-level only; a parenthesized chain is a single atom.
+    result = translate_filter_masks("([a] = 1 AND [b] = 2)", "df")
+    assert len(result.masks) == 1
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "[Age] > 18",
+        '!Contains([Status], "drop") AND !IsEmpty([Status])',
+        "[a] = 1 OR [b] = 2 AND [c] = 3",
+        "[a] = 1 AND [b] = 2 OR [c] = 3",
+        "NOT [a] = 1 AND [b] IN (1, 2)",
+        'IF [x] > 1 THEN "hi" ELSE "lo" ENDIF',
+    ],
+)
+def test_masks_combined_matches_translate_expr(expr: str) -> None:
+    result = translate_filter_masks(expr, "df")
+    assert result.combined == translate_expr(expr, "df")
+
+
+def test_masks_fragments_drop_comments_and_newlines() -> None:
+    expr = "[a] = 1 // note\nAND [b] = /* block\ncomment */ 2 AND\n[c] =\n3"
+    result = translate_filter_masks(expr, "df")
+    fragments = [m.fragment for m in result.masks]
+    assert fragments == ["[a] = 1", "[b] = 2", "[c] = 3"]
+    assert all("\n" not in f for f in fragments)
+
+
+def test_masks_fragment_keeps_original_spacing_between_tokens() -> None:
+    result = translate_filter_masks('[a]>1 AND Contains([b], "x")', "df")
+    assert [m.fragment for m in result.masks] == [
+        "[a]>1",
+        'Contains([b], "x")',
+    ]
+
+
+def test_masks_empty_expression_raises() -> None:
+    with pytest.raises(ExprTranslationError):
+        translate_filter_masks("   ", "df")
+
+
+def test_masks_untranslatable_raises() -> None:
+    with pytest.raises(ExprTranslationError):
+        translate_filter_masks("[a] = something", "df")
 
 
 # ── Errors (callers fall back to plain substitution) ───────────────────────
