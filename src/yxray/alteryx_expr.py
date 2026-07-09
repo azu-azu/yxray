@@ -178,8 +178,11 @@ _FUNCTIONS: dict[str, Callable[[list[_Emitted]], str]] = {
     "isnull": _str_method("IsNull", ".isna()", 1),
     "isempty": _emit_isempty,
     "null": lambda args: "np.nan",
+    # Alteryx Contains is a literal (non-regex) case-insensitive substring
+    # match, so regex=False — pandas would otherwise treat "." or "+" in the
+    # target as regex and silently return wrong matches.
     "contains": _str_method(
-        "Contains", ".str.contains({}, case=False, na=False)", 2
+        "Contains", ".str.contains({}, case=False, regex=False, na=False)", 2
     ),
     "startswith": _str_method("StartsWith", ".str.startswith({})", 2),
     "endswith": _str_method("EndsWith", ".str.endswith({})", 2),

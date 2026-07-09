@@ -8,9 +8,11 @@ ToolCategory = str
 
 UNSUPPORTED_PYTHON_HINT = "# TODO: no direct pandas equivalent — review manually"
 
+# regex=False by default — write regex=True only when a pattern (| ^ .)
+# is actually intended; Alteryx string matching is literal.
 _FILTER_HINT = (
     "df = df[mask]\n"
-    '# ~df[col].str.contains(r"...", na=False)\n'
+    '# ~df[col].str.contains("...", regex=False, na=False)\n'
     '# df[col].isna() | (df[col] == "")'
 )
 

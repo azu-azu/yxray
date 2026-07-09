@@ -243,6 +243,23 @@ def test_scaffold_filter_simple_mode_numeric_comparison() -> None:
     assert 'df2 = df1[df1["Amount"] > 100]' in code
 
 
+def test_scaffold_filter_simple_mode_contains_is_literal() -> None:
+    # Alteryx Contains is a literal substring match — the operand must not
+    # be interpreted as regex ("ta.ro" matching "taXro" etc.).
+    doc = _simple_filter_doc(
+        {
+            "Operator": "Contains",
+            "Field": "Name",
+            "Operands": {"Operand": "ta.ro"},
+        }
+    )
+    code = scaffold(doc)
+    assert (
+        'df2 = df1[df1["Name"].str.contains("ta.ro", regex=False, na=False)]'
+        in code
+    )
+
+
 def test_scaffold_filter_simple_mode_is_null() -> None:
     doc = _simple_filter_doc({"Operator": "IsNull", "Field": "Amount"})
     code = scaffold(doc)
