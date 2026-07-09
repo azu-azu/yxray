@@ -3,7 +3,10 @@ import pytest
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import (
+    _date_columns_in_fragment,
     _emit_select_helpers,
+    _fields_in_fragment,
+    _isempty_columns_in_fragment,
     node_code_snippets,
     scaffold,
     scaffold_simple,
@@ -191,6 +194,104 @@ def test_scaffold_filter_no_date_warning_without_date_functions() -> None:
     )
     code = scaffold(doc)
     assert "# WARNING: date comparison" not in code
+
+
+def test_date_columns_in_fragment_matches_both_directions() -> None:
+    assert _date_columns_in_fragment('[閉業日] >= ToDate("2024-01-01")') == {"閉業日"}
+    assert _date_columns_in_fragment('ToDate("2024-01-01") <= [閉業日]') == {"閉業日"}
+
+
+def test_date_columns_in_fragment_misses_column_wrapped_inside_todate() -> None:
+    # ToDate([col]) >= [other]: the column *inside* ToDate(...) can't be
+    # named by the adjacent-pattern regex (matching inside a call's
+    # parens is out of scope), but the column on the other side of the
+    # comparison is still caught via the reverse-direction branch.
+    assert _date_columns_in_fragment("ToDate([閉業日]) >= [他の日付]") == {"他の日付"}
+
+
+def test_isempty_columns_in_fragment_excludes_isnull() -> None:
+    fragment = "IsEmpty([A]) OR IsNull([B])"
+    assert _isempty_columns_in_fragment(fragment) == {"A"}
+
+
+def test_fields_in_fragment_collects_all_columns() -> None:
+    fragment = "[A] >= ToDate(...) OR [A] >= [B]"
+    assert _fields_in_fragment(fragment) == {"A", "B"}
+
+
+def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() -> (
+    None
+):
+    # Same expression that motivated issue #38: cond_1 is a bare IsEmpty
+    # on 閉業/閉店日, cond_2 date-compares 閉業/閉店日 against ToDate(...)
+    # and also against 開業/開店日 (column-vs-column, so only reachable
+    # via the residual fallback).
+    expr = (
+        "IsEmpty([閉業/閉店日]) OR ([閉業/閉店日] >= ToDate(DateTimeToday())"
+        " or (!IsEmpty([開業/開店日]) and [閉業/閉店日] >= [開業/開店日]))"
+    )
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": expr},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'column "閉業/閉店日" is compared as a date in cond_2' in code
+    assert "IsEmpty's == \"\" check on \"閉業/閉店日\"" in code
+    assert 'verify the type of column "開業/開店日" too' in code
+    assert "IsEmpty == \"\" check becomes always False afterward" in code
+
+
+def test_scaffold_filter_isnull_with_date_has_no_dead_code_note() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={
+                "Expression": 'IsNull([DateCol]) OR [DateCol] >= ToDate("2024-01-01")'
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'column "DateCol" is compared as a date' in code
+    assert "IsEmpty" not in code
+
+
+def test_scaffold_filter_date_residual_warning_flags_unrelated_column() -> None:
+    # A single top-level operand can bundle an unrelated condition via an
+    # inner AND ([Name] == "foo" here) — the residual fallback is the
+    # documented, accepted trade-off for that case.
+    expr = '([DateCol] >= ToDate("2024-01-01") AND [Name] == "foo") OR [Other] > 1'
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            config={"Expression": expr},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'column "DateCol" is compared as a date in cond_1' in code
+    assert 'verify the type of column "Name" too' in code
 
 
 def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:

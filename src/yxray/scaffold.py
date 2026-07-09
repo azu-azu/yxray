@@ -71,6 +71,20 @@ _NUMPY_RE = re.compile(r"\bnp\.(where|select|nan)\b")
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
 _DATE_EXPR_RE = re.compile(r"\bpd\.(to_datetime|Timestamp|DateOffset)\b")
+# [col] adjacent to a ToDate/DateTime* call across a comparison operator,
+# in either order — the column that is actually being date-compared.
+# Multi-char operators must precede their single-char prefix (>= before >)
+# so the alternation doesn't consume just the prefix.
+_ADJACENT_DATE_RE = re.compile(
+    r"\[([^\]]+)\]\s*(?:>=|<=|==|!=|>|<)\s*(?:ToDate|DateTime)\w*"
+    r"|(?:ToDate|DateTime)\w*\([^()]*\)\s*(?:>=|<=|==|!=|>|<)\s*\[([^\]]+)\]",
+    re.IGNORECASE,
+)
+# IsEmpty([col]) specifically — not IsNull([col]): IsNull translates to
+# .isna() alone (still valid after pd.to_datetime coercion), but IsEmpty
+# translates to isna() | (col == ""), whose == "" half goes dead once the
+# column is converted to datetime.
+_ISEMPTY_CALL_RE = re.compile(r"IsEmpty\s*\(\s*\[([^\]]+)\]", re.IGNORECASE)
 
 
 def _translate_expr(expr: str, df_var: str) -> str:
@@ -250,6 +264,78 @@ def _filter_mask_lines(
     return lines
 
 
+def _fields_in_fragment(fragment: str) -> set[str]:
+    return set(_FIELD_RE.findall(fragment))
+
+
+def _date_columns_in_fragment(fragment: str) -> set[str]:
+    return {
+        m.group(1) or m.group(2) for m in _ADJACENT_DATE_RE.finditer(fragment)
+    }
+
+
+def _isempty_columns_in_fragment(fragment: str) -> set[str]:
+    return set(_ISEMPTY_CALL_RE.findall(fragment))
+
+
+def _isempty_dead_code_note(col: str, *, confident: bool) -> str:
+    if confident:
+        return (
+            f'# NOTE: after conversion, IsEmpty\'s == "" check on "{col}"'
+            ' always evaluates False — isna() alone is enough (it also'
+            " catches NaT)."
+        )
+    return (
+        f'# NOTE: if "{col}" needs pd.to_datetime conversion, its IsEmpty'
+        ' == "" check becomes always False afterward — isna() alone is'
+        " enough."
+    )
+
+
+def _filter_date_warning_lines(
+    translation: FilterTranslation, *, split: bool
+) -> list[str]:
+    """Per-column date-conversion warnings, split into precise vs. residual.
+
+    A mask matching a date function (_DATE_EXPR_RE on its translated code)
+    contributes two tiers of warning: columns the adjacent-pattern regex
+    can name with confidence, and the mask's remaining columns named more
+    tentatively. The residual tier matters because one side of a
+    column-vs-column comparison (e.g. `[A] >= [B]` where only `A` is also
+    compared against a literal date elsewhere) would otherwise go
+    unwarned even though it needs the same dtype conversion.
+    """
+    isempty_cols: set[str] = set()
+    for mask in translation.masks:
+        isempty_cols |= _isempty_columns_in_fragment(mask.fragment)
+
+    lines: list[str] = []
+    for i, mask in enumerate(translation.masks, 1):
+        if not _DATE_EXPR_RE.search(mask.code):
+            continue
+        where = f"cond_{i}" if split else "this filter"
+        precise = _date_columns_in_fragment(mask.fragment)
+        residual = _fields_in_fragment(mask.fragment) - precise
+        for col in sorted(precise):
+            lines.append(
+                f'# WARNING: column "{col}" is compared as a date in'
+                f" {where} — convert first:"
+            )
+            lines.append(
+                f'# df["{col}"] = pd.to_datetime(df["{col}"], errors="coerce")'
+            )
+            if col in isempty_cols:
+                lines.append(_isempty_dead_code_note(col, confident=True))
+        for col in sorted(residual):
+            lines.append(
+                f"# WARNING: {where} involves a date comparison — verify"
+                f' the type of column "{col}" too (mask-level heuristic).'
+            )
+            if col in isempty_cols:
+                lines.append(_isempty_dead_code_note(col, confident=False))
+    return lines
+
+
 def _gen_filter(
     tool_id: int,
     segment: str,
@@ -284,6 +370,10 @@ def _gen_filter(
             if translation is not None
             else None
         )
+        if translation is not None:
+            lines += _filter_date_warning_lines(
+                translation, split=mask_lines is not None
+            )
         if mask_lines is not None:
             lines += mask_lines
         else:
