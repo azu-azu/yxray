@@ -385,6 +385,55 @@ df2 = df1[~is_drop & ~is_empty]
 
 ---
 
+## 17. 日付比較と `IsEmpty()` が同じ列に混在する場合の落とし穴
+
+CSV 由来の列は pandas 上ではすべて文字列（object/str dtype）で読み込まれる。
+同じ列が Filter 式の中で「日付として比較」されつつ「`IsEmpty()` で空判定」も
+されている場合、変換前・変換後のどちらのタイミングでも問題が起きる。
+
+| タイミング | 挙動 |
+|---|---|
+| 変換前（文字列のまま）で日付比較 | `[date_col] >= ToDate(...)` は文字列 vs Timestamp の比較になり実行時エラー |
+| 変換後（`pd.to_datetime(..., errors="coerce")`） | `IsEmpty` の `== ""` 側が常に `False` になり無意味化（エラーにはならず黙って死ぬ） |
+
+実測（pandas 3.0.3）:
+
+```python
+# 変換前に日付比較すると即エラー
+pd.Series(["2024-01-01", ""]) >= pd.Timestamp("2024-01-01")
+# TypeError: '<=' not supported between instances of 'Timestamp' and 'str'
+
+# 変換後は IsEmpty の == "" が常に False（NaT は isna() 側だけが拾う）
+conv = pd.to_datetime(pd.Series(["2024-01-01", "", "2023-05-05"]), errors="coerce")
+conv == ""   # → [False, False, False]
+```
+
+つまり: WARNING を無視すれば即クラッシュ、WARNING に従って変換すれば別の条件が
+黙って死ぬ。どちらのタイミングでも気づきにくい。
+
+### scaffold の対応
+
+同じ列が日付比較と `IsEmpty()` の両方に使われている場合、scaffold は列名を
+名指しした WARNING/NOTE を追加で生成する。
+
+```python
+# WARNING: column "date_col" is compared as a date in cond_2 — convert first:
+# df["date_col"] = pd.to_datetime(df["date_col"], errors="coerce")
+# NOTE: after conversion, IsEmpty's == "" check on "date_col" always
+# evaluates False — isna() alone is enough (it also catches NaT).
+```
+
+日付比較の相手が別の列（`[date_col] >= [other_date_col]` のような列同士の比較）
+の場合、`other_date_col` 側は「日付として扱われている」と断定はできないため、
+`(mask-level heuristic)` と明記した緩い警告になる。
+
+### `IsNull()` は対象外
+
+`IsNull([col])` は `.isna()` のみに翻訳されるため、日付変換後も NaT を正しく
+拾い続け、意味は壊れない。この WARNING/NOTE が付くのは `IsEmpty()` のみ。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -406,12 +455,13 @@ df2 = df1[~is_drop & ~is_empty]
 | FindReplace FindAny + Append | `pd.merge(how="left")` に変換。部分一致の意味論は要確認 |
 | FindReplace FindAny + ReplaceMultipleFound=False | 右側を `drop_duplicates()` してから merge |
 | FindReplace FindAny を自前で substring join 実装する場合 | `pd.isna()` で NaN 除外、空文字 needle は全件マッチしうるので要ガード。含意の向き自体も未検証 |
+| 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
 
 ---
 
 ## 関連実装
 
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
-- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）、`_gen_filter`（複合条件のマスク分割）
+- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）、`_gen_filter`（複合条件のマスク分割）、`_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）
 - `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

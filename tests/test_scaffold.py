@@ -164,7 +164,7 @@ def test_scaffold_filter_date_comparison_warning() -> None:
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
             tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
-            config={"Expression": '[閉業日] >= ToDate("2024-01-01")'},
+            config={"Expression": '[日付列] >= ToDate("2024-01-01")'},
         ),
         connections=(
             AlteryxConnection(
@@ -197,8 +197,8 @@ def test_scaffold_filter_no_date_warning_without_date_functions() -> None:
 
 
 def test_date_columns_in_fragment_matches_both_directions() -> None:
-    assert _date_columns_in_fragment('[閉業日] >= ToDate("2024-01-01")') == {"閉業日"}
-    assert _date_columns_in_fragment('ToDate("2024-01-01") <= [閉業日]') == {"閉業日"}
+    assert _date_columns_in_fragment('[日付列] >= ToDate("2024-01-01")') == {"日付列"}
+    assert _date_columns_in_fragment('ToDate("2024-01-01") <= [日付列]') == {"日付列"}
 
 
 def test_date_columns_in_fragment_misses_column_wrapped_inside_todate() -> None:
@@ -206,7 +206,9 @@ def test_date_columns_in_fragment_misses_column_wrapped_inside_todate() -> None:
     # named by the adjacent-pattern regex (matching inside a call's
     # parens is out of scope), but the column on the other side of the
     # comparison is still caught via the reverse-direction branch.
-    assert _date_columns_in_fragment("ToDate([閉業日]) >= [他の日付]") == {"他の日付"}
+    assert _date_columns_in_fragment("ToDate([日付列]) >= [別の日付列]") == {
+        "別の日付列"
+    }
 
 
 def test_isempty_columns_in_fragment_excludes_isnull() -> None:
@@ -222,13 +224,12 @@ def test_fields_in_fragment_collects_all_columns() -> None:
 def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() -> (
     None
 ):
-    # Same expression that motivated issue #38: cond_1 is a bare IsEmpty
-    # on 閉業/閉店日, cond_2 date-compares 閉業/閉店日 against ToDate(...)
-    # and also against 開業/開店日 (column-vs-column, so only reachable
-    # via the residual fallback).
+    # cond_1 is a bare IsEmpty on 日付列A, cond_2 date-compares 日付列A
+    # against ToDate(...) and also against 日付列B (column-vs-column, so
+    # 日付列B is only reachable via the residual fallback).
     expr = (
-        "IsEmpty([閉業/閉店日]) OR ([閉業/閉店日] >= ToDate(DateTimeToday())"
-        " or (!IsEmpty([開業/開店日]) and [閉業/閉店日] >= [開業/開店日]))"
+        "IsEmpty([日付列A]) OR ([日付列A] >= ToDate(DateTimeToday())"
+        " or (!IsEmpty([日付列B]) and [日付列A] >= [日付列B]))"
     )
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
@@ -244,9 +245,9 @@ def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() 
         ),
     )
     code = scaffold(doc)
-    assert 'column "閉業/閉店日" is compared as a date in cond_2' in code
-    assert "IsEmpty's == \"\" check on \"閉業/閉店日\"" in code
-    assert 'verify the type of column "開業/開店日" too' in code
+    assert 'column "日付列A" is compared as a date in cond_2' in code
+    assert "IsEmpty's == \"\" check on \"日付列A\"" in code
+    assert 'verify the type of column "日付列B" too' in code
     assert "IsEmpty == \"\" check becomes always False afterward" in code
 
 
@@ -1067,14 +1068,14 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
             "FindMode": "FindWhole",
             "ReplaceMode": "Append",
             "ReplaceAppendFields": {
-                "Field": [{"@field": "閉業/閉店日"}, {"@field": "開業/開店日"}],
+                "Field": [{"@field": "フィールドA"}, {"@field": "フィールドB"}],
             },
         },
         "F",
         "R",
     )
     code = scaffold(doc)
-    assert 'df2[["EL_ID", "閉業/閉店日", "開業/開店日"]]' in code
+    assert 'df2[["EL_ID", "フィールドA", "フィールドB"]]' in code
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
