@@ -1064,7 +1064,7 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
         {
             "FieldFind": "EL_ID",
             "FieldSearch": "EL_ID",
-            "ReplaceFoundField": "所有者 ID",
+            "ReplaceFoundField": "フィールドC",
             "FindMode": "FindWhole",
             "ReplaceMode": "Append",
             "ReplaceAppendFields": {
