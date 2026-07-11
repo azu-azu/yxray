@@ -7,15 +7,16 @@ parse(path_a, path_b)
     Raises a ParseError subclass (MissingFileError, UnreadableFileError,
     MalformedXMLError) on the first file that cannot be read; the second
     file is never touched if the first fails.
+parse_one(path)
+    Pre-flight checks then XML parse for a single path.
 
 Internal stages (private)
 --------------------------
-_parse_one       Pre-flight checks then XML parse for a single path.
 _tree_to_workflow  Convert an lxml ElementTree to a WorkflowDoc.
 _element_to_dict   Recursively convert an lxml Element to a plain dict.
 
 This module MUST NOT call sys.exit, print, or logging, and MUST NOT
-perform any file I/O beyond the etree.parse() call inside _parse_one.
+perform any file I/O beyond the etree.parse() call inside parse_one.
 """
 
 from __future__ import annotations
@@ -46,12 +47,12 @@ __all__ = ["parse", "parse_one"]
 # ---------------------------------------------------------------------------
 
 
-def parse_one(
-    path: pathlib.Path,
-    *,
-    filter_ui_tools: bool = True,
-) -> WorkflowDoc:
-    """Parse a single .yxmd file and return its WorkflowDoc.
+def parse_one(path: pathlib.Path, *, filter_ui_tools: bool = True) -> WorkflowDoc:
+    """Parse a single .yxmd file into a WorkflowDoc.
+
+    Stage 1 — pre-flight:  Validates the path exists and is a regular file.
+    Stage 2 — parse:       Uses lxml with ``recover=False`` for strict XML.
+    Stage 3 — convert:     Delegates to ``_tree_to_workflow``.
 
     Parameters
     ----------
@@ -64,7 +65,37 @@ def parse_one(
     ------
     MissingFileError, UnreadableFileError, MalformedXMLError
     """
-    return _parse_one(path, filter_ui_tools=filter_ui_tools)
+    # Stage 1: pre-flight
+    if not path.exists():
+        raise MissingFileError(
+            filepath=str(path),
+            message=f"File not found: {path}",
+        )
+    if not path.is_file():
+        raise UnreadableFileError(
+            filepath=str(path),
+            message=f"Path is not a regular file: {path}",
+        )
+
+    # Stage 2: parse
+    xml_parser: etree.XMLParser = etree.XMLParser(recover=False)
+    try:
+        tree: etree._ElementTree[etree._Element] = etree.parse(  # type: ignore[type-arg]
+            str(path), xml_parser
+        )
+    except etree.XMLSyntaxError as exc:
+        raise MalformedXMLError(
+            filepath=str(path),
+            message=f"Malformed XML in {path.name}: {exc}",
+        ) from exc
+    except OSError as exc:
+        raise UnreadableFileError(
+            filepath=str(path),
+            message=f"Cannot read {path}: {exc}",
+        ) from exc
+
+    # Stage 3: convert
+    return _tree_to_workflow(tree, filepath=str(path), filter_ui_tools=filter_ui_tools)
 
 
 def parse(
@@ -100,54 +131,14 @@ def parse(
     MalformedXMLError
         If either file contains invalid XML.
     """
-    doc_a = _parse_one(path_a, filter_ui_tools=filter_ui_tools)
-    doc_b = _parse_one(path_b, filter_ui_tools=filter_ui_tools)
+    doc_a = parse_one(path_a, filter_ui_tools=filter_ui_tools)
+    doc_b = parse_one(path_b, filter_ui_tools=filter_ui_tools)
     return doc_a, doc_b
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _parse_one(path: pathlib.Path, *, filter_ui_tools: bool = True) -> WorkflowDoc:
-    """Parse a single .yxmd file into a WorkflowDoc.
-
-    Stage 1 — pre-flight:  Validates the path exists and is a regular file.
-    Stage 2 — parse:       Uses lxml with ``recover=False`` for strict XML.
-    Stage 3 — convert:     Delegates to ``_tree_to_workflow``.
-    """
-    # Stage 1: pre-flight
-    if not path.exists():
-        raise MissingFileError(
-            filepath=str(path),
-            message=f"File not found: {path}",
-        )
-    if not path.is_file():
-        raise UnreadableFileError(
-            filepath=str(path),
-            message=f"Path is not a regular file: {path}",
-        )
-
-    # Stage 2: parse
-    xml_parser: etree.XMLParser = etree.XMLParser(recover=False)
-    try:
-        tree: etree._ElementTree[etree._Element] = etree.parse(  # type: ignore[type-arg]
-            str(path), xml_parser
-        )
-    except etree.XMLSyntaxError as exc:
-        raise MalformedXMLError(
-            filepath=str(path),
-            message=f"Malformed XML in {path.name}: {exc}",
-        ) from exc
-    except OSError as exc:
-        raise UnreadableFileError(
-            filepath=str(path),
-            message=f"Cannot read {path}: {exc}",
-        ) from exc
-
-    # Stage 3: convert
-    return _tree_to_workflow(tree, filepath=str(path), filter_ui_tools=filter_ui_tools)
 
 
 def _node_raw_xml(elem: etree._Element) -> str:
