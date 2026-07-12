@@ -1,8 +1,11 @@
-"""Single-source registry of all Alteryx noise-stripping patterns.
+"""Central registry for Alteryx noise-normalization rules.
 
-Adding a new Alteryx-generated metadata pattern requires only editing this file.
-All regex patterns are compiled at import time for performance.
-Phase 3 contract tests validate these patterns against fixture pairs.
+This module contains all regex patterns, targeted keys, and sentinel values
+used to remove Alteryx-generated metadata noise during normalization.
+
+Adding a new Alteryx-generated metadata rule should require editing only this
+module. Regex patterns are compiled at import time. Phase 3 contract tests
+validate the rules against fixture pairs.
 """
 
 from __future__ import annotations
