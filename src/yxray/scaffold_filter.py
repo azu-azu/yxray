@@ -31,7 +31,7 @@ from yxray.config_utils import (
     operand_literal,
     simple_filter_condition,
 )
-from yxray.scaffold_common import _FIELD_RE, _frame_name
+from yxray.scaffold_common import FIELD_RE, frame_name
 
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
@@ -126,7 +126,7 @@ def _filter_mask_lines(
 
 
 def _fields_in_fragment(fragment: str) -> set[str]:
-    return set(_FIELD_RE.findall(fragment))
+    return set(FIELD_RE.findall(fragment))
 
 
 def _date_columns_in_fragment(fragment: str) -> set[str]:
@@ -206,7 +206,7 @@ def _gen_filter(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
@@ -216,7 +216,7 @@ def _gen_filter(
             pandas_expr = translation.combined
         except ExprTranslationError:
             translation = None
-            pandas_expr = _FIELD_RE.sub(
+            pandas_expr = FIELD_RE.sub(
                 lambda m: f'{df_in}["{m.group(1)}"]', expr
             )
         lines = ["# Alteryx expression — review translation"]

@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import re
 
+__all__ = ["FIELD_RE", "frame_name"]
+
 # [field] notation in Alteryx expressions.
-_FIELD_RE = re.compile(r"\[([^\]]+)\]")
+FIELD_RE = re.compile(r"\[([^\]]+)\]")
 
 
-def _frame_name(
+def frame_name(
     names: dict[int, str],
     tool_id: int | None,
     fallback: str = "df_?",

@@ -27,7 +27,7 @@ from yxray.config_utils import (
     sort_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold_common import _FIELD_RE, _frame_name
+from yxray.scaffold_common import FIELD_RE, frame_name
 from yxray.scaffold_filter import _gen_filter
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
@@ -76,7 +76,7 @@ def _translate_expr(expr: str, df_var: str) -> str:
     try:
         return translate_expr(expr, df_var)
     except ExprTranslationError:
-        return _FIELD_RE.sub(lambda m: f'{df_var}["{m.group(1)}"]', expr)
+        return FIELD_RE.sub(lambda m: f'{df_var}["{m.group(1)}"]', expr)
 
 
 _SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
@@ -173,7 +173,7 @@ def _gen_output(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     path = output_paths.get(tool_id)
     return _write_stmt(df_in, path, f'OUTPUTS["output_{tool_id}"]')
 
@@ -201,7 +201,7 @@ def _gen_select(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     rows = select_field_rows(config)
 
@@ -268,7 +268,7 @@ def _gen_browse(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     return f'logger.info("ToolID {tool_id} (Browse): rows=%d", len({df_in}))'
 
 
@@ -281,7 +281,7 @@ def _gen_formula(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     ffs = config.get("FormulaFields", {})
     formulas: list[tuple[str, str]] = []
@@ -319,8 +319,8 @@ def _gen_join(
     df_out = names[tool_id]
     left_id = anchors.get("Left")
     right_id = anchors.get("Right")
-    df_left = _frame_name(names, left_id, "df_left")
-    df_right = _frame_name(names, right_id, "df_right")
+    df_left = frame_name(names, left_id, "df_left")
+    df_right = frame_name(names, right_id, "df_right")
 
     expr = first_text(config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
@@ -385,7 +385,7 @@ def _gen_summarize(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     sf = config.get("SummarizeFields", {})
     if not isinstance(sf, dict):
@@ -435,7 +435,7 @@ def _gen_sort(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     rows = sort_field_rows(config)
     if rows:
@@ -457,7 +457,7 @@ def _gen_sample(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     for key in ("RecordLimit", "N", "@N"):
         val = config.get(key)
@@ -477,7 +477,7 @@ def _gen_unique(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     unique_fields = config.get("UniqueFields", {})
     field_names: list[str] = []
@@ -565,8 +565,8 @@ def _gen_findreplace(
     # for test fixtures.
     f_id = _anchor_src(anchors, preds, ("Targets", "F", "Find", "Input"), 0)
     r_id = _anchor_src(anchors, preds, ("Source", "R", "Replace"), 1)
-    df_f = _frame_name(names, f_id, "df_find")
-    df_r = _frame_name(names, r_id, "df_replace")
+    df_f = frame_name(names, f_id, "df_find")
+    df_r = frame_name(names, r_id, "df_replace")
 
     field_find = first_text(config, "FieldFind")
     field_search = first_text(config, "FieldSearch")
@@ -664,8 +664,8 @@ def _gen_appendfields(
     df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     s_id = _anchor_src(anchors, preds, ("Sources", "Source"), 1)
-    df_t = _frame_name(names, t_id, "df_targets")
-    df_s = _frame_name(names, s_id, "df_sources")
+    df_t = frame_name(names, t_id, "df_targets")
+    df_s = frame_name(names, s_id, "df_sources")
     return (
         "# Append Fields — every source record is appended"
         " to every target record\n"
@@ -682,7 +682,7 @@ def _gen_createpoints(
     names: dict[int, str],
 ) -> str:
     src = preds[0] if preds else None
-    df_in = _frame_name(names, src)
+    df_in = frame_name(names, src)
     df_out = names[tool_id]
     fields = config.get("Fields", {})
     x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
@@ -710,8 +710,8 @@ def _gen_spatialmatch(
     df_out = names[tool_id]
     t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
     u_id = _anchor_src(anchors, preds, ("Universe",), 1)
-    df_t = _frame_name(names, t_id, "df_targets")
-    df_u = _frame_name(names, u_id, "df_universe")
+    df_t = frame_name(names, t_id, "df_targets")
+    df_u = frame_name(names, u_id, "df_universe")
     method = config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
@@ -1039,7 +1039,7 @@ def scaffold_simple_blocks(
             code = _read_stmt(names[tool_id], path, f'r"{path}"' if path else "")
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
             src = preds[0] if preds else None
-            df_in = _frame_name(names, src)
+            df_in = frame_name(names, src)
             path = first_text(node.config, "File", "FileName")
             code = _write_stmt(df_in, path, f'r"{path}"' if path else "")
         else:
