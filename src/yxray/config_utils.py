@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 _NUMBER_RE = re.compile(r"-?\d+(\.\d+)?")
+
+
+def py_str(value: object) -> str:
+    """A double-quoted Python string literal for an arbitrary value.
+
+    Field names and data cells come from the .yxmd verbatim and may contain
+    quotes, backslashes, or newlines that naive ``'"{value}"'`` interpolation
+    would turn into broken (a SyntaxError) or silently wrong generated code.
+    ``json.dumps`` emits a correctly escaped double-quoted literal — valid in
+    both JSON and Python — and ``ensure_ascii=False`` keeps non-ASCII names
+    like 日付列 readable instead of ``\\uXXXX``-escaped. Plain identifiers
+    render as ``"name"``, unchanged from the old interpolation.
+    """
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 def as_list(value: Any) -> list[Any]:
@@ -76,7 +91,7 @@ def operand_literal(operand: str) -> str:
     """Quote a Simple-mode filter operand unless it is a numeric literal."""
     if _NUMBER_RE.fullmatch(operand):
         return operand
-    return '"' + operand + '"'
+    return py_str(operand)
 
 
 _UNARY_FILTER_OPERATORS = {
