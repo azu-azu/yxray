@@ -298,14 +298,20 @@ def _gen_formula(
                 formulas.append((fname, expr))
     if not formulas:
         return f"{df_out} = {df_in}  # TODO: Formula — no fields found"
-    assigns = ",\n    ".join(
-        f'{f} = {_translate_expr(e, df_in)}'
-        for f, e in formulas
-    )
-    note = "# Alteryx expressions — review translation\n"
-    if len(formulas) == 1:
-        return f"{note}{df_out} = {df_in}.assign({assigns})"
-    return f"{note}{df_out} = {df_in}.assign(\n    {assigns},\n)"
+    # Build df_out up one column at a time rather than with a single
+    # .assign(). Two reasons: Alteryx applies formulas top to bottom and a
+    # later one may reference a column an earlier one just created (an
+    # .assign() expression would evaluate against the original frame and
+    # KeyError); and subscript assignment keys are strings, so field names
+    # that aren't valid Python identifiers (e.g. "Sales Amount", "2020")
+    # work — as .assign() keyword arguments they'd be a SyntaxError.
+    lines = [
+        "# Alteryx Formula — applied top to bottom; review translation",
+        f"{df_out} = {df_in}.copy()",
+    ]
+    for fname, expr in formulas:
+        lines.append(f'{df_out}["{fname}"] = {_translate_expr(expr, df_out)}')
+    return "\n".join(lines)
 
 
 def _gen_join(

@@ -524,7 +524,7 @@ def test_scaffold_formula_translates_if_expression() -> None:
     code = scaffold(doc)
     assert "import numpy as np" in code
     assert (
-        "np.select([df1[\"Score\"] >= 80, df1[\"Score\"] >= 60],"
+        "np.select([df2[\"Score\"] >= 80, df2[\"Score\"] >= 60],"
         " ['A', 'B'], default='C')" in code
     )
     assert "THEN" not in code
@@ -571,7 +571,67 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df1["x"] ?? weird syntax' in code
+    assert 'df2["x"] ?? weird syntax' in code
+
+
+def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:
+    # Field names like "Sales Amount" are common in Alteryx; embedding them
+    # as .assign() keyword arguments would produce a SyntaxError.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {
+                        "@field": "Sales Amount",
+                        "@expression": "[Price] * [Qty]",
+                    }
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df2["Sales Amount"] = df2["Price"] * df2["Qty"]' in code
+    # The whole scaffold must be syntactically valid Python.
+    compile(code, "<scaffold>", "exec")
+
+
+def test_scaffold_formula_later_field_references_earlier() -> None:
+    # Alteryx applies formulas top to bottom; the second formula reads the
+    # column the first one created, so it must reference the built-up frame.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": [
+                        {"@field": "Net", "@expression": "[Gross] - [Tax]"},
+                        {"@field": "Doubled", "@expression": "[Net] * 2"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "df2 = df1.copy()" in code
+    assert 'df2["Net"] = df2["Gross"] - df2["Tax"]' in code
+    # Doubled reads Net from the built-up frame, not the original df1.
+    assert 'df2["Doubled"] = df2["Net"] * 2' in code
+    assert ".assign(" not in code
 
 
 # ── Select ─────────────────────────────────────────────────────────────────
