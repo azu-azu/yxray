@@ -118,6 +118,30 @@ def _file_write(path_expr: str, df_var: str, ext: str) -> str:
     return f"{df_var}.to_csv({path_expr}, index=False)"
 
 
+def _read_stmt(target: str, path: str | None, path_expr: str) -> str:
+    """`target = pd.read_...(path_expr)`, or a TODO fallback when path is unset.
+
+    Shared by scaffold() (path_expr → INPUTS[...]) and
+    scaffold_simple_blocks() (path_expr → raw literal) so the extension
+    dispatch and fallback wording live in one place.
+    """
+    if not path:
+        return f"{target} = pd.read_csv(...)  # TODO: set file path"
+    ext = pathlib.Path(path).suffix.lower()
+    return f"{target} = {_file_read(path_expr, ext)}"
+
+
+def _write_stmt(df_in: str, path: str | None, path_expr: str) -> str:
+    """`df_in.to_...(path_expr)`, or a TODO fallback when path is unset.
+
+    Counterpart to _read_stmt for the output side.
+    """
+    if not path:
+        return f"{df_in}.to_csv(...)  # TODO: set file path"
+    ext = pathlib.Path(path).suffix.lower()
+    return _file_write(path_expr, df_in, ext)
+
+
 # ── Connection helpers ─────────────────────────────────────────────────────
 
 
@@ -166,11 +190,8 @@ def _gen_input(
     input_paths: dict[int, str],
     names: dict[int, str],
 ) -> str:
-    if tool_id in input_paths:
-        ext = pathlib.Path(input_paths[tool_id]).suffix.lower()
-        path_expr = f'INPUTS["input_{tool_id}"]'
-        return f"{names[tool_id]} = {_file_read(path_expr, ext)}"
-    return f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
+    path = input_paths.get(tool_id)
+    return _read_stmt(names[tool_id], path, f'INPUTS["input_{tool_id}"]')
 
 
 def _gen_output(
@@ -184,11 +205,8 @@ def _gen_output(
 ) -> str:
     src = preds[0] if preds else None
     df_in = _frame_name(names, src)
-    if tool_id in output_paths:
-        ext = pathlib.Path(output_paths[tool_id]).suffix.lower()
-        path_expr = f'OUTPUTS["output_{tool_id}"]'
-        return _file_write(path_expr, df_in, ext)
-    return f"{df_in}.to_csv(...)  # TODO: set file path"
+    path = output_paths.get(tool_id)
+    return _write_stmt(df_in, path, f'OUTPUTS["output_{tool_id}"]')
 
 
 _SIMPLE_FILTER_OPS = {
@@ -1243,22 +1261,12 @@ def scaffold_simple_blocks(
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             path = first_text(node.config, "File", "FileName")
-            if path:
-                ext = pathlib.Path(path).suffix.lower()
-                path_expr = f'r"{path}"'
-                code = f"{names[tool_id]} = {_file_read(path_expr, ext)}"
-            else:
-                code = f"{names[tool_id]} = pd.read_csv(...)  # TODO: set file path"
+            code = _read_stmt(names[tool_id], path, f'r"{path}"' if path else "")
         elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
             src = preds[0] if preds else None
             df_in = _frame_name(names, src)
             path = first_text(node.config, "File", "FileName")
-            if path:
-                ext = pathlib.Path(path).suffix.lower()
-                path_expr = f'r"{path}"'
-                code = _file_write(path_expr, df_in, ext)
-            else:
-                code = f"{df_in}.to_csv(...)  # TODO: set file path"
+            code = _write_stmt(df_in, path, f'r"{path}"' if path else "")
         else:
             gen = _GENERATORS.get(segment)
             if gen is None:
