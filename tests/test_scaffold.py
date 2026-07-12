@@ -3,13 +3,15 @@ import pytest
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import (
-    _date_columns_in_fragment,
     _emit_select_helpers,
-    _fields_in_fragment,
-    _isempty_columns_in_fragment,
     node_code_snippets,
     scaffold,
     scaffold_simple,
+)
+from yxray.scaffold_filter import (
+    _date_columns_in_fragment,
+    _fields_in_fragment,
+    _isempty_columns_in_fragment,
 )
 
 
