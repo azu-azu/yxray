@@ -603,6 +603,48 @@ def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:
     compile(code, "<scaffold>", "exec")
 
 
+def test_scaffold_field_name_with_quote_stays_valid_python() -> None:
+    # A double-quote in a field name would break naive '"{name}"' embedding;
+    # every generator routes names through py_str, so the scaffold still
+    # parses. Sort is one representative generator.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            config={
+                "SortInfo": {
+                    "Field": {"@field": 'weird"name', "@order": "Ascending"}
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    compile(code, "<scaffold>", "exec")
+    assert 'weird\\"name' in code  # escaped, not a bare quote
+
+
+def test_scaffold_text_input_data_value_with_quote_stays_valid_python() -> None:
+    # Text Input cells are arbitrary data — a quote in a value is realistic,
+    # not just theoretical, and must not break the generated DataFrame.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="TextInput", x=0, y=0,
+            config={
+                "Fields": {"Field": {"@name": "Note"}},
+                "Data": {"r": {"c": 'say "hi"'}},
+            },
+        ),
+    )
+    code = scaffold(doc)
+    compile(code, "<scaffold>", "exec")
+
+
 def test_scaffold_formula_later_field_references_earlier() -> None:
     # Alteryx applies formulas top to bottom; the second formula reads the
     # column the first one created, so it must reference the built-up frame.

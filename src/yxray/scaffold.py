@@ -23,6 +23,7 @@ from yxray.config_utils import (
     as_list,
     field_name,
     first_text,
+    py_str,
     select_field_rows,
     sort_field_rows,
 )
@@ -76,7 +77,7 @@ def _translate_expr(expr: str, df_var: str) -> str:
     try:
         return translate_expr(expr, df_var)
     except ExprTranslationError:
-        return FIELD_RE.sub(lambda m: f'{df_var}["{m.group(1)}"]', expr)
+        return FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
 
 
 _SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
@@ -249,11 +250,14 @@ def _gen_select(
     col_lines.append(f"{var} = [")
     for name, new_name, selected in edits:
         if not selected:
-            col_lines.append(f'    SelectColumnEdit("{name}", selected=False),')
+            col_lines.append(f"    SelectColumnEdit({py_str(name)}, selected=False),")
         elif new_name:
-            col_lines.append(f'    SelectColumnEdit("{name}", new_name="{new_name}"),')
+            col_lines.append(
+                f"    SelectColumnEdit({py_str(name)},"
+                f" new_name={py_str(new_name)}),"
+            )
         else:
-            col_lines.append(f'    SelectColumnEdit("{name}"),')
+            col_lines.append(f"    SelectColumnEdit({py_str(name)}),")
     col_lines.append("]")
     col_lines.append(f"{df_out} = apply_select_edits({df_in}, {var})")
     return "\n".join(col_lines)
@@ -310,7 +314,7 @@ def _gen_formula(
         f"{df_out} = {df_in}.copy()",
     ]
     for fname, expr in formulas:
-        lines.append(f'{df_out}["{fname}"] = {_translate_expr(expr, df_out)}')
+        lines.append(f"{df_out}[{py_str(fname)}] = {_translate_expr(expr, df_out)}")
     return "\n".join(lines)
 
 
@@ -343,7 +347,7 @@ def _gen_join(
 
     if matches:
         if all(lk == rk for lk, rk in matches):
-            keys = "[" + ", ".join(f'"{lk}"' for lk, _ in matches) + "]"
+            keys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
             return (
                 f'{df_out} = pd.merge(\n'
                 f'    {df_left}, {df_right},\n'
@@ -351,8 +355,8 @@ def _gen_join(
                 f'    how="inner",\n'
                 f')'
             )
-        lkeys = "[" + ", ".join(f'"{lk}"' for lk, _ in matches) + "]"
-        rkeys = "[" + ", ".join(f'"{rk}"' for _, rk in matches) + "]"
+        lkeys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
+        rkeys = "[" + ", ".join(py_str(rk) for _, rk in matches) + "]"
         return (
             f'{df_out} = pd.merge(\n'
             f'    {df_left}, {df_right},\n'
@@ -409,12 +413,13 @@ def _gen_summarize(
     ]
     if not groups and not aggs:
         return f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO"
-    group_str = "[" + ", ".join(f'"{g}"' for g in groups if g) + "]"
+    group_str = "[" + ", ".join(py_str(g) for g in groups if g) + "]"
     if aggs:
         agg_map = (
             "{"
             + ", ".join(
-                f'"{field}": "{action.lower()}"' for field, action in aggs if field
+                f"{py_str(field)}: {py_str(action.lower())}"
+                for field, action in aggs if field
             )
             + "}"
         )
@@ -449,7 +454,7 @@ def _gen_sort(
         orders = [
             r.get("@order", "Ascending").lower() != "descending" for r in rows
         ]
-        col_str = "[" + ", ".join(f'"{f}"' for f in fields) + "]"
+        col_str = "[" + ", ".join(py_str(f) for f in fields) + "]"
         return f"{df_out} = {df_in}.sort_values({col_str}, ascending={orders})"
     return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
 
@@ -494,7 +499,7 @@ def _gen_unique(
             if isinstance(f, dict) and field_name(f)
         ]
     if field_names:
-        subset = "[" + ", ".join(f'"{n}"' for n in field_names) + "]"
+        subset = "[" + ", ".join(py_str(n) for n in field_names) + "]"
         return f"{df_out} = {df_in}.drop_duplicates(subset={subset})"
     return f"{df_out} = {df_in}.drop_duplicates()"
 
@@ -550,9 +555,9 @@ def _gen_text_input(
     ]
     for i, name in enumerate(field_names):
         values = ", ".join(
-            f'"{row[i]}"' if i < len(row) else '""' for row in rows
+            py_str(row[i]) if i < len(row) else '""' for row in rows
         )
-        lines.append(f'    "{name}": [{values}],')
+        lines.append(f"    {py_str(name)}: [{values}],")
     lines.append("})")
     return "\n".join(lines)
 
@@ -595,11 +600,12 @@ def _gen_findreplace(
     any_match = find_mode == "FindAny" and bool(field_find and field_search)
 
     if (whole_match or any_match) and replace_mode == "Append" and append_names:
-        cols = ", ".join(f'"{n}"' for n in (field_search, *append_names))
+        cols = ", ".join(py_str(n) for n in (field_search, *append_names))
         key = (
-            f'    on="{field_find}",'
+            f"    on={py_str(field_find)},"
             if field_find == field_search
-            else f'    left_on="{field_find}",\n    right_on="{field_search}",'
+            else f"    left_on={py_str(field_find)},\n"
+            f"    right_on={py_str(field_search)},"
         )
         note = (
             "# Find Replace (append fields on whole match) as a left join"
@@ -613,7 +619,8 @@ def _gen_findreplace(
             lookup_var = f"_LOOKUP_{tool_id}"
             return (
                 f"{note} — review translation\n"
-                f"{lookup_var} = {df_r}[[{cols}]].drop_duplicates('{field_search}')\n"
+                f"{lookup_var} = {df_r}[[{cols}]]"
+                f".drop_duplicates({py_str(field_search)})\n"
                 f"{df_out} = pd.merge(\n"
                 f"    {df_f},\n"
                 f"    {lookup_var},\n"
@@ -621,13 +628,13 @@ def _gen_findreplace(
                 f'    how="left",\n'
                 f")"
             )
+        guard_msg = (
+            f"Find & Replace lookup key '{field_search}' is not unique"
+            " — a left join would duplicate rows; verify Alteryx semantics"
+        )
         guard = (
-            f'if {df_r}["{field_search}"].duplicated().any():\n'
-            f"    raise ValueError(\n"
-            f"        \"Find & Replace lookup key '{field_search}' is not unique\"\n"
-            f'        " — a left join would duplicate rows; verify Alteryx'
-            f' semantics"\n'
-            f"    )"
+            f"if {df_r}[{py_str(field_search)}].duplicated().any():\n"
+            f"    raise ValueError({py_str(guard_msg)})"
         )
         return (
             f"{note} — review translation\n"
@@ -645,12 +652,12 @@ def _gen_findreplace(
         return (
             "# Find Replace (whole match) via lookup map"
             " — review translation\n"
-            f'{map_var} = dict(zip({df_r}["{field_search}"],'
-            f' {df_r}["{replace_field}"]))\n'
+            f"{map_var} = dict(zip({df_r}[{py_str(field_search)}],"
+            f" {df_r}[{py_str(replace_field)}]))\n"
             f"{df_out} = {df_f}.copy()\n"
-            f'{df_out}["{field_find}"] = ('
-            f'{df_out}["{field_find}"].map({map_var})'
-            f'.fillna({df_out}["{field_find}"]))'
+            f"{df_out}[{py_str(field_find)}] = ("
+            f"{df_out}[{py_str(field_find)}].map({map_var})"
+            f".fillna({df_out}[{py_str(field_find)}]))"
         )
     return (
         f"# TODO: Find Replace — mode '{find_mode or '?'}' not translated;"
@@ -698,7 +705,8 @@ def _gen_createpoints(
             "# spatial tool — requires geopandas\n"
             f"{df_out} = gpd.GeoDataFrame(\n"
             f"    {df_in},\n"
-            f'    geometry=gpd.points_from_xy({df_in}["{x}"], {df_in}["{y}"]),\n'
+            f"    geometry=gpd.points_from_xy("
+            f"{df_in}[{py_str(x)}], {df_in}[{py_str(y)}]),\n"
             f'    crs="EPSG:4326",\n'
             f")"
         )
@@ -728,7 +736,7 @@ def _gen_spatialmatch(
         f"    {df_t},\n"
         f"    {df_u},\n"
         f'    how="inner",\n'
-        f'    predicate="{predicate}",\n'
+        f"    predicate={py_str(predicate)},\n"
         f")"
     )
 

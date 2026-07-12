@@ -29,6 +29,7 @@ from yxray.alteryx_expr import (
 from yxray.config_utils import (
     first_text,
     operand_literal,
+    py_str,
     simple_filter_condition,
 )
 from yxray.scaffold_common import FIELD_RE, frame_name
@@ -68,7 +69,7 @@ def _simple_filter_pandas(config: dict[str, Any], df_var: str) -> str:
     if cond is None:
         return ""
     field, operator, operand = cond
-    col = f'{df_var}["{field}"]'
+    col = f"{df_var}[{py_str(field)}]"
     if operator == "IsNull":
         return f"{col}.isna()"
     if operator == "IsNotNull":
@@ -79,9 +80,9 @@ def _simple_filter_pandas(config: dict[str, Any], df_var: str) -> str:
         return f'({col}.notna() & ({col} != ""))'
     # Alteryx Contains is a literal (non-regex) substring match: regex=False.
     if operator == "Contains":
-        return f'{col}.str.contains("{operand}", regex=False, na=False)'
+        return f"{col}.str.contains({py_str(operand)}, regex=False, na=False)"
     if operator == "NotContains":
-        return f'~{col}.str.contains("{operand}", regex=False, na=False)'
+        return f"~{col}.str.contains({py_str(operand)}, regex=False, na=False)"
     op = _SIMPLE_FILTER_OPS.get(operator)
     if op is None:
         return ""
@@ -217,7 +218,7 @@ def _gen_filter(
         except ExprTranslationError:
             translation = None
             pandas_expr = FIELD_RE.sub(
-                lambda m: f'{df_in}["{m.group(1)}"]', expr
+                lambda m: f"{df_in}[{py_str(m.group(1))}]", expr
             )
         lines = ["# Alteryx expression — review translation"]
         if _DATE_EXPR_RE.search(pandas_expr):

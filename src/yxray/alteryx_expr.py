@@ -17,6 +17,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from yxray.config_utils import py_str
+
 __all__ = [
     "ExprTranslationError",
     "FilterMask",
@@ -435,7 +437,7 @@ class _Parser:
         if token.kind == "field":
             self.advance()
             name = token.value[1:-1]
-            return f'{self.df_var}["{name}"]', _ATOM
+            return f"{self.df_var}[{py_str(name)}]", _ATOM
         if token.kind == "lparen":
             self.advance()
             inner = self.expr()
