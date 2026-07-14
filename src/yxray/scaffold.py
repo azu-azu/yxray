@@ -21,6 +21,7 @@ from yxray.alteryx_expr import (
 )
 from yxray.config_utils import (
     as_list,
+    comment_safe,
     field_name,
     first_text,
     py_str,
@@ -366,7 +367,7 @@ def _gen_join(
             f')'
         )
     return (
-        f"# TODO: parse join condition: {expr or '(none)'}\n"
+        f"# TODO: parse join condition: {comment_safe(expr) or '(none)'}\n"
         f'{df_out} = pd.merge({df_left}, {df_right}, on=[...], how="inner")'
     )
 
@@ -660,8 +661,8 @@ def _gen_findreplace(
             f".fillna({df_out}[{py_str(field_find)}]))"
         )
     return (
-        f"# TODO: Find Replace — mode '{find_mode or '?'}' not translated;"
-        " review manually\n"
+        f"# TODO: Find Replace — mode '{comment_safe(find_mode) or '?'}'"
+        " not translated; review manually\n"
         f"{df_out} = {df_f}"
     )
 
@@ -968,7 +969,7 @@ def _emit_main_body(
         body.append(f"# {'─' * 68}")
         body.append(f"# ToolID {tool_id}: {segment}")
         for msg in (warnings_by_tool or {}).get(tool_id, []):
-            body.append(f"# WARNING: {msg}")
+            body.append(f"# WARNING: {comment_safe(msg)}")
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             code = _gen_input(
@@ -1046,7 +1047,7 @@ def scaffold_simple_blocks(
 
         lines: list[str] = [f"# {'─' * 68}", f"# ToolID {tool_id}: {segment}"]
         for msg in (warnings_by_tool or {}).get(tool_id, []):
-            lines.append(f"# WARNING: {msg}")
+            lines.append(f"# WARNING: {comment_safe(msg)}")
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             path = first_text(node.config, "File", "FileName")

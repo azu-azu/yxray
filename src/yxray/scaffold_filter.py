@@ -27,6 +27,7 @@ from yxray.alteryx_expr import (
     translate_filter_masks,
 )
 from yxray.config_utils import (
+    comment_safe,
     first_text,
     operand_literal,
     py_str,
@@ -117,7 +118,7 @@ def _filter_mask_lines(
             return None
     lines: list[str] = []
     for i, mask in enumerate(masks, 1):
-        lines.append(f"# {mask.fragment}")
+        lines.append(f"# {comment_safe(mask.fragment)}")
         lines.append(f"cond_{i} = {mask.code}")
     joined = f" {translation.joiner} ".join(
         f"cond_{i}" for i in range(1, len(masks) + 1)
@@ -141,14 +142,15 @@ def _isempty_columns_in_fragment(fragment: str) -> set[str]:
 
 
 def _isempty_dead_code_note(col: str, *, confident: bool) -> str:
+    name = comment_safe(col)
     if confident:
         return (
-            f'# NOTE: after conversion, IsEmpty\'s == "" check on "{col}"'
+            f'# NOTE: after conversion, IsEmpty\'s == "" check on "{name}"'
             ' always evaluates False — isna() alone is enough (it also'
             " catches NaT)."
         )
     return (
-        f'# NOTE: if "{col}" needs pd.to_datetime conversion, its IsEmpty'
+        f'# NOTE: if "{name}" needs pd.to_datetime conversion, its IsEmpty'
         ' == "" check becomes always False afterward — isna() alone is'
         " enough."
     )
@@ -179,19 +181,21 @@ def _filter_date_warning_lines(
         precise = _date_columns_in_fragment(mask.fragment)
         residual = _fields_in_fragment(mask.fragment) - precise
         for col in sorted(precise):
+            name = comment_safe(col)
             lines.append(
-                f'# WARNING: column "{col}" is compared as a date in'
+                f'# WARNING: column "{name}" is compared as a date in'
                 f" {where} — convert first:"
             )
             lines.append(
-                f'# df["{col}"] = pd.to_datetime(df["{col}"], errors="coerce")'
+                f'# df["{name}"] = pd.to_datetime(df["{name}"], errors="coerce")'
             )
             if col in isempty_cols:
                 lines.append(_isempty_dead_code_note(col, confident=True))
         for col in sorted(residual):
+            name = comment_safe(col)
             lines.append(
                 f"# WARNING: {where} involves a date comparison — verify"
-                f' the type of column "{col}" too (mask-level heuristic).'
+                f' the type of column "{name}" too (mask-level heuristic).'
             )
             if col in isempty_cols:
                 lines.append(_isempty_dead_code_note(col, confident=False))

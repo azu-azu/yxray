@@ -984,6 +984,33 @@ def test_scaffold_join_different_keys() -> None:
     assert '"OrderID"' in code
 
 
+def test_scaffold_join_unparseable_expr_with_newline_stays_in_comment() -> None:
+    # An unrecognized JoinExpression is echoed into a `# TODO` comment
+    # verbatim from the XML; a newline in it would end the comment and
+    # expose the tail as code. comment_safe flattens it to one line.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
+        AlteryxNode(
+            tool_id=ToolID(3), tool_type="Join", x=100, y=50,
+            config={"JoinExpression": "messy\nmulti-line cond"},
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3), dst_anchor=AnchorName("Left"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3), dst_anchor=AnchorName("Right"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# TODO: parse join condition: messy multi-line cond" in code
+    compile(code, "<scaffold>", "exec")
+
+
 # ── Summarize ──────────────────────────────────────────────────────────────
 
 
