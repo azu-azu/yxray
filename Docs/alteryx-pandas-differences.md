@@ -279,8 +279,16 @@ Alteryx の **FindReplace ツール**には `FindWhole`（完全一致）と `Fi
 
 | モード | 挙動 | scaffold の翻訳 |
 |--------|------|-----------------|
-| **FindWhole** | FieldFind の値が FieldSearch に完全一致する行を結合 | `pd.merge(how="left")` + ルックアップキー一意性ガード |
+| **FindWhole** | FieldFind の値が FieldSearch に完全一致する行を結合 | source を `drop_duplicates(keep=...)` してから `pd.merge(how="left")` |
 | **FindAny** | 部分一致（Source の検索値が Targets のフィールドに部分文字列として含まれる） | `simulate_find_any_append(...)` の呼び出しを生成（定義は生成しない） |
+
+FindReplace はモードに関係なく **1 target = 1 出力行** を保証するツールで、
+ルックアップキーが重複していても行は増えない。素の left join は重複キーで
+行が増えるため、FindWhole でも merge の前に source 側を
+`drop_duplicates(subset=[search_field], keep=...)` で重複排除する。
+どの重複を残すかは `ReplaceMultipleFound` に対応させる
+（True = `keep="last"` / False = `keep="first"`。FindAny ヘルパーの
+last/first match と同じ対応）。
 
 anchor と config タグの対応関係:
 
@@ -449,6 +457,7 @@ conv == ""   # → [False, False, False]
 | `Substring(col, start, length)` | 0-indexed。`str[start:start+length]`（`-1` 補正は不要） |
 | `DateTimeAdd(dt, n, "unit")` | `dt + pd.DateOffset(unit=n)` |
 | `ToDate(val)` | `pd.to_datetime(val)` |
+| FindReplace FindWhole + 重複キー source | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `simulate_find_any_append(...)` の呼び出しに変換（定義は生成されない — 参照実装をコピーする） |
 | FindReplace FindAny + ReplaceMultipleFound | ヘルパーの `replace_multiple_found` フラグに変換（True=last match / False=first match） |
 | FindReplace の NoCase | ヘルパーの `case_sensitive` に反転して渡される（NoCase=True → case_sensitive=False） |

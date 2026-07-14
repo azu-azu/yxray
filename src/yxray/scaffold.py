@@ -637,21 +637,22 @@ def _gen_findreplace(
             else f"    left_on={py_str(field_find)},\n"
             f"    right_on={py_str(field_search)},"
         )
-        guard_msg = (
-            f"Find & Replace lookup key '{field_search}' is not unique"
-            " — a left join would duplicate rows; verify Alteryx semantics"
-        )
-        guard = (
-            f"if {df_r}[{py_str(field_search)}].duplicated().any():\n"
-            f"    raise ValueError({py_str(guard_msg)})"
-        )
+        # Find Replace never grows the row count (1 target = 1 row), so the
+        # lookup side must be deduplicated before a left join. Which duplicate
+        # wins mirrors ReplaceMultipleFound: True = last, False = first
+        # (same mapping the FindAny helper implements).
+        keep = "last" if replace_multiple_found else "first"
+        lookup_var = f"_LOOKUP_{tool_id}"
         return (
             "# Find Replace (append fields on whole match) as a left join"
             " — review translation\n"
-            f"{guard}\n"
+            "# source deduplicated so 1 target = 1 row;"
+            " keep follows ReplaceMultipleFound\n"
+            f"{lookup_var} = {df_r}[[{cols}]]"
+            f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
             f"{df_out} = pd.merge(\n"
             f"    {df_f},\n"
-            f"    {df_r}[[{cols}]],\n"
+            f"    {lookup_var},\n"
             f"{key}\n"
             f'    how="left",\n'
             f")"

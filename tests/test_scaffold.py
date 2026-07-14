@@ -1153,6 +1153,32 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
+    # duplicate lookup keys must not grow the row count: the source side is
+    # deduplicated before the join, last match wins (ReplaceMultipleFound
+    # defaults to True)
+    assert '.drop_duplicates("EL_ID", keep="last")' in code
+    assert "raise ValueError(" not in code
+
+
+def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "key_a",
+            "FieldSearch": "key_b",
+            "FindMode": "FindWhole",
+            "ReplaceMode": "Append",
+            "ReplaceMultipleFound": {"@value": "False"},
+            "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert '.drop_duplicates("key_b", keep="first")' in code
+    assert 'left_on="key_a"' in code
+    assert 'right_on="key_b"' in code
+    assert 'how="left"' in code
 
 
 def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
