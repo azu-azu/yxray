@@ -1221,7 +1221,13 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     code = scaffold(doc)
     assert "simulate_find_any_append(" in code
     assert 'find_field="EL_ID"' in code
-    assert 'search_field="EL_ID"' in code
+    # FieldFind == FieldSearch: the helper would append a matched-needle
+    # column named "EL_ID" and collide with the identically named Targets
+    # column. The Source key is renamed to a temp column and dropped after,
+    # so the output keeps the original columns.
+    assert 'df2.rename(columns={"EL_ID": "_search_3"})' in code
+    assert 'search_field="_search_3"' in code
+    assert '.drop(columns=["_search_3"])' in code
     assert 'append_fields=["col_a", "col_b"]' in code
     assert "case_sensitive=True" in code
     assert "replace_multiple_found=True" in code
@@ -1315,6 +1321,9 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
     assert "simulate_find_any_append(\n        df1,\n        df2," in code
     assert 'find_field="key_a"' in code
     assert 'search_field="key_b"' in code
+    # distinct find/search names: no rename/drop workaround emitted
+    assert ".rename(columns=" not in code
+    assert ".drop(columns=" not in code
 
 
 # ── Append Fields ──────────────────────────────────────────────────────────
