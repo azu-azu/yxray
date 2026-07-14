@@ -639,8 +639,11 @@ def _gen_findreplace(
         )
         # Find Replace never grows the row count (1 target = 1 row), so the
         # lookup side must be deduplicated before a left join. Which duplicate
-        # wins mirrors ReplaceMultipleFound: True = last, False = first
-        # (same mapping the FindAny helper implements).
+        # wins mirrors ReplaceMultipleFound: True = last, False = first.
+        # NOTE: this mapping is inferred from the FindAny golden results
+        # (RMF=True = last match) and has not yet been verified for FindWhole
+        # against real Alteryx output — if golden testing shows otherwise,
+        # this line is the only place to fix.
         keep = "last" if replace_multiple_found else "first"
         lookup_var = f"_LOOKUP_{tool_id}"
         return (
@@ -648,6 +651,9 @@ def _gen_findreplace(
             " — review translation\n"
             "# source deduplicated so 1 target = 1 row;"
             " keep follows ReplaceMultipleFound\n"
+            f'# NOTE: keep="{keep}" is inferred from FindAny golden results'
+            " — not yet\n"
+            "# verified for FindWhole\n"
             f"{lookup_var} = {df_r}[[{cols}]]"
             f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
             f"{df_out} = pd.merge(\n"

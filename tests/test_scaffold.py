@@ -1158,6 +1158,9 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
     # defaults to True)
     assert '.drop_duplicates("EL_ID", keep="last")' in code
     assert "raise ValueError(" not in code
+    # the keep mapping is a hypothesis carried over from FindAny golden
+    # results; the generated code must say so until FindWhole is verified
+    assert 'keep="last" is inferred from FindAny golden results' in code
 
 
 def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
