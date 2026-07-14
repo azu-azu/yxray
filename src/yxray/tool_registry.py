@@ -153,7 +153,8 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "FindReplace": ToolInfo(
         "Find & Replace",
         "transform",
-        'pd.merge(data, lookup, ..., how="left") / df[...].map(lookup)',
+        'FindWhole: pd.merge(..., how="left") /'
+        " FindAny: simulate_find_any_append(...) substring lookup",
         "partial",
     ),
     "AppendFields": ToolInfo(

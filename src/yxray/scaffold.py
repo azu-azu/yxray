@@ -248,6 +248,10 @@ def _gen_select(
             "# WARNING: *Unknown=False — apply_select_edits keeps only explicitly"
             " selected columns; verify column list matches Alteryx output"
         )
+    col_lines.append(
+        "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
+    )
+    col_lines.append("# provide the helpers separately")
     col_lines.append(f"{var} = [")
     for name, new_name, selected in edits:
         if not selected:
@@ -596,11 +600,36 @@ def _gen_findreplace(
     replace_multiple_found = not (
         isinstance(rmf_raw, dict) and rmf_raw.get("@value", "").lower() == "false"
     )
+    nocase_raw = config.get("NoCase", {})
+    case_sensitive = not (
+        isinstance(nocase_raw, dict)
+        and nocase_raw.get("@value", "").lower() == "true"
+    )
 
     whole_match = find_mode == "FindWhole" and bool(field_find and field_search)
     any_match = find_mode == "FindAny" and bool(field_find and field_search)
 
-    if (whole_match or any_match) and replace_mode == "Append" and append_names:
+    if any_match and replace_mode == "Append" and append_names:
+        fields = ", ".join(py_str(n) for n in append_names)
+        return (
+            "# Find Replace (FindAny) — substring lookup: each Source"
+            " search value\n"
+            "# is matched inside the Targets find field\n"
+            "# NOTE: simulate_find_any_append() is not generated —"
+            " provide the\n"
+            "# helper separately\n"
+            f"{df_out} = simulate_find_any_append(\n"
+            f"    {df_f},\n"
+            f"    {df_r},\n"
+            f"    find_field={py_str(field_find)},\n"
+            f"    search_field={py_str(field_search)},\n"
+            f"    append_fields=[{fields}],\n"
+            f"    case_sensitive={case_sensitive},\n"
+            f"    replace_multiple_found={replace_multiple_found},\n"
+            f")"
+        )
+
+    if whole_match and replace_mode == "Append" and append_names:
         cols = ", ".join(py_str(n) for n in (field_search, *append_names))
         key = (
             f"    on={py_str(field_find)},"
@@ -608,27 +637,6 @@ def _gen_findreplace(
             else f"    left_on={py_str(field_find)},\n"
             f"    right_on={py_str(field_search)},"
         )
-        note = (
-            "# Find Replace (append fields on whole match) as a left join"
-            if whole_match
-            else (
-                "# Find Replace (FindAny — translated as left join;"
-                " verify match semantics, incl. NaN/empty-string handling)"
-            )
-        )
-        if any_match and not replace_multiple_found:
-            lookup_var = f"_LOOKUP_{tool_id}"
-            return (
-                f"{note} — review translation\n"
-                f"{lookup_var} = {df_r}[[{cols}]]"
-                f".drop_duplicates({py_str(field_search)})\n"
-                f"{df_out} = pd.merge(\n"
-                f"    {df_f},\n"
-                f"    {lookup_var},\n"
-                f"{key}\n"
-                f'    how="left",\n'
-                f")"
-            )
         guard_msg = (
             f"Find & Replace lookup key '{field_search}' is not unique"
             " — a left join would duplicate rows; verify Alteryx semantics"
@@ -638,7 +646,8 @@ def _gen_findreplace(
             f"    raise ValueError({py_str(guard_msg)})"
         )
         return (
-            f"{note} — review translation\n"
+            "# Find Replace (append fields on whole match) as a left join"
+            " — review translation\n"
             f"{guard}\n"
             f"{df_out} = pd.merge(\n"
             f"    {df_f},\n"
@@ -803,11 +812,10 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
 def _collect_metadata(
     node_map: dict[int, Any],
     order: list[int],
-) -> tuple[dict[int, str], dict[int, str], bool, bool]:
+) -> tuple[dict[int, str], dict[int, str], bool]:
     """Pre-pass: collect input/output paths and which helper imports are needed."""
     input_paths: dict[int, str] = {}
     output_paths: dict[int, str] = {}
-    has_select = False
     has_spatial = False
 
     for tool_id in order:
@@ -823,17 +831,14 @@ def _collect_metadata(
             path = first_text(node.config, "File", "FileName")
             if path:
                 output_paths[tool_id] = path
-        elif segment in SCAFFOLD_SELECT_SEGMENTS:
-            has_select = True
         elif segment in SCAFFOLD_SPATIAL_SEGMENTS:
             has_spatial = True
 
-    return input_paths, output_paths, has_select, has_spatial
+    return input_paths, output_paths, has_spatial
 
 
 def _emit_preamble(
     source: str,
-    has_select: bool,
     has_spatial: bool,
     uses_numpy: bool,
 ) -> list[str]:
@@ -843,8 +848,6 @@ def _emit_preamble(
         "from __future__ import annotations",
         "",
     ]
-    if has_select:
-        lines.append("from dataclasses import dataclass")
     lines += [
         "import logging",
         "import os",
@@ -910,41 +913,6 @@ def _emit_paths_block(
         '    raise ValueError(f"Unknown ENV: {ENV}")',
     ]
     return lines
-
-
-def _emit_select_helpers() -> list[str]:
-    return [
-        "",
-        "",
-        "@dataclass(frozen=True)",
-        "class SelectColumnEdit:",
-        "    name: str",
-        "    new_name: str | None = None",
-        "    selected: bool = True",
-        "",
-        "",
-        "def apply_select_edits(",
-        "        df: pd.DataFrame,",
-        "        columns: list[SelectColumnEdit],",
-        ") -> pd.DataFrame:",
-        '    wildcard = next((c for c in columns if c.name == "*Unknown"), None)',
-        '    explicit = [c for c in columns if c.name != "*Unknown"]',
-        "    if wildcard is not None and not wildcard.selected:",
-        "        keep = [",
-        "            c.name for c in explicit",
-        "            if c.selected and c.name in df.columns",
-        "        ]",
-        "        df = df[keep]",
-        "    else:",
-        "        drop = {c.name for c in explicit if not c.selected} & set(df.columns)",
-        "        df = df.drop(columns=drop)",
-        "    rename_map = {",
-        "        c.name: c.new_name",
-        "        for c in explicit",
-        "        if c.selected and c.new_name and c.name in df.columns",
-        "    }",
-        "    return df.rename(columns=rename_map)",
-    ]
 
 
 def _emit_main_body(
@@ -1127,7 +1095,7 @@ def scaffold(
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name
 
-    input_paths, output_paths, has_select, has_spatial = _collect_metadata(
+    input_paths, output_paths, has_spatial = _collect_metadata(
         node_map, order
     )
 
@@ -1138,10 +1106,8 @@ def scaffold(
     )
     uses_numpy = any(_NUMPY_RE.search(line) for line in body)
 
-    lines = _emit_preamble(source, has_select, has_spatial, uses_numpy)
+    lines = _emit_preamble(source, has_spatial, uses_numpy)
     lines += _emit_paths_block(input_paths, output_paths)
-    if has_select:
-        lines += _emit_select_helpers()
     lines += ["", "", "def main() -> None:"]
     lines += body
     lines += [

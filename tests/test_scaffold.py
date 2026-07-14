@@ -1,9 +1,7 @@
-import pytest
 
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import (
-    _emit_select_helpers,
     node_code_snippets,
     scaffold,
     scaffold_simple,
@@ -737,7 +735,9 @@ def test_scaffold_select_with_rename() -> None:
     assert "SelectColumnEdit" in code
 
 
-def test_scaffold_select_emits_helpers() -> None:
+def test_scaffold_select_does_not_emit_helper_definitions() -> None:
+    """Helper definitions are no longer embedded in the generated .py;
+    the scaffold emits the call plus a NOTE to provide them separately."""
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
@@ -756,9 +756,14 @@ def test_scaffold_select_emits_helpers() -> None:
         ),
     )
     code = scaffold(doc)
-    assert "from dataclasses import dataclass" in code
-    assert "class SelectColumnEdit:" in code
-    assert "def apply_select_edits(" in code
+    assert "from dataclasses import dataclass" not in code
+    assert "class SelectColumnEdit:" not in code
+    assert "def apply_select_edits(" not in code
+    assert (
+        "# NOTE: SelectColumnEdit / apply_select_edits are not generated"
+        in code
+    )
+    assert "apply_select_edits(df1, _COLS_2)" in code
 
 
 def test_scaffold_select_always_warns_about_stale_xml() -> None:
@@ -831,68 +836,6 @@ def test_scaffold_select_unknown_deselected_warning() -> None:
     )
     code = scaffold(doc)
     assert "# WARNING: *Unknown=False" in code
-
-
-# ── Select helper semantics ─────────────────────────────────────────────────
-# The helper is emitted as source text; exec it and check the runtime
-# behavior the generated scaffolds rely on.
-
-
-def _exec_select_helpers():
-    pd = pytest.importorskip("pandas")
-    ns: dict[str, object] = {}
-    src = (
-        "from dataclasses import dataclass\n"
-        "import pandas as pd\n" + "\n".join(_emit_select_helpers())
-    )
-    exec(src, ns)
-    return pd, ns["SelectColumnEdit"], ns["apply_select_edits"]
-
-
-def test_apply_select_edits_unknown_deselected_keeps_only_selected() -> None:
-    pd, edit, apply_edits = _exec_select_helpers()
-    df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
-    out = apply_edits(df, [
-        edit("a"),
-        edit("b", "b2"),
-        edit("*Unknown", selected=False),
-    ])
-    assert list(out.columns) == ["a", "b2"]
-
-
-def test_apply_select_edits_ignores_absent_deselected_column() -> None:
-    # Alteryx XML routinely carries stale field lists; dropping a column
-    # that no longer exists must not raise KeyError.
-    pd, edit, apply_edits = _exec_select_helpers()
-    df = pd.DataFrame({"a": [1], "unlisted": [2]})
-    out = apply_edits(df, [
-        edit("a", "id"),
-        edit("gone", selected=False),
-        edit("*Unknown"),
-    ])
-    assert list(out.columns) == ["id", "unlisted"]
-
-
-def test_apply_select_edits_unknown_selected_keeps_unlisted_columns() -> None:
-    pd, edit, apply_edits = _exec_select_helpers()
-    df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
-    out = apply_edits(df, [
-        edit("a"),
-        edit("b", selected=False),
-        edit("*Unknown"),
-    ])
-    assert list(out.columns) == ["a", "extra"]
-
-
-def test_apply_select_edits_unknown_deselected_skips_absent_selected() -> None:
-    pd, edit, apply_edits = _exec_select_helpers()
-    df = pd.DataFrame({"a": [1]})
-    out = apply_edits(df, [
-        edit("a"),
-        edit("renamed_away", "x"),
-        edit("*Unknown", selected=False),
-    ])
-    assert list(out.columns) == ["a"]
 
 
 # ── Browse ──────────────────────────────────────────────────────────────────
@@ -1230,7 +1173,7 @@ def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
     assert '"Code"' in code
 
 
-def test_scaffold_findreplace_findany_append_left_join() -> None:
+def test_scaffold_findreplace_findany_append_helper_call() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
@@ -1247,18 +1190,19 @@ def test_scaffold_findreplace_findany_append_left_join() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert 'df2[["EL_ID", "col_a", "col_b"]]' in code
-    assert 'on="EL_ID"' in code
-    assert 'how="left"' in code
+    assert "simulate_find_any_append(" in code
+    assert 'find_field="EL_ID"' in code
+    assert 'search_field="EL_ID"' in code
+    assert 'append_fields=["col_a", "col_b"]' in code
+    assert "case_sensitive=True" in code
+    assert "replace_multiple_found=True" in code
+    # substring semantics live inside the helper — no equality join emitted
+    assert "pd.merge" not in code
     assert "TODO: Find Replace" not in code
-    # a left join duplicates rows when the lookup key repeats; the
-    # scaffold must guard against that silently changing row counts
-    assert 'if df2["EL_ID"].duplicated().any():' in code
-    assert "raise ValueError(" in code
-    assert "Find & Replace lookup key 'EL_ID' is not unique" in code
+    assert "# NOTE: simulate_find_any_append() is not generated" in code
 
 
-def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
+def test_scaffold_findreplace_findany_first_match_flag() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
@@ -1273,11 +1217,15 @@ def test_scaffold_findreplace_dedup_path_has_no_uniqueness_guard() -> None:
         "R",
     )
     code = scaffold(doc)
-    # drop_duplicates already makes the lookup unique; no guard needed
+    # first-match handling is a helper flag now, not drop_duplicates + merge
+    assert "replace_multiple_found=False" in code
+    assert "drop_duplicates" not in code
     assert "duplicated().any()" not in code
+    assert "pd.merge" not in code
+    assert "TODO: Find Replace" not in code
 
 
-def test_scaffold_findreplace_findany_append_dedup_when_first_match_only() -> None:
+def test_scaffold_findreplace_findany_nocase_maps_to_case_insensitive() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
@@ -1285,20 +1233,14 @@ def test_scaffold_findreplace_findany_append_dedup_when_first_match_only() -> No
             "FieldSearch": "key_b",
             "FindMode": "FindAny",
             "ReplaceMode": "Append",
-            "ReplaceMultipleFound": {"@value": "False"},
-            "ReplaceAppendFields": {
-                "Field": [{"@field": "val"}],
-            },
+            "NoCase": {"@value": "True"},
+            "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
         },
         "F",
         "R",
     )
     code = scaffold(doc)
-    assert "drop_duplicates" in code
-    assert 'left_on="key_a"' in code
-    assert 'right_on="key_b"' in code
-    assert 'how="left"' in code
-    assert "TODO: Find Replace" not in code
+    assert "case_sensitive=False" in code
 
 
 def test_scaffold_findreplace_findany_replace_mode_falls_back() -> None:
@@ -1322,8 +1264,8 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
 
     Targets = main stream (FieldFind column lives here),
     Source  = lookup table (FieldSearch column lives here).
-    Verify that tool 1 (Targets/main) becomes the LEFT side of the merge
-    and tool 2 (Source/lookup) becomes the RIGHT side.
+    Verify that tool 1 (Targets/main) is passed as the targets frame and
+    tool 2 (Source/lookup) as the source frame of the helper call.
     """
     doc = _two_input_doc(
         "FindReplace",
@@ -1339,13 +1281,10 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
         "Source",   # tool 2 → lookup table
     )
     code = scaffold(doc)
-    # tool 1 (Targets / main) must be the LEFT side
-    assert "pd.merge(\n        df1," in code
-    # tool 2 (Source / lookup) must supply the lookup columns
-    assert 'df2[["key_b", "val"]]' in code
-    assert 'left_on="key_a"' in code
-    assert 'right_on="key_b"' in code
-    assert 'how="left"' in code
+    # tool 1 (Targets / main) first, tool 2 (Source / lookup) second
+    assert "simulate_find_any_append(\n        df1,\n        df2," in code
+    assert 'find_field="key_a"' in code
+    assert 'search_field="key_b"' in code
 
 
 # ── Append Fields ──────────────────────────────────────────────────────────
