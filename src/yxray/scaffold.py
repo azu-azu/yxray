@@ -626,7 +626,7 @@ def _gen_findreplace(
             f"    append_fields=[{fields}],\n"
             f"    case_sensitive={case_sensitive},\n"
             f"    replace_multiple_found={replace_multiple_found},\n"
-            f'    log_title={py_str(f"ToolID {tool_id}")},\n'
+            f'    log_label={py_str(f"ToolID {tool_id}")},\n'
             f")"
         )
 
