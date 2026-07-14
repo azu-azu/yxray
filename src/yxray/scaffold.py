@@ -251,7 +251,7 @@ def _gen_select(
     col_lines.append(
         "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
     )
-    col_lines.append("# provide the helpers separately")
+    col_lines.append("# copy them from scripts/select_helpers.py")
     col_lines.append(f"{var} = [")
     for name, new_name, selected in edits:
         if not selected:
@@ -615,9 +615,9 @@ def _gen_findreplace(
             "# Find Replace (FindAny) — substring lookup: each Source"
             " search value\n"
             "# is matched inside the Targets find field\n"
-            "# NOTE: simulate_find_any_append() is not generated —"
-            " provide the\n"
-            "# helper separately\n"
+            "# NOTE: simulate_find_any_append() is not generated — copy"
+            " it from\n"
+            "# scripts/simulate_find_any_append.py\n"
             f"{df_out} = simulate_find_any_append(\n"
             f"    {df_f},\n"
             f"    {df_r},\n"

@@ -55,6 +55,9 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "src/yxray/renderers/_report_assets.py" = ["E501"]
+# scripts/ holds reference implementations kept close to their
+# golden-verified originals; Japanese comments run past 88 chars
+"scripts/*" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
