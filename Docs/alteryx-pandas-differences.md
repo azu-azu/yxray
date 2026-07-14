@@ -343,13 +343,36 @@ df3 = simulate_find_any_append(
 - **NaN の誤マッチ防止** — `astype(str)` だと NaN が `"nan"` になり誤マッチ
   するため、NaN は判定から除外する
 - **空文字 needle の除外** — `"" in "ABC-123"` は `True` なので、空文字の
-  検索値は全行マッチになる前に弾く
+  検索値は全行マッチになる前に弾く（Alteryx の実挙動との一致は未実測。
+  下記の保留事項参照）
 - **float64 昇格による表記ずれ** — NaN 混在で整数列が float64 に昇格すると
   `123` が `"123.0"` になり文字列比較がすれ違うため、整数値 float は
   `".0"` を落として文字列化する
 
 FindAny + `ReplaceMode=Replace`（見つかった部分文字列の置換）は未対応で、
 従来どおり TODO コメントにフォールバックする。
+
+### 未検証・保留事項（golden で確定したら消し込む）
+
+実 Alteryx の golden 出力との突合で確定していない項目の一覧。
+確定したら該当行を消し、関係するコード側の NOTE・テストも合わせて更新する。
+
+- [ ] **FindWhole + 重複キー source** — `ReplaceMultipleFound=True` で本当に
+  last が勝つか。現在の `drop_duplicates(keep="last")` は FindAny の golden
+  結果からの類推。source に同じキーを2行（値違い）入れた FindWhole
+  ワークフローで、①行数が増えないこと ②後の行が採用されること を実測する。
+  確定したら `scaffold.py` の keep 行のコメント・生成コードの NOTE・
+  `test_scaffold_findreplace_append_mode_left_join` の NOTE アサーションを更新
+  （逆だった場合は `keep = "last" if replace_multiple_found else "first"` の
+  1行を直す）
+- [ ] **RMF=False（first match）** — FindAny の golden 突合に
+  `ReplaceMultipleFound=False` のケースが含まれていたか確認。
+  なければ追加して first match 採用を実測する
+- [ ] **NoCase=True（大文字小文字無視）** — golden 突合に case-insensitive の
+  ケースが含まれていたか確認。なければ追加する
+- [ ] **空文字の検索値** — 参照実装（`scripts/simulate_find_any_append.py`）は
+  空文字 needle をスキップするが、Alteryx の実挙動（全行マッチ / 無視）は
+  未実測。source に空文字行を含む golden で一致を確認する
 
 ---
 
