@@ -1,4 +1,4 @@
-from yxray.config_utils import operand_literal, py_str
+from yxray.config_utils import comment_safe, operand_literal, py_str
 
 
 def test_py_str_plain_identifier_is_double_quoted() -> None:
@@ -26,6 +26,20 @@ def test_py_str_escapes_backslash_and_newline() -> None:
 
 def test_py_str_coerces_non_str() -> None:
     assert eval(py_str(42)) == "42"
+
+
+def test_comment_safe_single_line_unchanged() -> None:
+    assert comment_safe("[Status] = 1") == "[Status] = 1"
+
+
+def test_comment_safe_collapses_newlines() -> None:
+    # A newline would otherwise end the comment and expose the rest as code.
+    assert (
+        comment_safe('[Status] = "A"\nOR [Flag] = 1')
+        == '[Status] = "A" OR [Flag] = 1'
+    )
+    assert comment_safe("a\r\nb") == "a b"
+    assert comment_safe("a\n\n\nb") == "a b"
 
 
 def test_operand_literal_numeric_unquoted() -> None:

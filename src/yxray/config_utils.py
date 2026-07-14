@@ -23,6 +23,18 @@ def py_str(value: object) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
+def comment_safe(value: object) -> str:
+    """Flatten a value to one line for safe embedding in a ``# comment``.
+
+    py_str protects string *literals*, but a value dropped into a comment
+    has no such wrapper: a newline in workflow-derived text (an expression
+    fragment, a field name) would end the comment and let the rest be
+    parsed as code. Collapse any run of CR/LF to a single space. Single-line
+    values are returned unchanged.
+    """
+    return re.sub(r"[\r\n]+", " ", str(value))
+
+
 def as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else ([] if value is None else [value])
 
