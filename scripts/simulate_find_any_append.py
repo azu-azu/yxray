@@ -40,7 +40,7 @@ def simulate_find_any_append(
     append_fields: list[str],
     case_sensitive: bool = True,  # Alteryx の NoCase=False（大小を区別）に対応
     replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。True=last match、False=first match
-    log_title: str = "",  # ログ見出しの先頭に付ける文字列
+    log_label: str = "",  # ログ見出しの先頭に付ける識別ラベル（例: "ToolID 7"）
     verbose: bool = True,
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
@@ -54,7 +54,7 @@ def simulate_find_any_append(
     start = time.perf_counter()
 
     if verbose:
-        print(f"\n{log_title}⛳️ simulate find any append")
+        print(f"\n{log_label}⛳️ simulate find any append")
         print("target の文字列の中に、source の検索値が「部分文字列として」含まれるか で判定中 ...\n")
 
     # ── 入力チェック ──────────────────────────────────────────────

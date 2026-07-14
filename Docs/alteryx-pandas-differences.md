@@ -327,7 +327,7 @@ df3 = simulate_find_any_append(
     append_fields=["col_a", "col_b"],
     case_sensitive=True,          # Alteryx の NoCase=False に対応
     replace_multiple_found=True,  # Alteryx の ReplaceMultipleFound
-    log_title="ToolID 3",         # 実行ログにどのツールか表示される
+    log_label="ToolID 3",         # 実行ログにどのツールか表示される
 )
 ```
 

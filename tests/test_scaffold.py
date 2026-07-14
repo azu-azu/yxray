@@ -1225,7 +1225,7 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     assert 'append_fields=["col_a", "col_b"]' in code
     assert "case_sensitive=True" in code
     assert "replace_multiple_found=True" in code
-    assert 'log_title="ToolID 3"' in code
+    assert 'log_label="ToolID 3"' in code
     # substring semantics live inside the helper — no equality join emitted
     assert "pd.merge" not in code
     assert "TODO: Find Replace" not in code
