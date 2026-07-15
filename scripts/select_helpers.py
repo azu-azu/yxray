@@ -24,16 +24,13 @@ class SelectColumnEdit:
 
 
 def apply_select_edits(
-        df: pd.DataFrame,
-        columns: list[SelectColumnEdit],
+    df: pd.DataFrame,
+    columns: list[SelectColumnEdit],
 ) -> pd.DataFrame:
     wildcard = next((c for c in columns if c.name == "*Unknown"), None)
     explicit = [c for c in columns if c.name != "*Unknown"]
     if wildcard is not None and not wildcard.selected:
-        keep = [
-            c.name for c in explicit
-            if c.selected and c.name in df.columns
-        ]
+        keep = [c.name for c in explicit if c.selected and c.name in df.columns]
         df = df[keep]
     else:
         drop = {c.name for c in explicit if not c.selected} & set(df.columns)

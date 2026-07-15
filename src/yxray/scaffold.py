@@ -127,7 +127,6 @@ def _write_stmt(df_in: str, path: str | None, path_expr: str) -> str:
 # ── Connection helpers ─────────────────────────────────────────────────────
 
 
-
 def _build_anchor_map(doc: WorkflowDoc) -> dict[int, dict[str, int]]:
     """For each dst tool, map anchor name → src tool_id."""
     anchors: dict[int, dict[str, int]] = {}
@@ -258,8 +257,7 @@ def _gen_select(
             col_lines.append(f"    SelectColumnEdit({py_str(name)}, selected=False),")
         elif new_name:
             col_lines.append(
-                f"    SelectColumnEdit({py_str(name)},"
-                f" new_name={py_str(new_name)}),"
+                f"    SelectColumnEdit({py_str(name)}, new_name={py_str(new_name)}),"
             )
         else:
             col_lines.append(f"    SelectColumnEdit({py_str(name)}),")
@@ -299,10 +297,7 @@ def _gen_formula(
             if not isinstance(item, dict):
                 continue
             fname = item.get("@field", "") or item.get("@name", "")
-            expr = (
-                item.get("@expression", "")
-                or item.get("@formula", "")
-            )
+            expr = item.get("@expression", "") or item.get("@formula", "")
             if fname and expr:
                 formulas.append((fname, expr))
     if not formulas:
@@ -354,21 +349,21 @@ def _gen_join(
         if all(lk == rk for lk, rk in matches):
             keys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
             return (
-                f'{df_out} = pd.merge(\n'
-                f'    {df_left}, {df_right},\n'
-                f'    on={keys},\n'
+                f"{df_out} = pd.merge(\n"
+                f"    {df_left}, {df_right},\n"
+                f"    on={keys},\n"
                 f'    how="inner",\n'
-                f')'
+                f")"
             )
         lkeys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
         rkeys = "[" + ", ".join(py_str(rk) for _, rk in matches) + "]"
         return (
-            f'{df_out} = pd.merge(\n'
-            f'    {df_left}, {df_right},\n'
-            f'    left_on={lkeys},\n'
-            f'    right_on={rkeys},\n'
+            f"{df_out} = pd.merge(\n"
+            f"    {df_left}, {df_right},\n"
+            f"    left_on={lkeys},\n"
+            f"    right_on={rkeys},\n"
             f'    how="inner",\n'
-            f')'
+            f")"
         )
     return (
         f"# TODO: parse join condition: {comment_safe(expr) or '(none)'}\n"
@@ -424,7 +419,8 @@ def _gen_summarize(
             "{"
             + ", ".join(
                 f"{py_str(field)}: {py_str(action.lower())}"
-                for field, action in aggs if field
+                for field, action in aggs
+                if field
             )
             + "}"
         )
@@ -437,8 +433,7 @@ def _gen_summarize(
             f")"
         )
     return (
-        f"{df_out} = {df_in}.groupby({group_str}).agg({{...}}) "
-        "# TODO: set aggregations"
+        f"{df_out} = {df_in}.groupby({group_str}).agg({{...}}) # TODO: set aggregations"
     )
 
 
@@ -456,9 +451,7 @@ def _gen_sort(
     rows = sort_field_rows(config)
     if rows:
         fields = [r["@field"] for r in rows]
-        orders = [
-            r.get("@order", "Ascending").lower() != "descending" for r in rows
-        ]
+        orders = [r.get("@order", "Ascending").lower() != "descending" for r in rows]
         col_str = "[" + ", ".join(py_str(f) for f in fields) + "]"
         return f"{df_out} = {df_in}.sort_values({col_str}, ascending={orders})"
     return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
@@ -559,12 +552,126 @@ def _gen_text_input(
         f"{df_out} = pd.DataFrame({{",
     ]
     for i, name in enumerate(field_names):
-        values = ", ".join(
-            py_str(row[i]) if i < len(row) else '""' for row in rows
-        )
+        values = ", ".join(py_str(row[i]) if i < len(row) else '""' for row in rows)
         lines.append(f"    {py_str(name)}: [{values}],")
     lines.append("})")
     return "\n".join(lines)
+
+
+def _findreplace_any_append(
+    tool_id: int,
+    df_out: str,
+    df_f: str,
+    df_r: str,
+    field_find: str,
+    field_search: str,
+    append_names: list[str],
+    case_sensitive: bool,
+    replace_multiple_found: bool,
+) -> str:
+    fields = ", ".join(py_str(n) for n in append_names)
+    # The helper output is "original Targets columns + append_fields" only;
+    # the search value (FieldSearch) is used to look up but never added to
+    # the output — matching real Alteryx Append output (verified against
+    # golden output, diff 0). So FieldFind == FieldSearch needs no special
+    # handling: the key column is never duplicated.
+    header = (
+        "# Find Replace (FindAny) — substring lookup: each Source"
+        " search value\n"
+        "# is matched inside the Targets find field\n"
+        "# NOTE: simulate_find_any_append() is not generated — copy"
+        " it from\n"
+        "# scripts/simulate_find_any_append.py\n"
+    )
+    return (
+        header + f"{df_out} = simulate_find_any_append(\n"
+        f"    {df_f},\n"
+        f"    {df_r},\n"
+        f"    find_field={py_str(field_find)},\n"
+        f"    search_field={py_str(field_search)},\n"
+        f"    append_fields=[{fields}],\n"
+        f"    case_sensitive={case_sensitive},\n"
+        f"    replace_multiple_found={replace_multiple_found},\n"
+        f"    log_label={py_str(f'ToolID {tool_id}')},\n"
+        f")"
+    )
+
+
+def _findreplace_whole_append(
+    tool_id: int,
+    df_out: str,
+    df_f: str,
+    df_r: str,
+    field_find: str,
+    field_search: str,
+    append_names: list[str],
+    replace_multiple_found: bool,
+) -> str:
+    cols = ", ".join(py_str(n) for n in (field_search, *append_names))
+    key = (
+        f"    on={py_str(field_find)},"
+        if field_find == field_search
+        else f"    left_on={py_str(field_find)},\n    right_on={py_str(field_search)},"
+    )
+    # Find Replace never grows the row count (1 target = 1 row), so the
+    # lookup side must be deduplicated before a left join. Which duplicate
+    # wins mirrors ReplaceMultipleFound: True = last, False = first.
+    # NOTE: this mapping is inferred from the FindAny golden results
+    # (RMF=True = last match) and has not yet been verified for FindWhole
+    # against real Alteryx output — if golden testing shows otherwise,
+    # this line is the only place to fix.
+    keep = "last" if replace_multiple_found else "first"
+    lookup_var = f"_LOOKUP_{tool_id}"
+    return (
+        "# Find Replace (append fields on whole match) as a left join"
+        " — review translation\n"
+        "# source deduplicated so 1 target = 1 row;"
+        " keep follows ReplaceMultipleFound\n"
+        f'# NOTE: keep="{keep}" is inferred from FindAny golden results'
+        " — not yet\n"
+        "# verified for FindWhole\n"
+        f"{lookup_var} = {df_r}[[{cols}]]"
+        f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
+        f"{df_out} = pd.merge(\n"
+        f"    {df_f},\n"
+        f"    {lookup_var},\n"
+        f"{key}\n"
+        f'    how="left",\n'
+        f")"
+    )
+
+
+def _findreplace_whole_replace(
+    df_out: str,
+    df_f: str,
+    df_r: str,
+    field_find: str,
+    field_search: str,
+    replace_field: str,
+    tool_id: int,
+) -> str:
+    map_var = f"_MAP_{tool_id}"
+    return (
+        "# Find Replace (whole match) via lookup map"
+        " — review translation\n"
+        f"{map_var} = dict(zip({df_r}[{py_str(field_search)}],"
+        f" {df_r}[{py_str(replace_field)}]))\n"
+        f"{df_out} = {df_f}.copy()\n"
+        f"{df_out}[{py_str(field_find)}] = ("
+        f"{df_out}[{py_str(field_find)}].map({map_var})"
+        f".fillna({df_out}[{py_str(field_find)}]))"
+    )
+
+
+def _findreplace_todo(df_out: str, df_f: str, find_mode: str, replace_mode: str) -> str:
+    # Name both axes so a reviewer can tell "cannot translate" apart from
+    # "forgot to translate".
+    return (
+        f"# TODO: Find Replace — FindMode='{comment_safe(find_mode) or '?'}',"
+        f" ReplaceMode='{comment_safe(replace_mode) or '?'}'\n"
+        "# is not translated; input passed through unchanged\n"
+        f"{df_out} = {df_f}"
+    )
 
 
 def _gen_findreplace(
@@ -602,75 +709,34 @@ def _gen_findreplace(
     )
     nocase_raw = config.get("NoCase", {})
     case_sensitive = not (
-        isinstance(nocase_raw, dict)
-        and nocase_raw.get("@value", "").lower() == "true"
+        isinstance(nocase_raw, dict) and nocase_raw.get("@value", "").lower() == "true"
     )
 
     whole_match = find_mode == "FindWhole" and bool(field_find and field_search)
     any_match = find_mode == "FindAny" and bool(field_find and field_search)
 
     if any_match and replace_mode == "Append" and append_names:
-        fields = ", ".join(py_str(n) for n in append_names)
-        # The helper output is "original Targets columns + append_fields" only;
-        # the search value (FieldSearch) is used to look up but never added to
-        # the output — matching real Alteryx Append output (verified against
-        # golden output, diff 0). So FieldFind == FieldSearch needs no special
-        # handling: the key column is never duplicated.
-        header = (
-            "# Find Replace (FindAny) — substring lookup: each Source"
-            " search value\n"
-            "# is matched inside the Targets find field\n"
-            "# NOTE: simulate_find_any_append() is not generated — copy"
-            " it from\n"
-            "# scripts/simulate_find_any_append.py\n"
+        return _findreplace_any_append(
+            tool_id,
+            df_out,
+            df_f,
+            df_r,
+            field_find,
+            field_search,
+            append_names,
+            case_sensitive,
+            replace_multiple_found,
         )
-        return (
-            header
-            + f"{df_out} = simulate_find_any_append(\n"
-            f"    {df_f},\n"
-            f"    {df_r},\n"
-            f"    find_field={py_str(field_find)},\n"
-            f"    search_field={py_str(field_search)},\n"
-            f"    append_fields=[{fields}],\n"
-            f"    case_sensitive={case_sensitive},\n"
-            f"    replace_multiple_found={replace_multiple_found},\n"
-            f'    log_label={py_str(f"ToolID {tool_id}")},\n'
-            f")"
-        )
-
     if whole_match and replace_mode == "Append" and append_names:
-        cols = ", ".join(py_str(n) for n in (field_search, *append_names))
-        key = (
-            f"    on={py_str(field_find)},"
-            if field_find == field_search
-            else f"    left_on={py_str(field_find)},\n"
-            f"    right_on={py_str(field_search)},"
-        )
-        # Find Replace never grows the row count (1 target = 1 row), so the
-        # lookup side must be deduplicated before a left join. Which duplicate
-        # wins mirrors ReplaceMultipleFound: True = last, False = first.
-        # NOTE: this mapping is inferred from the FindAny golden results
-        # (RMF=True = last match) and has not yet been verified for FindWhole
-        # against real Alteryx output — if golden testing shows otherwise,
-        # this line is the only place to fix.
-        keep = "last" if replace_multiple_found else "first"
-        lookup_var = f"_LOOKUP_{tool_id}"
-        return (
-            "# Find Replace (append fields on whole match) as a left join"
-            " — review translation\n"
-            "# source deduplicated so 1 target = 1 row;"
-            " keep follows ReplaceMultipleFound\n"
-            f'# NOTE: keep="{keep}" is inferred from FindAny golden results'
-            " — not yet\n"
-            "# verified for FindWhole\n"
-            f"{lookup_var} = {df_r}[[{cols}]]"
-            f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
-            f"{df_out} = pd.merge(\n"
-            f"    {df_f},\n"
-            f"    {lookup_var},\n"
-            f"{key}\n"
-            f'    how="left",\n'
-            f")"
+        return _findreplace_whole_append(
+            tool_id,
+            df_out,
+            df_f,
+            df_r,
+            field_find,
+            field_search,
+            append_names,
+            replace_multiple_found,
         )
     # ReplaceMode is the primary discriminator: the XML can retain settings
     # for the non-selected mode (a stale ReplaceFoundField survives switching
@@ -678,25 +744,16 @@ def _gen_findreplace(
     # Replace branch.
     replace_field = first_text(config, "ReplaceFoundField")
     if whole_match and replace_mode == "Replace" and replace_field:
-        map_var = f"_MAP_{tool_id}"
-        return (
-            "# Find Replace (whole match) via lookup map"
-            " — review translation\n"
-            f"{map_var} = dict(zip({df_r}[{py_str(field_search)}],"
-            f" {df_r}[{py_str(replace_field)}]))\n"
-            f"{df_out} = {df_f}.copy()\n"
-            f"{df_out}[{py_str(field_find)}] = ("
-            f"{df_out}[{py_str(field_find)}].map({map_var})"
-            f".fillna({df_out}[{py_str(field_find)}]))"
+        return _findreplace_whole_replace(
+            df_out,
+            df_f,
+            df_r,
+            field_find,
+            field_search,
+            replace_field,
+            tool_id,
         )
-    # Name both axes so a reviewer can tell "cannot translate" apart from
-    # "forgot to translate".
-    return (
-        f"# TODO: Find Replace — FindMode='{comment_safe(find_mode) or '?'}',"
-        f" ReplaceMode='{comment_safe(replace_mode) or '?'}'\n"
-        "# is not translated; input passed through unchanged\n"
-        f"{df_out} = {df_f}"
-    )
+    return _findreplace_todo(df_out, df_f, find_mode, replace_mode)
 
 
 def _gen_appendfields(
@@ -947,6 +1004,56 @@ def _emit_paths_block(
     return lines
 
 
+def _tool_context(
+    tool_id: int,
+    node_map: dict[int, Any],
+    pred_map: dict[int, list[int]],
+    anchor_map: dict[int, dict[str, int]],
+) -> tuple[Any, str, list[int], dict[str, int]] | None:
+    """(node, segment, preds, anchors) for a tool, or None if it has no node.
+
+    Shared by _emit_main_body() (.py) and scaffold_simple_blocks() (.md) so
+    the per-tool lookup stays in one place even though the two callers emit
+    different output shapes.
+    """
+    node = node_map.get(tool_id)
+    if node is None:
+        return None
+    segment = tool_segment(node.tool_type)
+    return node, segment, pred_map.get(tool_id, []), anchor_map.get(tool_id, {})
+
+
+def _header_comment_lines(
+    tool_id: int,
+    segment: str,
+    warnings_by_tool: dict[int, list[str]] | None,
+) -> list[str]:
+    """The "# ─── / # ToolID N: segment / # WARNING: ..." block above a tool."""
+    lines = [f"# {'─' * 68}", f"# ToolID {tool_id}: {segment}"]
+    for msg in (warnings_by_tool or {}).get(tool_id, []):
+        lines.append(f"# WARNING: {comment_safe(msg)}")
+    return lines
+
+
+def _gen_code_for_segment(
+    tool_id: int,
+    segment: str,
+    config: dict[str, Any],
+    preds: list[int],
+    anchors: dict[str, int],
+    names: dict[int, str],
+) -> str | None:
+    """Code for a non-Input/Output segment via the generator registry.
+
+    None means the segment has no registered generator (unsupported tool);
+    callers append their own TODO fallback in that case.
+    """
+    gen = _GENERATORS.get(segment)
+    if gen is None:
+        return None
+    return gen(tool_id, segment, config, preds, anchors, names)
+
+
 def _emit_main_body(
     order: list[int],
     node_map: dict[int, Any],
@@ -959,17 +1066,12 @@ def _emit_main_body(
 ) -> list[str]:
     body: list[str] = []
     for tool_id in order:
-        node = node_map.get(tool_id)
-        if node is None:
+        ctx = _tool_context(tool_id, node_map, pred_map, anchor_map)
+        if ctx is None:
             continue
-        segment = tool_segment(node.tool_type)
-        preds = pred_map.get(tool_id, [])
-        anchors = anchor_map.get(tool_id, {})
+        node, segment, preds, anchors = ctx
 
-        body.append(f"# {'─' * 68}")
-        body.append(f"# ToolID {tool_id}: {segment}")
-        for msg in (warnings_by_tool or {}).get(tool_id, []):
-            body.append(f"# WARNING: {comment_safe(msg)}")
+        body += _header_comment_lines(tool_id, segment, warnings_by_tool)
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             code = _gen_input(
@@ -980,13 +1082,14 @@ def _emit_main_body(
                 tool_id, segment, node.config, preds, anchors, output_paths, names
             )
         else:
-            gen = _GENERATORS.get(segment)
-            if gen is None:
+            code = _gen_code_for_segment(
+                tool_id, segment, node.config, preds, anchors, names
+            )
+            if code is None:
                 body.append("# TODO: unsupported tool type — review manually")
                 body.append(f"# {names[tool_id]} = ...")
                 body.append("")
                 continue
-            code = gen(tool_id, segment, node.config, preds, anchors, names)
 
         body.extend(code.split("\n"))
         body.append("")
@@ -1017,9 +1120,7 @@ def scaffold_simple_blocks(
     <Node> XML — between tool blocks.
     """
     node_map = {
-        int(n.tool_id): n
-        for n in doc.nodes
-        if "ToolContainer" not in n.tool_type
+        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
     }
     pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
@@ -1038,16 +1139,12 @@ def scaffold_simple_blocks(
     blocks: list[ScaffoldBlock] = []
 
     for tool_id in order:
-        node = node_map.get(tool_id)
-        if node is None:
+        ctx = _tool_context(tool_id, node_map, pred_map, anchor_map)
+        if ctx is None:
             continue
-        segment = tool_segment(node.tool_type)
-        preds = pred_map.get(tool_id, [])
-        anchors = anchor_map.get(tool_id, {})
+        node, segment, preds, anchors = ctx
 
-        lines: list[str] = [f"# {'─' * 68}", f"# ToolID {tool_id}: {segment}"]
-        for msg in (warnings_by_tool or {}).get(tool_id, []):
-            lines.append(f"# WARNING: {comment_safe(msg)}")
+        lines = _header_comment_lines(tool_id, segment, warnings_by_tool)
 
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             path = first_text(node.config, "File", "FileName")
@@ -1058,13 +1155,14 @@ def scaffold_simple_blocks(
             path = first_text(node.config, "File", "FileName")
             code = _write_stmt(df_in, path, f'r"{path}"' if path else "")
         else:
-            gen = _GENERATORS.get(segment)
-            if gen is None:
+            code = _gen_code_for_segment(
+                tool_id, segment, node.config, preds, anchors, names
+            )
+            if code is None:
                 lines.append("# TODO: unsupported tool type — review manually")
                 lines.append(f"# {names[tool_id]} = ...")
                 blocks.append(ScaffoldBlock(tool_id, segment, lines))
                 continue
-            code = gen(tool_id, segment, node.config, preds, anchors, names)
 
         lines.append(code)
         blocks.append(ScaffoldBlock(tool_id, segment, lines))
@@ -1077,9 +1175,7 @@ def scaffold_simple_blocks(
         header += ["import logging", ""]
     if has_spatial:
         header.append("import geopandas as gpd")
-    if any(
-        _NUMPY_RE.search(line) for block in blocks for line in block.lines
-    ):
+    if any(_NUMPY_RE.search(line) for block in blocks for line in block.lines):
         header.append("import numpy as np")
     header += [
         "import pandas as pd",
@@ -1118,22 +1214,24 @@ def scaffold(
     a TODO comment block.
     """
     node_map = {
-        int(n.tool_id): n
-        for n in doc.nodes
-        if "ToolContainer" not in n.tool_type
+        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
     }
     pred_map = build_predecessor_map(doc)
     anchor_map = _build_anchor_map(doc)
     order = topo_order(doc)
     source = pathlib.Path(doc.filepath).name
 
-    input_paths, output_paths, has_spatial = _collect_metadata(
-        node_map, order
-    )
+    input_paths, output_paths, has_spatial = _collect_metadata(node_map, order)
 
     names = _assign_frame_names(order, node_map)
     body = _emit_main_body(
-        order, node_map, pred_map, anchor_map, input_paths, output_paths, names,
+        order,
+        node_map,
+        pred_map,
+        anchor_map,
+        input_paths,
+        output_paths,
+        names,
         warnings_by_tool=warnings_by_tool,
     )
     uses_numpy = any(_NUMPY_RE.search(line) for line in body)
