@@ -98,7 +98,10 @@ def test_find_any_substring_match_appends_and_keeps_row_count() -> None:
     out = _run(targets, source)
     assert len(out) == 2
     assert list(out["label"]) == ["L1", pd.NA]
-    assert list(out["kw"]) == ["101", pd.NA]
+    # output is "Targets columns + append_fields" only — the search key column
+    # (kw / FieldSearch) is used to look up but never added to the output,
+    # matching real Alteryx Append output
+    assert list(out.columns) == ["text", "label"]
 
 
 def test_find_any_multiple_matches_last_vs_first() -> None:
@@ -157,3 +160,23 @@ def test_find_any_rejects_column_overlap_with_targets() -> None:
     # the message must name the offending column and tell the user to rename
     assert "label" in message
     assert "rename" in message
+
+
+def test_find_any_same_name_key_does_not_collide() -> None:
+    # FieldFind == FieldSearch (both "key"): the search value is used to look
+    # up but never added to the output, so the key column is not duplicated
+    # and no collision is raised.
+    targets = pd.DataFrame({"key": ["ABC-101-X", "no hit"]})
+    source = pd.DataFrame({"key": ["101"], "label": ["L1"]})
+    out = find_any.simulate_find_any_append(
+        targets,
+        source,
+        find_field="key",
+        search_field="key",
+        append_fields=["label"],
+        verbose=False,
+    )
+    assert list(out.columns) == ["key", "label"]
+    assert list(out["label"]) == ["L1", pd.NA]
+    # the target's own key column is untouched (not overwritten by the needle)
+    assert list(out["key"]) == ["ABC-101-X", "no hit"]
