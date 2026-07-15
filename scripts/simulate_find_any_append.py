@@ -3,9 +3,11 @@
 yxray の scaffold が生成する simulate_find_any_append(...) 呼び出しの定義。
 生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
 マッチ意味論（needle = Source.FieldSearch が Targets.FieldFind に部分文字列と
-して含まれる）と ReplaceMultipleFound=True（last match）は実 Alteryx の
-golden 出力との突合で検証済み。ReplaceMultipleFound=False（first match）は
-推定・未検証（golden が RMF=True 設定のものしかないため）。
+して含まれる）、ReplaceMultipleFound=True（last match）、出力列が
+「元の Targets 列 + append_fields」のみで検索値の列を含まないことは、
+実 Alteryx の golden 出力との突合で検証済み。
+ReplaceMultipleFound=False（first match）は推定・未検証
+（golden が RMF=True 設定のものしかないため）。
 """
 
 from __future__ import annotations
@@ -48,7 +50,8 @@ def simulate_find_any_append(
 
     出力は実 Alteryx の Append 出力に合わせ「元の Targets 列 + append_fields」のみ。
     検索キー列（search_field の値）と行追跡 ID は内部で使うだけで出力には残さない
-    （実データ観察: Append モードでは検索値の列は出力に現れない）。
+    （Append モードでは検索値の列は出力に現れない — 実 Alteryx の golden 出力
+    との突合で検証済み）。
 
     Find Replace は join ではないので、複数マッチしても出力は 1 target = 1 行。
     複数の source 行にマッチしたときにどの行の値を採用するかは
@@ -172,7 +175,7 @@ def simulate_find_any_append(
     # 実 Alteryx の Append 出力に合わせる: 元の Targets 列 + append_fields のみ。
     # 検索キー列（search_field / matched_needle）と行追跡 ID（_target_row_id・
     # _source_row_id）は内部・デバッグ専用で、出力には残さない
-    # （実データ観察: Append モードでは検索値の列は出力に現れない）。
+    # （Append モードでは検索値の列は出力に現れない — golden 突合で検証済み）。
     # appended[field] は index が 0..n-1 の object Series。Series のまま代入して
     # object dtype と pd.NA を保つ（.to_numpy() で ndarray 化すると dtype 推論で
     # str へ寄せられ、未マッチの pd.NA が nan に化ける）。

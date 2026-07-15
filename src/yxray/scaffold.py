@@ -613,9 +613,9 @@ def _gen_findreplace(
         fields = ", ".join(py_str(n) for n in append_names)
         # The helper output is "original Targets columns + append_fields" only;
         # the search value (FieldSearch) is used to look up but never added to
-        # the output — matching real Alteryx Append output (observed on real
-        # data). So FieldFind == FieldSearch needs no special handling: the key
-        # column is never duplicated.
+        # the output — matching real Alteryx Append output (verified against
+        # golden output, diff 0). So FieldFind == FieldSearch needs no special
+        # handling: the key column is never duplicated.
         header = (
             "# Find Replace (FindAny) — substring lookup: each Source"
             " search value\n"

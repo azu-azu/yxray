@@ -388,7 +388,7 @@ df3 = simulate_find_any_append(
 
 - **出力列は「元の Targets 列 + append_fields」のみ** — 検索値
   （`FieldSearch`）の列は照合に使うだけで出力に残さない。実 Alteryx の
-  Append 出力に検索値の列が現れないという観察に合わせている
+  golden 出力との突合（行・列・セルとも diff 0）で検証済み
   （詳細は後述「出力列と FieldFind == FieldSearch」）
 - **1 target = 1 出力行** — FindReplace は join ではないので、複数の
   source 行にマッチしても行は増えない。どの行の値を採用するかは
@@ -420,8 +420,9 @@ df3 = df1
 
 参照実装の出力は **「元の Targets 列 + append_fields」のみ**。検索キー
 （`FieldSearch` / matched_needle）は照合に使うだけで出力には残さない。
-**実 Alteryx の Append 出力でも検索値の列は現れない**という実データ観察に
-基づく（Append モードは「追加するフィールドを選択する」もので、検索値の列が
+**実 Alteryx の Append 出力でも検索値の列は現れない**ことは、golden 出力との
+突合（同名キー・別名キーの両ケースで行・列・セルとも diff 0）で検証済み
+（Append モードは「追加するフィールドを選択する」もので、検索値の列が
 自動追加されるとは公式にも書かれていない）。matched_needle と `_source_row_id`
 はデバッグに有用なので計算自体は残し、`verbose` のログ表示だけで使う。
 
@@ -488,15 +489,6 @@ df3 = simulate_find_any_append(
   未実測。source に空文字行を含む golden で一致を確認する。それまでは現状の
   スキップ挙動をテストで固定し（`test_find_any_nan_and_empty_needles_do_not_match`）、
   検証時の比較基準とする
-- [ ] **検索値の列を出力しない挙動** — 参照実装は出力を「元の Targets 列 +
-  append_fields」のみにし、検索値（`FieldSearch`）の列を出力に残さない。
-  これは実データ観察に基づく類推で、golden 未検証。FindAny ワークフロー
-  （特に FieldFind == FieldSearch の同名キー）を golden 突合に足し、
-  ①検索値の列が出力に現れないこと ②同名キーでもキー列が重複しないこと
-  ③append 列の値が正しいこと を実測する。もし実 Alteryx がマッチした検索値を
-  別列として残すなら、`scripts/simulate_find_any_append.py` の結果組み立てで
-  `search_field` 列を戻し、`test_find_any_substring_match_appends_and_keeps_row_count`
-  と `test_scaffold_findreplace_findany_append_helper_call` を更新する
 - [ ] **FindWhole + Replace / FindAny + Replace の実挙動** — Replace モード時の
   `ReplaceFoundField` の適用のされ方（部分置換の範囲・複数マッチ時の挙動）は
   未実測。Replace モードのワークフローを golden 突合に足してから対応範囲を
