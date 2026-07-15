@@ -1389,6 +1389,11 @@ def test_scaffold_createpoints_geopandas() -> None:
     )
     code = scaffold(doc)
     assert "import geopandas as gpd" in code
+    # the geometry column is Alteryx's hidden Centroid SpatialObj field;
+    # the generated code must tell golden reviewers to drop it on the
+    # comparison side instead of deleting it from the output
+    assert "'geometry' is Alteryx's 'Centroid' SpatialObj field" in code
+    assert "drop it on the comparison side, not here" in code
     # X/Y must be coerced to plain float64 before points_from_xy:
     # pd.NA (NAType) in nullable-dtype columns makes float() raise TypeError.
     assert (

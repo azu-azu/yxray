@@ -612,6 +612,69 @@ conv == ""   # → [False, False, False]
 
 ---
 
+## 18. 空間ツール — SpatialObj は「見えない列」
+
+Create Points は Longitude/Latitude から SpatialObj 型の `Centroid` フィールドを
+出力ストリームに追加する。下流の Spatial Match はこのフィールドを
+`<Target SpatialObj="Centroid"/>` のように**名前で**参照するので、ストリーム上に
+実在するデータ列である。
+
+ただし SpatialObj は通常の文字列・数値列と扱いが違い、Designer の Results
+グリッドには表示されない（Browse では追加の **Map タブ**に描画される）。
+golden CSV にも空間列は現れない。一方 geopandas は空間オブジェクトを明示的な
+DataFrame 列（デフォルト名 `geometry`）として保持するため、生成コードを
+実行すると「golden にない列が増えた」ように見える。
+
+```text
+Alteryx の内部ストリーム              pandas（GeoDataFrame）
+├─ EL_ID                              ├─ EL_ID
+├─ Longitude                          ├─ Longitude
+├─ Latitude                           ├─ Latitude
+└─ Centroid ← SpatialObj型。          └─ geometry ← 明示的な列として
+    グリッド/CSV に出ない                  常に見える
+```
+
+### golden 比較時の扱い
+
+`geometry` は作業列ではなくツール本体の出力（Alteryx の `Centroid` 相当）なので、
+**生成コード側で削除してはいけない** — 下流の Spatial Match（`gpd.sjoin`）が
+アクティブジオメトリとして使う。除外するのは比較処理側:
+
+```python
+actual = pd.DataFrame(gdf.drop(columns=gdf.geometry.name))
+```
+
+scaffold が生成する Create Points コードには、この旨の NOTE コメントが付く
+（「golden CSV には現れない列なので比較側で drop せよ」）。
+
+### 未検証（golden で確定したら消し込む）
+
+- [ ] **Alteryx が SpatialObj を CSV 出力するときの挙動** — 列ごと書かないのか、
+  空文字/文字列化で書くのか未実測。比較スクリプトが golden 側の列集合を
+  どう想定すべきかに効く。Results グリッドに表示されないことは実測済み。
+
+### 設計上の保留 — `rename_geometry("Centroid")` は条件付き保留
+
+現在の生成コードは列名を geopandas デフォルトの `geometry` のままにしている。
+`_gen_spatialmatch` はアクティブジオメトリ任せの `gpd.sjoin` を生成するため、
+**1ストリーム1空間列の間は列名が何であっても動く**（Target 側は Create Points
+が作った点、Universe 側は `gpd.read_file(.shp)` の `geometry` が、それぞれ
+自然に正しいアクティブジオメトリになる）。rename しても golden との列差分は
+解決しない（golden には空間列自体が見えないため）。
+
+rename が必要になるトリガーは **1つのストリームに空間列が複数ある場合**
+（例: Universe 側にも Create Points 由来の列があり、`Target/@SpatialObj`・
+`Universe/@SpatialObj` の名前参照を再現する必要が出たとき）。該当ケースが
+golden 突合に現れたら、`rename_geometry("Centroid")` と config の SpatialObj
+属性読み取り（`_gen_spatialmatch`）をセットで実装する。
+
+なお Spatial Match の埋め込み SelectConfiguration（`Target_`/`Universe_`
+プレフィックス付与＋列選択）も未翻訳で、`gpd.sjoin` の命名規則
+（衝突列に `_left`/`_right` サフィックス、`index_right` 追加）とは一致しない。
+Spatial Match 以降の golden 突合では列名の食い違いを前提にレビューすること。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -635,6 +698,7 @@ conv == ""   # → [False, False, False]
 | FindReplace FindAny + ReplaceMultipleFound | ヘルパーの `replace_multiple_found` フラグに変換（True=last match / False=first match） |
 | FindReplace の NoCase | ヘルパーの `case_sensitive` に反転して渡される（NoCase=True → case_sensitive=False） |
 | 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
+| Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx では Map タブのみ、通常グリッド/CSV に出ない）。golden 比較前に比較側で drop — 生成コード側では消さない |
 
 ---
 
@@ -643,6 +707,6 @@ conv == ""   # → [False, False, False]
 - `scripts/simulate_find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
 - `scripts/select_helpers.py` — Select ツールヘルパーの参照実装
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
-- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）、`_gen_filter`（複合条件のマスク分割）、`_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）
+- `src/yxray/scaffold.py` — `_gen_join`（inner のみ生成）、`_gen_union`（ByName 固定）、`_gen_filter`（複合条件のマスク分割）、`_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_gen_createpoints`（`geometry` 列の NOTE 付き生成）、`_gen_spatialmatch`（アクティブジオメトリ任せの `sjoin`）
 - `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint
