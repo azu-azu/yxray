@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -842,7 +843,11 @@ def _gen_spatialmatch(
 
 # ── Generator registry ─────────────────────────────────────────────────────
 
-_GENERATORS: dict[str, Any] = {
+_Generator = Callable[
+    [int, str, dict[str, Any], list[int], dict[str, int], dict[int, str]], str
+]
+
+_GENERATORS: dict[str, _Generator] = {
     **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, _gen_browse),
     **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, _gen_filter),
     **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
@@ -1073,6 +1078,7 @@ def _emit_main_body(
 
         body += _header_comment_lines(tool_id, segment, warnings_by_tool)
 
+        code: str | None
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             code = _gen_input(
                 tool_id, segment, node.config, preds, anchors, input_paths, names
@@ -1146,6 +1152,7 @@ def scaffold_simple_blocks(
 
         lines = _header_comment_lines(tool_id, segment, warnings_by_tool)
 
+        code: str | None
         if segment in SCAFFOLD_INPUT_SEGMENTS:
             path = first_text(node.config, "File", "FileName")
             code = _read_stmt(names[tool_id], path, f'r"{path}"' if path else "")
