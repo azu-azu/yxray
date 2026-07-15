@@ -1292,7 +1292,41 @@ def test_scaffold_findreplace_findany_replace_mode_falls_back() -> None:
         "R",
     )
     code = scaffold(doc)
+    # the TODO must name both axes so a reviewer can tell "cannot translate"
+    # apart from "forgot to translate"
     assert "TODO: Find Replace" in code
+    assert "FindMode='FindAny'" in code
+    assert "ReplaceMode='Replace'" in code
+    assert "input passed through unchanged" in code
+    assert "df3 = df1" in code
+
+
+def test_scaffold_findreplace_stale_replace_found_field_is_ignored() -> None:
+    """A stale ReplaceFoundField must not select the Replace branch.
+
+    The XML can retain settings for the non-selected mode (switching the GUI
+    from Replace to Append leaves the old ReplaceFoundField tag behind), so
+    ReplaceMode is the primary discriminator. Here ReplaceMode=Append but the
+    append-field list is empty: the tool must fall back to the TODO
+    passthrough, not build a lookup map from the stale tag.
+    """
+    doc = _two_input_doc(
+        "FindReplace",
+        {
+            "FieldFind": "Code",
+            "FieldSearch": "OldCode",
+            "ReplaceFoundField": "NewCode",
+            "FindMode": "FindWhole",
+            "ReplaceMode": "Append",
+        },
+        "F",
+        "R",
+    )
+    code = scaffold(doc)
+    assert "_MAP_3" not in code
+    assert ".map(" not in code
+    assert "TODO: Find Replace" in code
+    assert "ReplaceMode='Append'" in code
 
 
 def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:

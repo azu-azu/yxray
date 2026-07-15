@@ -690,8 +690,12 @@ def _gen_findreplace(
             f'    how="left",\n'
             f")"
         )
+    # ReplaceMode is the primary discriminator: the XML can retain settings
+    # for the non-selected mode (a stale ReplaceFoundField survives switching
+    # the GUI to Append), so the tag's presence alone must never select the
+    # Replace branch.
     replace_field = first_text(config, "ReplaceFoundField")
-    if whole_match and replace_field:
+    if whole_match and replace_mode == "Replace" and replace_field:
         map_var = f"_MAP_{tool_id}"
         return (
             "# Find Replace (whole match) via lookup map"
@@ -703,9 +707,12 @@ def _gen_findreplace(
             f"{df_out}[{py_str(field_find)}].map({map_var})"
             f".fillna({df_out}[{py_str(field_find)}]))"
         )
+    # Name both axes so a reviewer can tell "cannot translate" apart from
+    # "forgot to translate".
     return (
-        f"# TODO: Find Replace — mode '{comment_safe(find_mode) or '?'}'"
-        " not translated; review manually\n"
+        f"# TODO: Find Replace — FindMode='{comment_safe(find_mode) or '?'}',"
+        f" ReplaceMode='{comment_safe(replace_mode) or '?'}'\n"
+        "# is not translated; input passed through unchanged\n"
         f"{df_out} = {df_f}"
     )
 

@@ -3,8 +3,9 @@
 yxray の scaffold が生成する simulate_find_any_append(...) 呼び出しの定義。
 生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
 マッチ意味論（needle = Source.FieldSearch が Targets.FieldFind に部分文字列と
-して含まれる、ReplaceMultipleFound の last/first match）は実 Alteryx の
-golden 出力との突合で検証済み。
+して含まれる）と ReplaceMultipleFound=True（last match）は実 Alteryx の
+golden 出力との突合で検証済み。ReplaceMultipleFound=False（first match）は
+推定・未検証（golden が RMF=True 設定のものしかないため）。
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ def simulate_find_any_append(
     search_field: str,
     append_fields: list[str],
     case_sensitive: bool = True,  # Alteryx の NoCase=False（大小を区別）に対応
-    replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。True=last match、False=first match
+    replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。True=last match（golden 検証済み）、False=first match（推定・未検証）
     log_label: str = "",  # ログ見出しの先頭に付ける識別ラベル（例: "ToolID 7"）
     verbose: bool = True,
 ) -> pd.DataFrame:
@@ -48,7 +49,8 @@ def simulate_find_any_append(
     Find Replace は join ではないので、複数マッチしても出力は 1 target = 1 行。
     複数の source 行にマッチしたときにどの行の値を採用するかは
     replace_multiple_found で決まる（Alteryx の ReplaceMultipleFound 設定に対応）:
-    True なら source 順で最後にマッチした行、False なら最初にマッチした行。
+    True なら source 順で最後にマッチした行（golden 突合で検証済み）、
+    False なら最初にマッチした行（推定 — RMF=False 設定の golden が未取得のため未検証）。
     """
 
     start = time.perf_counter()

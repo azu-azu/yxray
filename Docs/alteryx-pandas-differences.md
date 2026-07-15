@@ -273,27 +273,32 @@ pd.to_datetime("2024-01-01")
 
 ---
 
-## 15. `FindReplace`（FindAny モード）— 部分一致ルックアップ
+## 15. `FindReplace` — モード別の翻訳と部分一致ルックアップ
 
-Alteryx の **FindReplace ツール**には `FindWhole`（完全一致）と `FindAny`（部分一致）の2モードがある。
+Alteryx の **FindReplace ツール**の挙動は `FindMode`（探し方）×
+`ReplaceMode`（結果の使い方）の組み合わせで決まる。scaffold の翻訳も
+この2軸で分岐する。
 
-| モード | 挙動 | scaffold の翻訳 |
-|--------|------|-----------------|
-| **FindWhole** | FieldFind の値が FieldSearch に完全一致する行を結合 | source を `drop_duplicates(keep=...)` してから `pd.merge(how="left")` |
-| **FindAny** | 部分一致（Source の検索値が Targets のフィールドに部分文字列として含まれる） | `simulate_find_any_append(...)` の呼び出しを生成（定義は生成しない） |
+| FindMode | ReplaceMode | scaffold の翻訳 |
+|----------|-------------|-----------------|
+| **FindWhole**（完全一致） | Append | source を `drop_duplicates(keep=...)` してから `pd.merge(how="left")` |
+| **FindWhole**（完全一致） | Replace | `ReplaceFoundField` を使う Replace 分岐で翻訳 |
+| **FindAny**（部分一致） | Append | `simulate_find_any_append(...)` の呼び出しを生成（定義は生成しない） |
+| **FindAny**（部分一致） | Replace | **未対応** — TODO コメント + 入力パススルー（`df_out = df_in`）にフォールバック |
 
-FindReplace はモードに関係なく **1 target = 1 出力行** を保証するツールで、
-ルックアップキーが重複していても行は増えない。素の left join は重複キーで
-行が増えるため、FindWhole でも merge の前に source 側を
-`drop_duplicates(subset=[search_field], keep=...)` で重複排除する。
-どの重複を残すかは `ReplaceMultipleFound` に対応させる
-（True = `keep="last"` / False = `keep="first"`）。
+### 設定タグの読み方 — ReplaceMode が主判定
 
-**注意: この keep 対応は FindAny の golden 検証結果（RMF=True = last match）
-からの類推で、FindWhole モード自体は実 Alteryx の golden 出力で未検証**。
-golden 突合（実 Alteryx 出力との比較）に「FindWhole + 重複キー source」の
-ケースを足して確定させること。もし逆だった場合、直すのは `scaffold.py` の
-`keep = "last" if replace_multiple_found else "first"` の1行だけ。
+`ReplaceMode` によって、参照される設定タグが切り替わる:
+
+- `ReplaceMode=Append` → **`ReplaceAppendFields`** に指定された列を付与する
+- `ReplaceMode=Replace` → **`ReplaceFoundField`** の値で、見つかった文字列を置き換える
+
+**注意: XML には非選択モード側の設定値も保持されることがある**（GUI で
+モードを切り替えても古いタグが残る）。したがって `ReplaceFoundField` タグが
+存在するだけで Replace 処理へ入ってはならず、必ず `ReplaceMode` を主判定と
+する。scaffold の Replace 分岐は `replace_mode == "Replace"` を条件に含める
+ことで、分岐の評価順序に依存しない安全性を持たせている
+（`test_scaffold_findreplace_stale_replace_found_field_is_ignored` で固定）。
 
 anchor と config タグの対応関係:
 
@@ -302,23 +307,67 @@ anchor と config タグの対応関係:
 
 （`e8121044` で実 Alteryx XML から確定し、`test_scaffold_findreplace_targets_source_anchors_route_correctly` で固定されている）
 
-**含意の向きは実 Alteryx の golden 出力との突合で検証済み**: needle は
-`FieldSearch`（Source/ルックアップ側）の値で、それが `FieldFind`
-（Targets/メイン側）の値に部分文字列として含まれるかで判定される。
-この意味論を pandas で忠実に再現した参照実装が本リポジトリの
-`scripts/simulate_find_any_append.py`（golden 突合済み）。
+### 検証済みの意味論（golden 突合）
 
-### scaffold が生成するコード
+**含意の向き**: needle は `FieldSearch`（Source/ルックアップ側）の値で、
+それが `FieldFind`（Targets/メイン側）の値に部分文字列として含まれるかで
+判定される。実 Alteryx の golden 出力との突合で検証済み。
 
-FindAny + `ReplaceMode=Append` は、等価結合では意味論を再現できない
-（`pd.merge` は完全一致しかできない）ため、scaffold は参照実装の関数を
-呼び出す形に翻訳する:
+**ReplaceMultipleFound（FindAny + Append）の検証状態**:
+
+| 設定 | 採用規則 | 状態 |
+|------|---------|------|
+| `RMF=True` | last match（source 順で最後にマッチした行） | **golden 突合で検証済み** |
+| `RMF=False` | first match（source 順で最初にマッチした行） | **推定・未検証**（下記の保留事項参照） |
+
+以降、本章で「検証済み」と書くときは **RMF=True 側のみ**を指す。
+定量的な根拠:
+
+| 条件 | cell_diff |
+|------|-----------|
+| 修正前の実装 | 779 |
+| RMF=True（last match）として実装 | **22** |
+| RMF=False（first match）として実装 | 363 |
+
+残 22 セルについては、現時点では helper の意味論の誤りよりも、
+**verify 側の対応付け（重複 id・行の突き合わせ）に起因する可能性が高い**と
+考えている。この残差は **FindReplace 実装の品質とは切り離して評価する** —
+残差が残っていること自体を FindReplace 翻訳の失敗と解釈しないこと。
+説明の消し込みは verify 改善タスク（FindReplace とは別タスク）で行う。
+
+**上記の検証がカバーする範囲**: 比較対象はいずれも「RMF=True 設定の
+golden」であり、`RMF=False` を Alteryx 側で設定した golden との突合ではない
+（cell_diff 363 は「False 実装が True の golden に合わない」ことの確認で
+あって、False 側の検証ではない）。コード・docstring では
+「True=last は検証済み / False=first は推定」を書き分けること。
+
+FindReplace はモードに関係なく **1 target = 1 出力行** を保証するツールで、
+ルックアップキーが重複していても行は増えない。この行数不変の保証が、
+素の left join との決定的な違いになる。
+
+### FindWhole の翻訳 — dedup + merge（keep は類推）
+
+素の left join は重複キーで行が増えるため、FindWhole でも merge の前に
+source 側を `drop_duplicates(subset=[search_field], keep=...)` で重複排除する。
+どの重複を残すかは `ReplaceMultipleFound` に対応させる
+（True = `keep="last"` / False = `keep="first"`）。
+
+**注意: この keep 対応は FindAny の golden 検証結果（RMF=True = last match）
+からの類推で、FindWhole モード自体は実 Alteryx の golden 出力で未検証**。
+golden 突合に「FindWhole + 重複キー source」のケースを足して確定させること。
+もし逆だった場合、直すのは `scaffold.py` の
+`keep = "last" if replace_multiple_found else "first"` の1行だけ。
+
+### FindAny + Append — scaffold が生成するコード
+
+FindAny は等価結合では意味論を再現できない（`pd.merge` は完全一致しか
+できない）ため、scaffold は参照実装の関数を呼び出す形に翻訳する:
 
 ```python
 # Find Replace (FindAny) — substring lookup: each Source search value
 # is matched inside the Targets find field
-# NOTE: simulate_find_any_append() is not generated — provide the
-# helper separately
+# NOTE: simulate_find_any_append() is not generated — copy it from
+# scripts/simulate_find_any_append.py
 df3 = simulate_find_any_append(
     df1,
     df2,
@@ -339,7 +388,8 @@ df3 = simulate_find_any_append(
 
 - **1 target = 1 出力行** — FindReplace は join ではないので、複数の
   source 行にマッチしても行は増えない。どの行の値を採用するかは
-  `ReplaceMultipleFound` で決まる（True=last match / False=first match）
+  `ReplaceMultipleFound` で決まる（True=last match は検証済み /
+  False=first match は推定）
 - **NaN の誤マッチ防止** — `astype(str)` だと NaN が `"nan"` になり誤マッチ
   するため、NaN は判定から除外する
 - **空文字 needle の除外** — `"" in "ABC-123"` は `True` なので、空文字の
@@ -349,22 +399,38 @@ df3 = simulate_find_any_append(
   `123` が `"123.0"` になり文字列比較がすれ違うため、整数値 float は
   `".0"` を落として文字列化する
 
-FindAny + `ReplaceMode=Replace`（見つかった部分文字列の置換）は未対応で、
-従来どおり TODO コメントにフォールバックする。
+FindAny + `ReplaceMode=Replace`（見つかった部分文字列の置換）は未対応。
+silent skip ではなく、**未対応の組み合わせ（FindMode / ReplaceMode の両方）を
+明記した TODO コメント + 入力パススルー**を生成する:
+
+```python
+# TODO: Find Replace — FindMode='FindAny', ReplaceMode='Replace'
+# is not translated; input passed through unchanged
+df3 = df1
+```
+
+「翻訳できません」と「翻訳し忘れました」をレビューする人間が区別できるように
+するための措置。
 
 ### FieldFind == FieldSearch（同名キー）のとき
 
 ルックアップキーで探すワークフローでは、XML の `FieldFind`（Targets 側）と
 `FieldSearch`（Source 側）に**同じ列名**が入ることが多い。参照実装は
 マッチした検索値を `search_field` という名前の列で出力に残すため、
-その名前が Targets 側に既にあると
-`ValueError: 付与する列が targets_df 側に既に存在しています` で落ちる
+その名前が Targets 側に既にあると `ValueError: 列名の衝突` で落ちる
 （`scripts/simulate_find_any_append.py` の入力チェック）。
 
-`FieldFind == FieldSearch` は生成時に XML から判定できる（FindWhole 側は
-既に `on=` への切り替えでこれを使っている）。そこで scaffold は同名のとき、
-**Source のキー列を一時列 `_search_<ToolID>` にリネームして渡し、呼び出し後に
-その一時列を drop する**コードを生成する:
+役割分担は次のとおり:
+
+- **scaffold** — Alteryx XML を読む側。FindMode / ReplaceMode の判定・
+  設定タグの読み取り・同名キーの検出はすべて scaffold の責務で、
+  同名なら自動で一時 rename → drop するコードを生成する
+- **helper 単体** — **Alteryx XML を解釈しない**。整形済みの DataFrame と
+  引数だけを受け取り、衝突したら黙って上書きせず `ValueError` で止め、
+  rename の対処方法をエラーメッセージで案内する
+
+scaffold は同名のとき、**Source のキー列を一時列 `_search_<ToolID>` に
+リネームして渡し、呼び出し後にその一時列を drop する**コードを生成する:
 
 ```python
 # FieldFind == FieldSearch ("key"): rename the Source key to a temp
@@ -390,7 +456,12 @@ df3 = simulate_find_any_append(
 ### 未検証・保留事項（golden で確定したら消し込む）
 
 実 Alteryx の golden 出力との突合で確定していない項目の一覧。
-確定したら該当行を消し、関係するコード側の NOTE・テストも合わせて更新する。
+**このチェックリストが正本**であり、ロードマップ等の他ドキュメントは
+本節を参照する（重複管理しない）。確定したら該当行を消し、関係する
+コード側の NOTE・テストも合わせて更新する。
+
+以降の項目は**コード変更のタスクではなく、実 Alteryx で仕様を確定するための
+チェックリスト**である。翻訳の実装が未完成という意味ではない。
 
 - [ ] **FindWhole + 重複キー source** — `ReplaceMultipleFound=True` で本当に
   last が勝つか。現在の `drop_duplicates(keep="last")` は FindAny の golden
@@ -400,14 +471,18 @@ df3 = simulate_find_any_append(
   `test_scaffold_findreplace_append_mode_left_join` の NOTE アサーションを更新
   （逆だった場合は `keep = "last" if replace_multiple_found else "first"` の
   1行を直す）
-- [ ] **RMF=False（first match）** — FindAny の golden 突合に
-  `ReplaceMultipleFound=False` のケースが含まれていたか確認。
-  なければ追加して first match 採用を実測する
+- [ ] **RMF=False（first match）** — 現在の golden 突合は RMF=True 設定の
+  出力に対する比較のみ（cell_diff 363 は「False 実装が True の golden に
+  合わない」ことの確認であり、False 側の検証ではない）。Alteryx 側を
+  `ReplaceMultipleFound=False` に設定した golden を追加し、first match 採用を
+  実測する。確定したら helper docstring の「推定」表記を更新する
 - [ ] **NoCase=True（大文字小文字無視）** — golden 突合に case-insensitive の
   ケースが含まれていたか確認。なければ追加する
 - [ ] **空文字の検索値** — 参照実装（`scripts/simulate_find_any_append.py`）は
   空文字 needle をスキップするが、Alteryx の実挙動（全行マッチ / 無視）は
-  未実測。source に空文字行を含む golden で一致を確認する
+  未実測。source に空文字行を含む golden で一致を確認する。それまでは現状の
+  スキップ挙動をテストで固定し（`test_find_any_nan_and_empty_needles_do_not_match`）、
+  検証時の比較基準とする
 - [ ] **FieldFind == FieldSearch（同名キー）の出力列** — 同名時に
   `_search_<ToolID>` へリネーム→ drop して「キー列を重複させない」挙動は
   実データ観察に基づく類推で、golden 未検証。同名キーの FindAny ワークフローを
@@ -415,6 +490,24 @@ df3 = simulate_find_any_append(
   もし実 Alteryx がマッチした検索値を別列として残すなら、drop を外して
   `scaffold.py` の同名分岐と `test_scaffold_findreplace_findany_append_helper_call`
   を更新する
+- [ ] **FindWhole + Replace / FindAny + Replace の実挙動** — Replace モード時の
+  `ReplaceFoundField` の適用のされ方（部分置換の範囲・複数マッチ時の挙動）は
+  未実測。Replace モードのワークフローを golden 突合に足してから対応範囲を
+  広げる
+
+### 設計上の保留（golden 検証とは別軸の判断）
+
+以下は仕様の問題ではなく設計判断であり、上記の golden 検証が済んでから
+着手する（仕様が動いている間に API を変えない）:
+
+- **append 値の型保持** — 現在の参照実装は golden CSV 比較のしやすさを優先し、
+  append 値を `_stringify` で文字列化している（`123` → `"123"`、型は失われる）。
+  将来的には helper は元の型を保持し、比較処理側でのみ正規化する形へ分離する
+- **デバッグ列の分離** — 現在は `_target_row_id`・`_source_row_id`・
+  `search_field` を常に出力している。`include_debug_columns` フラグで
+  通常出力（元の Targets 列 + append_fields のみ）とデバッグ出力を分ける
+- **helper API の整理** — 上記2点を含む API 変更は、未検証・保留事項の
+  消し込みが進んでから一括で判断する
 
 ---
 
