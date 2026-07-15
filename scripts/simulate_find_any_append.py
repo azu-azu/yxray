@@ -3,9 +3,11 @@
 yxray の scaffold が生成する simulate_find_any_append(...) 呼び出しの定義。
 生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
 マッチ意味論（needle = Source.FieldSearch が Targets.FieldFind に部分文字列と
-して含まれる）と ReplaceMultipleFound=True（last match）は実 Alteryx の
-golden 出力との突合で検証済み。ReplaceMultipleFound=False（first match）は
-推定・未検証（golden が RMF=True 設定のものしかないため）。
+して含まれる）、ReplaceMultipleFound=True（last match）、出力列が
+「元の Targets 列 + append_fields」のみで検索値の列を含まないことは、
+実 Alteryx の golden 出力との突合で検証済み。
+ReplaceMultipleFound=False（first match）は推定・未検証
+（golden が RMF=True 設定のものしかないため）。
 """
 
 from __future__ import annotations
@@ -46,6 +48,11 @@ def simulate_find_any_append(
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
 
+    出力は実 Alteryx の Append 出力に合わせ「元の Targets 列 + append_fields」のみ。
+    検索キー列（search_field の値）と行追跡 ID は内部で使うだけで出力には残さない
+    （Append モードでは検索値の列は出力に現れない — 実 Alteryx の golden 出力
+    との突合で検証済み）。
+
     Find Replace は join ではないので、複数マッチしても出力は 1 target = 1 行。
     複数の source 行にマッチしたときにどの行の値を採用するかは
     replace_multiple_found で決まる（Alteryx の ReplaceMultipleFound 設定に対応）:
@@ -74,25 +81,26 @@ def simulate_find_any_append(
             f"source_df に列がありません: {missing_source_columns}"
         )
 
-    # source_df から付与する列（search_field と append_fields）が targets_df に
-    # 同名で既にあると、同じ列名を2つ持てず結果が壊れるので弾く。
-    # find_field == search_field（同名キーでの探索）もここで検出できる。
-    new_columns = [search_field, *append_fields]
-    overlap = [column for column in new_columns if column in targets_df.columns]
+    # 出力に追加する列（append_fields）が targets_df に同名で既にあると、
+    # 同じ列名を2つ持つことになり結果が壊れるので弾く。search_field（検索キー）
+    # は出力に残さない（実 Alteryx の Append 出力に検索値の列は現れない）ため、
+    # find_field == search_field でも衝突しない。
+    overlap = [field for field in append_fields if field in targets_df.columns]
     if overlap:
+        example = overlap[0]
         raise ValueError(
-            "列名の衝突: source_df から付与しようとした列 "
+            "列名の衝突: source_df から付与しようとした append_fields の列 "
             f"{overlap} が targets_df 側に同名で既に存在します。"
             "2つの df で同じ列名は共存できないため、この列は追加できません。\n"
-            "対処: source_df 側の該当列を rename して名前をずらしてから "
-            "呼び出してください（search_field / append_fields も新しい名前に合わせる）。\n"
-            f'  例: find_field と search_field が同じキー列名 "{search_field}" のとき\n'
+            "対処: source_df 側の該当列を rename して名前をずらし、"
+            "append_fields も新しい名前に合わせてから呼び出してください。\n"
+            f'  例: 追加列 "{example}" が Targets 側と衝突するとき\n'
             f'    simulate_find_any_append(\n'
             f'        targets_df,\n'
-            f'        source_df.rename(columns={{"{search_field}": "{search_field}_lookup"}}),\n'
+            f'        source_df.rename(columns={{"{example}": "{example}_lookup"}}),\n'
             f'        find_field="{find_field}",\n'
-            f'        search_field="{search_field}_lookup",  # ← rename 後の名前\n'
-            f'        ...\n'
+            f'        search_field="{search_field}",\n'
+            f'        append_fields=[..., "{example}_lookup", ...],  # ← rename 後の名前\n'
             f'    )'
         )
 
@@ -164,36 +172,44 @@ def simulate_find_any_append(
             unmatched &= ~contains
 
     # ── 結果の組み立て（入力順のまま。matched/unmatched に分割しない）──
-    result = targets.copy()
-    result[SOURCE_ROW_ID] = winning_source_id.astype("Int64")
-    result[search_field] = matched_needle
+    # 実 Alteryx の Append 出力に合わせる: 元の Targets 列 + append_fields のみ。
+    # 検索キー列（search_field / matched_needle）と行追跡 ID（_target_row_id・
+    # _source_row_id）は内部・デバッグ専用で、出力には残さない
+    # （Append モードでは検索値の列は出力に現れない — golden 突合で検証済み）。
+    # appended[field] は index が 0..n-1 の object Series。Series のまま代入して
+    # object dtype と pd.NA を保つ（.to_numpy() で ndarray 化すると dtype 推論で
+    # str へ寄せられ、未マッチの pd.NA が nan に化ける）。
+    result = targets_df.reset_index(drop=True).copy()
     for field in append_fields:
         result[field] = appended[field]
 
-    result_columns = [
-        TARGET_ROW_ID,
-        *targets_df.columns,
-        SOURCE_ROW_ID,
-        search_field,
-        *append_fields,
-    ]
-    result = result[result_columns]
-
     if verbose:
-        all_matched_needles = pd.Series(
-            [" | ".join(lst) for lst in matched_needles_lists],
-            index=targets.index,
-            dtype="object",
+        # matched_needle / _source_row_id はデバッグにかなり有用なので、計算は
+        # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
+        # （戻り値の result には混ぜない）。
+        needle_col = f"matched_{search_field}"
+        all_col = f"all_matched_{search_field}"
+        debug = pd.DataFrame(
+            {
+                TARGET_ROW_ID: range(len(targets_df)),
+                find_field: targets[find_field].to_numpy(),
+                "matched_lookup_rows": match_count.to_numpy(),
+                all_col: [" | ".join(lst) for lst in matched_needles_lists],
+                SOURCE_ROW_ID: winning_source_id.astype("Int64").to_numpy(),
+                needle_col: matched_needle.to_numpy(),
+            }
         )
+        for field in append_fields:
+            debug[field] = appended[field].to_numpy()
         _print_summary(
             start=start,
             targets_df=targets_df,
             result=result,
-            match_count=match_count,
+            debug=debug,
             find_field=find_field,
-            search_field=search_field,
             append_fields=append_fields,
-            all_matched_needles=all_matched_needles,
+            needle_col=needle_col,
+            all_col=all_col,
         )
 
     return result
@@ -204,16 +220,20 @@ def _print_summary(
     start: float,
     targets_df: pd.DataFrame,
     result: pd.DataFrame,
-    match_count: pd.Series,
+    debug: pd.DataFrame,
     find_field: str,
-    search_field: str,
     append_fields: list[str],
-    all_matched_needles: pd.Series,
+    needle_col: str,
+    all_col: str,
 ) -> None:
-    """処理時間・行数・複数マッチ（曖昧マッチ）の確認用サマリを出す。"""
+    """処理時間・行数・複数マッチ（曖昧マッチ）の確認用サマリを出す。
+
+    debug は出力（result）には含めない観測列（行 ID・採用 source 行・採用/全
+    マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
+    """
 
     elapsed = time.perf_counter() - start
-    matched_rows = int((match_count > 0).sum())
+    matched_rows = int((debug["matched_lookup_rows"] > 0).sum())
 
     print(f" 🐒 simulate_find_any_append: {elapsed:.3f} 秒")
     print(f"rows before   : {len(targets_df):,}")
@@ -223,11 +243,7 @@ def _print_summary(
     # 1 target が複数 source 行にマッチした（＝採用値が source 順に依存する）行を可視化。
     # target 側（find_field の本文）と source 側（採用された検索値・source 行・append 値）
     # の両方を並べ、どのテキストがどの値を拾ったか確認できるようにする。
-    all_col = f"all_matched_{search_field}"
-    ambiguous = result.copy()
-    ambiguous["matched_lookup_rows"] = match_count.to_numpy()
-    ambiguous[all_col] = all_matched_needles.to_numpy()
-    ambiguous = ambiguous[ambiguous["matched_lookup_rows"] > 1].sort_values(
+    ambiguous = debug[debug["matched_lookup_rows"] > 1].sort_values(
         "matched_lookup_rows", ascending=False
     )
 
@@ -237,7 +253,7 @@ def _print_summary(
         "matched_lookup_rows",  # 何行の source にマッチしたか
         all_col,              # source: マッチした検索値すべて（source 順）
         SOURCE_ROW_ID,        # source: 採用された source 行
-        search_field,         # source: 採用された検索値
+        needle_col,           # source: 採用された検索値
         *append_fields,       # source: 付与された値
     ]
     print(f"ambiguous rows: {len(ambiguous):,}（複数 source にマッチ）")

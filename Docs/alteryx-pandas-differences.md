@@ -386,6 +386,10 @@ df3 = simulate_find_any_append(
 コピーして使う。挙動は `tests/test_reference_scripts.py` で固定されている。
 参照実装は以下を処理済み:
 
+- **出力列は「元の Targets 列 + append_fields」のみ** — 検索値
+  （`FieldSearch`）の列は照合に使うだけで出力に残さない。実 Alteryx の
+  golden 出力との突合（行・列・セルとも diff 0）で検証済み
+  （詳細は後述「出力列と FieldFind == FieldSearch」）
 - **1 target = 1 出力行** — FindReplace は join ではないので、複数の
   source 行にマッチしても行は増えない。どの行の値を採用するかは
   `ReplaceMultipleFound` で決まる（True=last match は検証済み /
@@ -412,46 +416,48 @@ df3 = df1
 「翻訳できません」と「翻訳し忘れました」をレビューする人間が区別できるように
 するための措置。
 
-### FieldFind == FieldSearch（同名キー）のとき
+### 出力列と FieldFind == FieldSearch（同名キー）
 
-ルックアップキーで探すワークフローでは、XML の `FieldFind`（Targets 側）と
-`FieldSearch`（Source 側）に**同じ列名**が入ることが多い。参照実装は
-マッチした検索値を `search_field` という名前の列で出力に残すため、
-その名前が Targets 側に既にあると `ValueError: 列名の衝突` で落ちる
-（`scripts/simulate_find_any_append.py` の入力チェック）。
+参照実装の出力は **「元の Targets 列 + append_fields」のみ**。検索キー
+（`FieldSearch` / matched_needle）は照合に使うだけで出力には残さない。
+**実 Alteryx の Append 出力でも検索値の列は現れない**ことは、golden 出力との
+突合（同名キー・別名キーの両ケースで行・列・セルとも diff 0）で検証済み
+（Append モードは「追加するフィールドを選択する」もので、検索値の列が
+自動追加されるとは公式にも書かれていない）。matched_needle と `_source_row_id`
+はデバッグに有用なので計算自体は残し、`verbose` のログ表示だけで使う。
 
-役割分担は次のとおり:
-
-- **scaffold** — Alteryx XML を読む側。FindMode / ReplaceMode の判定・
-  設定タグの読み取り・同名キーの検出はすべて scaffold の責務で、
-  同名なら自動で一時 rename → drop するコードを生成する
-- **helper 単体** — **Alteryx XML を解釈しない**。整形済みの DataFrame と
-  引数だけを受け取り、衝突したら黙って上書きせず `ValueError` で止め、
-  rename の対処方法をエラーメッセージで案内する
-
-scaffold は同名のとき、**Source のキー列を一時列 `_search_<ToolID>` に
-リネームして渡し、呼び出し後にその一時列を drop する**コードを生成する:
+このため、ルックアップキーで探すワークフローで XML の `FieldFind`（Targets 側）と
+`FieldSearch`（Source 側）に**同じ列名**が入っても衝突しない — 検索値の列を
+出力に足さないので、キー列が重複しようがないからだ。scaffold は
+同名かどうかに関わらず素直に `search_field=<FieldSearch>` を渡す:
 
 ```python
-# FieldFind == FieldSearch ("key"): rename the Source key to a temp
-# column to avoid a Targets-side collision, then drop it so no extra
-# column remains
+# Find Replace (FindAny) — substring lookup: each Source search value
+# is matched inside the Targets find field
+# NOTE: simulate_find_any_append() is not generated — copy it from
+# scripts/simulate_find_any_append.py
 df3 = simulate_find_any_append(
     df1,
-    df2.rename(columns={"key": "_search_3"}),
+    df2,
     find_field="key",
-    search_field="_search_3",
+    search_field="key",
     append_fields=["col_a", "col_b"],
     case_sensitive=True,
     replace_multiple_found=True,
     log_label="ToolID 3",
-).drop(columns=["_search_3"])
+)
 ```
 
-こうすると出力列は「元の Targets 列 + append_fields」のままで、キー列は
-重複しない。**実 Alteryx 出力でも同名キー時に列は増えず、キー列に重複が
-出ない**という実データ観察に基づく（下記の保留事項も参照）。find/search が
-別名のときは従来どおりリネーム・drop は生成しない。
+役割分担は次のとおり:
+
+- **scaffold** — Alteryx XML を読む側。FindMode / ReplaceMode の判定・
+  設定タグの読み取りが責務。出力に検索値の列を足さない設計になったので、
+  同名キー用の一時 rename → drop は生成しない
+- **helper 単体** — **Alteryx XML を解釈しない**。整形済みの DataFrame と
+  引数だけを受け取る。**append_fields** の列が Targets 側に同名で既にあると
+  （2つの df で同名列は共存できないため）黙って上書きせず `ValueError` で
+  止め、rename の対処方法をエラーメッセージで案内する。`search_field` は
+  出力に足さないので衝突チェックの対象外
 
 ### 未検証・保留事項（golden で確定したら消し込む）
 
@@ -483,13 +489,6 @@ df3 = simulate_find_any_append(
   未実測。source に空文字行を含む golden で一致を確認する。それまでは現状の
   スキップ挙動をテストで固定し（`test_find_any_nan_and_empty_needles_do_not_match`）、
   検証時の比較基準とする
-- [ ] **FieldFind == FieldSearch（同名キー）の出力列** — 同名時に
-  `_search_<ToolID>` へリネーム→ drop して「キー列を重複させない」挙動は
-  実データ観察に基づく類推で、golden 未検証。同名キーの FindAny ワークフローを
-  golden 突合に足し、①キー列が増えないこと ②append 列の値が正しいこと を実測する。
-  もし実 Alteryx がマッチした検索値を別列として残すなら、drop を外して
-  `scaffold.py` の同名分岐と `test_scaffold_findreplace_findany_append_helper_call`
-  を更新する
 - [ ] **FindWhole + Replace / FindAny + Replace の実挙動** — Replace モード時の
   `ReplaceFoundField` の適用のされ方（部分置換の範囲・複数マッチ時の挙動）は
   未実測。Replace モードのワークフローを golden 突合に足してから対応範囲を
@@ -503,10 +502,12 @@ df3 = simulate_find_any_append(
 - **append 値の型保持** — 現在の参照実装は golden CSV 比較のしやすさを優先し、
   append 値を `_stringify` で文字列化している（`123` → `"123"`、型は失われる）。
   将来的には helper は元の型を保持し、比較処理側でのみ正規化する形へ分離する
-- **デバッグ列の分離** — 現在は `_target_row_id`・`_source_row_id`・
-  `search_field` を常に出力している。`include_debug_columns` フラグで
-  通常出力（元の Targets 列 + append_fields のみ）とデバッグ出力を分ける
-- **helper API の整理** — 上記2点を含む API 変更は、未検証・保留事項の
+- **デバッグ列の分離**（対応済み）— 戻り値は「元の Targets 列 + append_fields」
+  のみにし、`_target_row_id`・`_source_row_id`・matched_needle は出力に混ぜず、
+  `verbose` 時に別 DataFrame へまとめてログ表示だけで使う形に分離済み。
+  もし将来デバッグ列を戻り値でも受け取りたくなったら `include_debug_columns`
+  フラグ等で明示的に切り替える
+- **helper API の整理** — 上記の型保持を含む API 変更は、未検証・保留事項の
   消し込みが進んでから一括で判断する
 
 ---

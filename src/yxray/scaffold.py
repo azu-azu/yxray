@@ -611,6 +611,11 @@ def _gen_findreplace(
 
     if any_match and replace_mode == "Append" and append_names:
         fields = ", ".join(py_str(n) for n in append_names)
+        # The helper output is "original Targets columns + append_fields" only;
+        # the search value (FieldSearch) is used to look up but never added to
+        # the output — matching real Alteryx Append output (verified against
+        # golden output, diff 0). So FieldFind == FieldSearch needs no special
+        # handling: the key column is never duplicated.
         header = (
             "# Find Replace (FindAny) — substring lookup: each Source"
             " search value\n"
@@ -619,41 +624,18 @@ def _gen_findreplace(
             " it from\n"
             "# scripts/simulate_find_any_append.py\n"
         )
-        # The helper records the matched needle in an output column named
-        # search_field. When FieldFind == FieldSearch that name already lives
-        # on the Targets side, so the helper raises on the collision. Rename
-        # the Source key to a temp column, then drop it after the call so the
-        # output keeps the original columns — real Alteryx output does not
-        # duplicate the key column (observed on real data).
-        if field_find == field_search:
-            tmp = f"_search_{tool_id}"
-            source_expr = (
-                f"{df_r}.rename(columns={{{py_str(field_search)}: {py_str(tmp)}}})"
-            )
-            search_arg = py_str(tmp)
-            tail = f".drop(columns=[{py_str(tmp)}])"
-            header += (
-                f"# FieldFind == FieldSearch ({field_find}): rename the Source"
-                " key to a temp\n"
-                "# column to avoid a Targets-side collision, then drop it so"
-                " no extra column remains\n"
-            )
-        else:
-            source_expr = df_r
-            search_arg = py_str(field_search)
-            tail = ""
         return (
             header
             + f"{df_out} = simulate_find_any_append(\n"
             f"    {df_f},\n"
-            f"    {source_expr},\n"
+            f"    {df_r},\n"
             f"    find_field={py_str(field_find)},\n"
-            f"    search_field={search_arg},\n"
+            f"    search_field={py_str(field_search)},\n"
             f"    append_fields=[{fields}],\n"
             f"    case_sensitive={case_sensitive},\n"
             f"    replace_multiple_found={replace_multiple_found},\n"
             f'    log_label={py_str(f"ToolID {tool_id}")},\n'
-            f"){tail}"
+            f")"
         )
 
     if whole_match and replace_mode == "Append" and append_names:
