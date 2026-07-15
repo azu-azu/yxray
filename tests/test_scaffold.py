@@ -1356,9 +1356,17 @@ def test_scaffold_createpoints_geopandas() -> None:
     )
     code = scaffold(doc)
     assert "import geopandas as gpd" in code
+    # X/Y must be coerced to plain float64 before points_from_xy:
+    # pd.NA (NAType) in nullable-dtype columns makes float() raise TypeError.
     assert (
-        'geometry=gpd.points_from_xy(df1["Longitude"], df1["Latitude"])' in code
+        '_x = pd.to_numeric(df1["Longitude"],'
+        ' errors="coerce").astype("float64")' in code
     )
+    assert (
+        '_y = pd.to_numeric(df1["Latitude"],'
+        ' errors="coerce").astype("float64")' in code
+    )
+    assert "geometry=gpd.points_from_xy(_x, _y)" in code
 
 
 def test_scaffold_spatialmatch_sjoin() -> None:

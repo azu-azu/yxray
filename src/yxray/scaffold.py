@@ -747,10 +747,16 @@ def _gen_createpoints(
     if x and y:
         return (
             "# spatial tool — requires geopandas\n"
+            "# X/Y coerced to float64 first: points_from_xy() calls float()\n"
+            "# per value, which raises TypeError on pd.NA (nullable dtypes)\n"
+            "# or strings; rows with missing X/Y are kept, as Alteryx does\n"
+            f"_x = pd.to_numeric({df_in}[{py_str(x)}],"
+            ' errors="coerce").astype("float64")\n'
+            f"_y = pd.to_numeric({df_in}[{py_str(y)}],"
+            ' errors="coerce").astype("float64")\n'
             f"{df_out} = gpd.GeoDataFrame(\n"
             f"    {df_in},\n"
-            f"    geometry=gpd.points_from_xy("
-            f"{df_in}[{py_str(x)}], {df_in}[{py_str(y)}]),\n"
+            f"    geometry=gpd.points_from_xy(_x, _y),\n"
             f'    crs="EPSG:4326",\n'
             f")"
         )
