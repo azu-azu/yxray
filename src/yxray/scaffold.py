@@ -736,6 +736,9 @@ def _gen_createpoints(
     if x and y:
         return (
             "# spatial tool — requires geopandas\n"
+            "# NOTE: 'geometry' is Alteryx's 'Centroid' SpatialObj field —\n"
+            "# shown only in the Map tab, never in the Results grid or\n"
+            "# golden CSVs; drop it on the comparison side, not here\n"
             "# X/Y coerced to float64 first: points_from_xy() calls float()\n"
             "# per value, which raises TypeError on pd.NA (nullable dtypes)\n"
             "# or strings; rows with missing X/Y are kept, as Alteryx does\n"
