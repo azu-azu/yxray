@@ -151,5 +151,9 @@ def test_find_any_case_insensitive_matches_when_requested() -> None:
 def test_find_any_rejects_column_overlap_with_targets() -> None:
     targets = pd.DataFrame({"text": ["x"], "label": ["existing"]})
     source = pd.DataFrame({"kw": ["x"], "label": ["L"]})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as excinfo:
         _run(targets, source)
+    message = str(excinfo.value)
+    # the message must name the offending column and tell the user to rename
+    assert "label" in message
+    assert "rename" in message

@@ -72,13 +72,26 @@ def simulate_find_any_append(
             f"source_df に列がありません: {missing_source_columns}"
         )
 
-    # 付与する列（search_field を含む）が targets 側に既にあると結果が壊れるので弾く。
-    # find_field == search_field のケースもここで検出できる。
+    # source_df から付与する列（search_field と append_fields）が targets_df に
+    # 同名で既にあると、同じ列名を2つ持てず結果が壊れるので弾く。
+    # find_field == search_field（同名キーでの探索）もここで検出できる。
     new_columns = [search_field, *append_fields]
     overlap = [column for column in new_columns if column in targets_df.columns]
     if overlap:
         raise ValueError(
-            f"付与する列が targets_df 側に既に存在しています: {overlap}"
+            "列名の衝突: source_df から付与しようとした列 "
+            f"{overlap} が targets_df 側に同名で既に存在します。"
+            "2つの df で同じ列名は共存できないため、この列は追加できません。\n"
+            "対処: source_df 側の該当列を rename して名前をずらしてから "
+            "呼び出してください（search_field / append_fields も新しい名前に合わせる）。\n"
+            f'  例: find_field と search_field が同じキー列名 "{search_field}" のとき\n'
+            f'    simulate_find_any_append(\n'
+            f'        targets_df,\n'
+            f'        source_df.rename(columns={{"{search_field}": "{search_field}_lookup"}}),\n'
+            f'        find_field="{find_field}",\n'
+            f'        search_field="{search_field}_lookup",  # ← rename 後の名前\n'
+            f'        ...\n'
+            f'    )'
         )
 
     # ── 準備 ─────────────────────────────────────────────────────
