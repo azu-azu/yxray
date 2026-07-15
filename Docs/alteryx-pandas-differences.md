@@ -329,11 +329,11 @@ anchor と config タグの対応関係:
 | RMF=True（last match）として実装 | **22** |
 | RMF=False（first match）として実装 | 363 |
 
-残 22 セルについては、現時点では helper の意味論の誤りよりも、
-**verify 側の対応付け（重複 id・行の突き合わせ）に起因する可能性が高い**と
-考えている。この残差は **FindReplace 実装の品質とは切り離して評価する** —
-残差が残っていること自体を FindReplace 翻訳の失敗と解釈しないこと。
-説明の消し込みは verify 改善タスク（FindReplace とは別タスク）で行う。
+この突合時点で残っていた 22 セルは、**その後 verify 側の対応付け
+（重複 id・行の突き合わせ）の改善で解消済み**。当時の推定どおり
+helper の意味論の誤りではなく、FindReplace 翻訳側の修正は不要だった。
+上表の cell_diff は突合当時の値で、「RMF=True = last match」という
+結論の根拠として履歴のまま残している。
 
 **上記の検証がカバーする範囲**: 比較対象はいずれも「RMF=True 設定の
 golden」であり、`RMF=False` を Alteryx 側で設定した golden との突合ではない
