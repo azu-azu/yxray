@@ -27,11 +27,11 @@ def _load_script(name: str):
     return module
 
 
-select_helpers = _load_script("select_helpers")
+select_helpers = _load_script("apply_select_edits")
 find_any = _load_script("simulate_find_any_append")
 
 
-# ── select_helpers ──────────────────────────────────────────────────────────
+# ── apply_select_edits ──────────────────────────────────────────────────────
 
 
 def test_apply_select_edits_unknown_deselected_keeps_only_selected() -> None:
@@ -78,6 +78,99 @@ def test_apply_select_edits_unknown_deselected_skips_absent_selected() -> None:
         edit("*Unknown", selected=False),
     ])
     assert list(out.columns) == ["a"]
+
+
+def test_apply_select_edits_type_string() -> None:
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"a": [1, 2]})
+    out = select_helpers.apply_select_edits(df, [edit("a", type="V_WString")])
+    assert out["a"].dtype == "string"
+    assert list(out["a"]) == ["1", "2"]
+
+
+def test_apply_select_edits_type_int_sizes_and_rounding() -> None:
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({
+        "i16": ["1", "2"],
+        "i64": ["3", "bad"],
+        "dbl": [1.5, 2.4],
+    })
+    out = select_helpers.apply_select_edits(df, [
+        edit("i16", type="Int16"),
+        edit("i64", type="Int64"),
+        edit("dbl", type="Int32"),
+    ])
+    assert out["i16"].dtype == "Int16"
+    assert out["i64"].dtype == "Int64"
+    # 変換失敗は Alteryx の Conversion Error と同じく null
+    assert out["i64"].isna().iloc[1]
+    # Double→Int は四捨五入（切り捨てだと astype が落ちるうえ Alteryx と不一致）
+    assert out["dbl"].dtype == "Int32"
+    assert list(out["dbl"]) == [2, 2]
+
+
+def test_apply_select_edits_type_float_and_date() -> None:
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({
+        "f": ["1.5", ""],
+        "d": ["2024-01-02 15:30:00", "not a date"],
+        "dt": ["2024-01-02 15:30:00", None],
+    })
+    out = select_helpers.apply_select_edits(df, [
+        edit("f", type="Double"),
+        edit("d", type="Date"),
+        edit("dt", type="DateTime"),
+    ])
+    assert out["f"].dtype == "float64"
+    assert out["f"].iloc[0] == 1.5
+    # Date は時刻部分を持たない（normalize）、DateTime は保持
+    assert out["d"].iloc[0] == pd.Timestamp("2024-01-02")
+    assert pd.isna(out["d"].iloc[1])
+    assert out["dt"].iloc[0] == pd.Timestamp("2024-01-02 15:30:00")
+
+
+def test_apply_select_edits_type_bool() -> None:
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"b": ["1", "0", "True", "false", "junk"]})
+    out = select_helpers.apply_select_edits(df, [edit("b", type="Bool")])
+    assert out["b"].dtype == "boolean"
+    assert list(out["b"][:4]) == [True, False, True, False]
+    assert pd.isna(out["b"].iloc[4])
+
+
+def test_apply_select_edits_type_applied_before_rename() -> None:
+    # type は rename 前の列名で指定される（Alteryx XML と同じ）ため、
+    # rename と併用しても変換が効くこと
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"old": ["1", "2"]})
+    out = select_helpers.apply_select_edits(df, [
+        edit("old", new_name="new", type="Int64"),
+    ])
+    assert list(out.columns) == ["new"]
+    assert out["new"].dtype == "Int64"
+
+
+def test_apply_select_edits_type_unsupported_or_absent_is_skipped() -> None:
+    # 未対応型（Blob 等）と存在しない列は警告のみで落ちない
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"a": [1], "b": ["x"]})
+    out = select_helpers.apply_select_edits(df, [
+        edit("a", type="Blob"),
+        edit("gone", type="Int64"),
+        edit("b"),
+        edit("*Unknown", selected=False),
+    ])
+    assert list(out.columns) == ["a", "b"]
+    assert out["a"].iloc[0] == 1
+
+
+def test_apply_select_edits_type_does_not_mutate_input() -> None:
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"a": ["1"]})
+    original_dtype = df["a"].dtype
+    select_helpers.apply_select_edits(df, [edit("a", type="Int64")])
+    assert df["a"].dtype == original_dtype
+    assert df["a"].iloc[0] == "1"
 
 
 # ── simulate_find_any_append ────────────────────────────────────────────────
