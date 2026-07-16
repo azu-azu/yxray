@@ -97,7 +97,7 @@ _SHX_NOTE_LINES = [
 
 
 def _is_shp(path: str | None) -> bool:
-    return bool(path) and pathlib.Path(path).suffix.lower() == ".shp"
+    return path is not None and pathlib.Path(path).suffix.lower() == ".shp"
 
 
 def _file_read(path_expr: str, ext: str) -> str:
