@@ -238,10 +238,10 @@ def test_find_any_golden_leftmost_match_for_both_rmf_settings() -> None:
     assert list(out_true["label"]) == expected
 
 
-def test_find_any_nested_needles_earliest_end_wins() -> None:
-    # "app" and "apple" both start at position 0 in "apple pie"; the match
-    # that completes first ("app", ending earlier) wins — for BOTH RMF
-    # settings. Golden-verified on real Alteryx output.
+def test_find_any_same_start_earlier_lookup_row_wins() -> None:
+    # "app" and "apple" both start at position 0 in "apple pie": the earlier
+    # lookup row wins the tie, for BOTH RMF settings. Golden-verified on
+    # real Alteryx output.
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]})
     for rmf in (True, False):
@@ -249,27 +249,25 @@ def test_find_any_nested_needles_earliest_end_wins() -> None:
         assert out["label"].iloc[0] == "SHORT"
 
 
-def test_find_any_nested_needles_reversed_order_assumption() -> None:
-    # Same nested needles with the lookup rows reversed: the earliest-end
-    # model still picks the shorter needle; a same-start "earlier lookup row
-    # wins" model would pick LONG instead. The golden above used the
-    # SHORT-first ordering, so this ordering has no golden yet — pinned as
-    # the discriminator baseline.
+def test_find_any_same_start_tie_reversed_order() -> None:
+    # Same nested needles with the lookup rows reversed: the earlier row
+    # (now "apple") wins — golden-verified. This rules out length-based
+    # models ("shorter needle" / "earliest end"), which would still pick
+    # "app": the same-start tie goes to lookup order, not needle length.
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["apple", "app"], "label": ["LONG", "SHORT"]})
     out = _run(targets, lookup)
-    assert out["label"].iloc[0] == "SHORT"
+    assert out["label"].iloc[0] == "LONG"
 
 
-def test_find_any_earliest_end_beats_earliest_start_assumption() -> None:
+def test_find_any_leftmost_start_beats_earliest_end() -> None:
     # "apple" starts at 0 and ends at 5; "ppl" starts at 1 but ends at 4.
-    # The implementation models Alteryx as "first match to complete"
-    # (earliest END), which picks "ppl". A leftmost-START model would pick
-    # "apple". No golden discriminates the two yet — pinned as baseline.
+    # Golden-verified: "apple" wins — the START position decides, not the
+    # end position ("first match to complete" would have picked "ppl").
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["apple", "ppl"], "label": ["LONG", "MID"]})
     out = _run(targets, lookup)
-    assert out["label"].iloc[0] == "MID"
+    assert out["label"].iloc[0] == "LONG"
 
 
 def test_find_any_duplicate_needle_last_row_wins_regardless_of_rmf() -> None:
