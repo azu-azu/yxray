@@ -124,6 +124,46 @@ def test_scaffold_input_shp_uses_gpd_read_file() -> None:
     assert "pd.read_csv(" not in code
 
 
+def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
+    # Alteryx SpatialObj is always WGS84; a .shp without .prj loads as CRS
+    # None and gpd.sjoin then warns about mixed CRS against e.g. the
+    # EPSG:4326 frame Create Points builds. Every spatial read must
+    # normalize right after loading.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold(doc)
+    assert "if df1.crs is None:" in code
+    assert 'df1 = df1.set_crs("EPSG:4326")' in code
+    assert 'df1 = df1.to_crs("EPSG:4326")' in code
+
+
+def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.gpkg"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "if df1.crs is None:" in code
+    assert 'df1 = df1.set_crs("EPSG:4326")' in code
+    assert 'df1 = df1.to_crs("EPSG:4326")' in code
+
+
+def test_scaffold_csv_read_has_no_crs_normalization() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\plain.csv"},
+        )
+    )
+    assert "set_crs" not in scaffold(doc)
+
+
 def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
     doc = _doc(
         AlteryxNode(
