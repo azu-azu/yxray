@@ -13,9 +13,12 @@
 - **hint側**: `tool_registry.py` の `ToolInfo`(1行ヒント)。
   `python_hint_for()` 経由で `explain.py` の `ExplainStep.python_hint` になり、
   inspect レポート(`single_graph_renderer.py`)の右ペインに出る。
-- **scaffold側**: `scaffold.py` の `_gen_<tool>` 関数(実コード)。
+- **scaffold側**: `scaffold/` パッケージの `gen_<tool>(ctx)` 関数(実コード)。
+  領域ごとの module にある(例: Filter は `scaffold/_filter.py`、Select は
+  `scaffold/_select.py`。対応は `docs/scaffold-architecture.md` 参照)。
   md/py の本体になるほか、`node_code_snippets()` 経由で
-  inspect レポートのノード詳細スニペットにも出る。
+  inspect レポートのノード詳細スニペットにも出る。どの module が担当するかは
+  `scaffold/_registry.py` の `GENERATORS` が決める。
 
 scaffold側を変えたら `tests/test_scaffold.py` の該当 assert
 (生成コードの文字列一致)も更新すること。

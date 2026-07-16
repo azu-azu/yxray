@@ -284,7 +284,7 @@ yxray/
 │       ├── summarizer.py       # Rule-based tool descriptions + key insights
 │       ├── explain.py          # Alteryx → Python/pandas hint engine
 │       ├── manual_clusters.py  # Manual cluster JSON validation and backups
-│       ├── scaffold.py         # Python/pandas skeleton generator
+│       ├── scaffold/           # Python/pandas skeleton generator (per-tool modules + registry)
 │       ├── models/             # Frozen dataclasses (WorkflowDoc, DiffResult, ...)
 │       ├── normalizer/         # C14N, GUID stripping, config hashing
 │       ├── matcher/            # ToolID + Hungarian matcher
