@@ -120,7 +120,63 @@ def test_scaffold_input_shp_uses_gpd_read_file() -> None:
     )
     code = scaffold(doc)
     assert "gpd.read_file(" in code
+    assert "import geopandas as gpd" in code
     assert "pd.read_csv(" not in code
+
+
+def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        ),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="DbFileInput", x=0, y=100,
+            config={"FileName": r"C:\data\roads.shp"},
+        ),
+    )
+    code = scaffold(doc)
+    restore = 'os.environ.setdefault("SHAPE_RESTORE_SHX", "YES")'
+    # Process-wide GDAL config: set once at module level, not per read.
+    assert code.count(restore) == 1
+    assert code.index(restore) < code.index("def main()")
+
+
+def test_scaffold_non_shp_has_no_shx_restore() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.gpkg"},
+        )
+    )
+    assert "SHAPE_RESTORE_SHX" not in scaffold(doc)
+
+
+def test_scaffold_simple_shp_notes_shx_restore() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "import geopandas as gpd" in code
+    # The .md scaffold carries a reminder comment, not executable config.
+    assert "# NOTE: a .shp without its .shx sidecar fails to open" in code
+    assert 'os.environ.setdefault("SHAPE_RESTORE_SHX", "YES")' in code
+    assert "import os" not in code
+
+
+def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.gpkg"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "SHAPE_RESTORE_SHX" not in code
+    assert "import os" not in code
 
 
 def test_scaffold_windows_path_extracts_filename_in_test_block() -> None:
