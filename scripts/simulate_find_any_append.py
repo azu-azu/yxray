@@ -163,7 +163,7 @@ def simulate_find_any_append(
     # lookup_id は重複排除前の元の行番号（lookup.index に保持）。
     append_positions = range(1, len(required_lookup_columns))
     for lookup_id, values in zip(
-        lookup.index, lookup.itertuples(index=False, name=None)
+        lookup.index, lookup.itertuples(index=False, name=None), strict=True
     ):
         needle = values[0]
         if pd.isna(needle):
