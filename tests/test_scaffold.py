@@ -120,7 +120,38 @@ def test_scaffold_input_shp_uses_gpd_read_file() -> None:
     )
     code = scaffold(doc)
     assert "gpd.read_file(" in code
+    assert "import geopandas as gpd" in code
     assert "pd.read_csv(" not in code
+    assert (
+        'os.environ.setdefault("SHAPE_RESTORE_SHX", "YES")'
+        "  # read .shp without .shx" in code
+    )
+
+
+def test_scaffold_simple_shp_restores_shx_and_imports_os() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "import os" in code
+    assert "import geopandas as gpd" in code
+    assert 'os.environ.setdefault("SHAPE_RESTORE_SHX", "YES")' in code
+    assert code.index("import os") < code.index("gpd.read_file(")
+
+
+def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.gpkg"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "SHAPE_RESTORE_SHX" not in code
+    assert "import os" not in code
 
 
 def test_scaffold_windows_path_extracts_filename_in_test_block() -> None:
