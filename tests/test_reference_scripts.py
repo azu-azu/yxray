@@ -238,33 +238,53 @@ def test_find_any_golden_leftmost_match_for_both_rmf_settings() -> None:
     assert list(out_true["label"]) == expected
 
 
-def test_find_any_same_position_tie_rmf_decides_lookup_row() -> None:
-    # Two needles starting at the same text position: RMF picks the lookup
-    # row — True takes the later row, False keeps the earlier. No golden for
-    # this tie yet — pinned as the baseline of the unified model (consistent
-    # with the golden-verified FindWhole duplicate-key behavior).
+def test_find_any_same_start_earlier_lookup_row_wins() -> None:
+    # "app" and "apple" both start at position 0 in "apple pie": the earlier
+    # lookup row wins the tie, for BOTH RMF settings. Golden-verified on
+    # real Alteryx output.
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]})
-    first = _run(targets, lookup, replace_multiple_found=False)
-    last = _run(targets, lookup, replace_multiple_found=True)
-    assert first["label"].iloc[0] == "SHORT"
-    assert last["label"].iloc[0] == "LONG"
+    for rmf in (True, False):
+        out = _run(targets, lookup, replace_multiple_found=rmf)
+        assert out["label"].iloc[0] == "SHORT"
 
 
-def test_find_any_duplicate_needle_rmf_picks_first_or_last_row() -> None:
-    # The same search value on multiple lookup rows matches at the same
-    # position, so RMF decides which row's values are appended — mirrors the
-    # golden-verified FindWhole duplicate-key behavior (RMF=True → last).
-    # The FindAny side itself has no golden yet — pinned as baseline.
+def test_find_any_same_start_tie_reversed_order() -> None:
+    # Same nested needles with the lookup rows reversed: the earlier row
+    # (now "apple") wins — golden-verified. This rules out length-based
+    # models ("shorter needle" / "earliest end"), which would still pick
+    # "app": the same-start tie goes to lookup order, not needle length.
+    targets = pd.DataFrame({"text": ["apple pie"]})
+    lookup = pd.DataFrame({"kw": ["apple", "app"], "label": ["LONG", "SHORT"]})
+    out = _run(targets, lookup)
+    assert out["label"].iloc[0] == "LONG"
+
+
+def test_find_any_leftmost_start_beats_earliest_end() -> None:
+    # "apple" starts at 0 and ends at 5; "ppl" starts at 1 but ends at 4.
+    # Golden-verified: "apple" wins — the START position decides, not the
+    # end position ("first match to complete" would have picked "ppl").
+    targets = pd.DataFrame({"text": ["apple pie"]})
+    lookup = pd.DataFrame({"kw": ["apple", "ppl"], "label": ["LONG", "MID"]})
+    out = _run(targets, lookup)
+    assert out["label"].iloc[0] == "LONG"
+
+
+def test_find_any_duplicate_needle_last_row_wins_regardless_of_rmf() -> None:
+    # The same search value on multiple lookup rows: the LAST row's values
+    # are appended, for BOTH RMF settings (dictionary-style overwrite).
+    # Golden-verified on real Alteryx output.
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["apple", "apple"], "label": ["X", "Y"]})
-    first = _run(targets, lookup, replace_multiple_found=False)
-    last = _run(targets, lookup, replace_multiple_found=True)
-    assert first["label"].iloc[0] == "X"
-    assert last["label"].iloc[0] == "Y"
+    for rmf in (True, False):
+        out = _run(targets, lookup, replace_multiple_found=rmf)
+        assert out["label"].iloc[0] == "Y"
 
 
 def test_find_any_nan_and_empty_needles_do_not_match() -> None:
+    # golden-verified: real Alteryx also ignores empty-string and NULL search
+    # values (a lookup with "", NULL and "apple" appends nothing to a
+    # no-match target row)
     targets = pd.DataFrame({"text": ["nan value here", "anything"]})
     lookup = pd.DataFrame({"kw": [None, ""], "label": ["N", "E"]})
     out = _run(targets, lookup)

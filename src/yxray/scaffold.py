@@ -625,7 +625,6 @@ def _findreplace_whole_append(
     field_find: str,
     field_search: str,
     append_names: list[str],
-    replace_multiple_found: bool,
 ) -> str:
     cols = ", ".join(py_str(n) for n in (field_search, *append_names))
     # When find/search names differ, pd.merge keeps the right_on key column in
@@ -640,29 +639,18 @@ def _findreplace_whole_append(
         else f"    left_on={py_str(field_find)},\n    right_on={py_str(field_search)},"
     )
     # Find Replace never grows the row count (1 target = 1 row), so the
-    # lookup side must be deduplicated before a left join. Which duplicate
-    # wins mirrors ReplaceMultipleFound: True = last, False = first.
-    # RMF=True (keep="last") is verified against real Alteryx golden output
-    # (3 duplicate keys with distinct values, diff 0). RMF=False
-    # (keep="first") is still inferred — no RMF=False golden taken yet;
-    # if it turns out otherwise, this line is the only place to fix.
-    keep = "last" if replace_multiple_found else "first"
-    note = (
-        ""
-        if replace_multiple_found
-        else '# NOTE: keep="first" for ReplaceMultipleFound=False is'
-        " inferred — no\n"
-        "# RMF=False golden verified yet\n"
-    )
+    # lookup side must be deduplicated before a left join. The LAST duplicate
+    # always wins, regardless of ReplaceMultipleFound — golden-verified with
+    # BOTH RMF settings (3 duplicate keys with distinct values, identical
+    # output). RMF has no observed effect in Append mode.
     lookup_var = f"_LOOKUP_{tool_id}"
     return (
         "# Find Replace (append fields on whole match) as a left join"
         " — review translation\n"
-        "# lookup deduplicated so 1 target = 1 row;"
-        " keep follows ReplaceMultipleFound\n"
-        f"{note}"
+        "# lookup deduplicated so 1 target = 1 row; the last duplicate wins\n"
+        "# regardless of ReplaceMultipleFound (golden-verified)\n"
         f"{lookup_var} = {df_r}[[{cols}]]"
-        f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
+        f'.drop_duplicates({py_str(field_search)}, keep="last")\n'
         f"{df_out} = pd.merge(\n"
         f"    {df_f},\n"
         f"    {lookup_var},\n"
@@ -767,7 +755,6 @@ def _gen_findreplace(
             field_find,
             field_search,
             append_names,
-            replace_multiple_found,
         )
     # ReplaceMode is the primary discriminator: the XML can retain settings
     # for the non-selected mode (a stale ReplaceFoundField survives switching

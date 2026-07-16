@@ -1257,16 +1257,15 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
     # duplicate lookup keys must not grow the row count: the lookup side is
-    # deduplicated before the join, last match wins (ReplaceMultipleFound
-    # defaults to True)
+    # deduplicated before the join and the last duplicate wins
     assert '.drop_duplicates("EL_ID", keep="last")' in code
     assert "raise ValueError(" not in code
-    # keep="last" for RMF=True is golden-verified (3 duplicate keys with
-    # distinct values, diff 0), so the generated code carries no caveat NOTE
+    # keep="last" is golden-verified (3 duplicate keys with distinct values,
+    # identical output for both RMF settings) — no caveat NOTE
     assert "is inferred" not in code
 
 
-def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
+def test_scaffold_findreplace_whole_match_rmf_false_still_keeps_last() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
@@ -1281,13 +1280,15 @@ def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert '.drop_duplicates("key_b", keep="first")' in code
+    # ReplaceMultipleFound has no observed effect in Append mode: the same
+    # duplicate-key workflow produced identical output with RMF=True and
+    # RMF=False (golden-verified), so keep="last" is generated for both
+    assert '.drop_duplicates("key_b", keep="last")' in code
+    assert 'keep="first"' not in code
+    assert "is inferred" not in code
     assert 'left_on="key_a"' in code
     assert 'right_on="key_b"' in code
     assert 'how="left"' in code
-    # RMF=False (keep="first") has no golden yet — unlike the verified
-    # RMF=True side, the generated code must carry the caveat NOTE
-    assert 'keep="first" for ReplaceMultipleFound=False is inferred' in code
     # the right_on key column stays in the merge output on purpose: real
     # Alteryx FindWhole carries the search key column into the Append output
     # automatically (golden-verified) — asymmetric with FindAny
