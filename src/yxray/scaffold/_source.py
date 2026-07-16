@@ -1,0 +1,50 @@
+"""Non-file endpoints of the flow (Text Input, Browse).
+
+Text Input materializes data embedded in the workflow XML; Browse is a
+sink that only logs. File-backed Input/Output live in _io.
+"""
+
+from __future__ import annotations
+
+from yxray.config_utils import as_list, field_name, py_str
+from yxray.scaffold._common import ToolContext
+
+
+def gen_text_input(ctx: ToolContext) -> str:
+    df_out = ctx.df_out
+    fields = ctx.config.get("Fields", {})
+    field_names: list[str] = []
+    if isinstance(fields, dict):
+        field_names = [
+            field_name(f)
+            for f in as_list(fields.get("Field"))
+            if isinstance(f, dict) and field_name(f)
+        ]
+    if not field_names:
+        return f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
+
+    data = ctx.config.get("Data", {})
+    rows: list[list[str]] = []
+    for r in as_list(data.get("r")) if isinstance(data, dict) else []:
+        if not isinstance(r, dict):
+            continue
+        cells: list[str] = []
+        for c in as_list(r.get("c")) if "c" in r else []:
+            if isinstance(c, dict):
+                c = c.get("#text")
+            cells.append("" if c is None else str(c))
+        rows.append(cells)
+
+    lines = [
+        "# Text Input values are strings — cast dtypes if needed",
+        f"{df_out} = pd.DataFrame({{",
+    ]
+    for i, name in enumerate(field_names):
+        values = ", ".join(py_str(row[i]) if i < len(row) else '""' for row in rows)
+        lines.append(f"    {py_str(name)}: [{values}],")
+    lines.append("})")
+    return "\n".join(lines)
+
+
+def gen_browse(ctx: ToolContext) -> str:
+    return f'logger.info("ToolID {ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))'

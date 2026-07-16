@@ -12,7 +12,7 @@ from the other per-tool generators:
 * Detecting the IsEmpty-vs-datetime contradiction (IsEmpty's == "" half
   goes dead once a column is coerced to datetime) and noting it.
 
-Only _gen_filter is called by the generator registry; the rest are its
+Only gen_filter is called by the generator registry; the rest are its
 internals (a few are also imported by tests).
 """
 
@@ -33,7 +33,7 @@ from yxray.config_utils import (
     py_str,
     simple_filter_condition,
 )
-from yxray.scaffold_common import FIELD_RE, frame_name
+from yxray.scaffold._common import FIELD_RE, ToolContext
 
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
@@ -132,9 +132,7 @@ def _fields_in_fragment(fragment: str) -> set[str]:
 
 
 def _date_columns_in_fragment(fragment: str) -> set[str]:
-    return {
-        m.group(1) or m.group(2) for m in _ADJACENT_DATE_RE.finditer(fragment)
-    }
+    return {m.group(1) or m.group(2) for m in _ADJACENT_DATE_RE.finditer(fragment)}
 
 
 def _isempty_columns_in_fragment(fragment: str) -> set[str]:
@@ -146,7 +144,7 @@ def _isempty_dead_code_note(col: str, *, confident: bool) -> str:
     if confident:
         return (
             f'# NOTE: after conversion, IsEmpty\'s == "" check on "{name}"'
-            ' always evaluates False — isna() alone is enough (it also'
+            " always evaluates False — isna() alone is enough (it also"
             " catches NaT)."
         )
     return (
@@ -202,17 +200,10 @@ def _filter_date_warning_lines(
     return lines
 
 
-def _gen_filter(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
+def gen_filter(ctx: ToolContext) -> str:
+    config = ctx.config
+    df_in = ctx.df_in
+    df_out = ctx.df_out
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         translation: FilterTranslation | None
@@ -221,9 +212,7 @@ def _gen_filter(
             pandas_expr = translation.combined
         except ExprTranslationError:
             translation = None
-            pandas_expr = FIELD_RE.sub(
-                lambda m: f"{df_in}[{py_str(m.group(1))}]", expr
-            )
+            pandas_expr = FIELD_RE.sub(lambda m: f"{df_in}[{py_str(m.group(1))}]", expr)
         lines = ["# Alteryx expression — review translation"]
         if _DATE_EXPR_RE.search(pandas_expr):
             lines += [
