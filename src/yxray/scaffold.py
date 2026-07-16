@@ -636,20 +636,25 @@ def _findreplace_whole_append(
     # Find Replace never grows the row count (1 target = 1 row), so the
     # lookup side must be deduplicated before a left join. Which duplicate
     # wins mirrors ReplaceMultipleFound: True = last, False = first.
-    # NOTE: this mapping is inferred from the FindAny golden results
-    # (RMF=True = last match) and has not yet been verified for FindWhole
-    # against real Alteryx output — if golden testing shows otherwise,
-    # this line is the only place to fix.
+    # RMF=True (keep="last") is verified against real Alteryx golden output
+    # (3 duplicate keys with distinct values, diff 0). RMF=False
+    # (keep="first") is still inferred — no RMF=False golden taken yet;
+    # if it turns out otherwise, this line is the only place to fix.
     keep = "last" if replace_multiple_found else "first"
+    note = (
+        ""
+        if replace_multiple_found
+        else '# NOTE: keep="first" for ReplaceMultipleFound=False is'
+        " inferred — no\n"
+        "# RMF=False golden verified yet\n"
+    )
     lookup_var = f"_LOOKUP_{tool_id}"
     return (
         "# Find Replace (append fields on whole match) as a left join"
         " — review translation\n"
-        "# source deduplicated so 1 target = 1 row;"
+        "# lookup deduplicated so 1 target = 1 row;"
         " keep follows ReplaceMultipleFound\n"
-        f'# NOTE: keep="{keep}" is inferred from FindAny golden results'
-        " — not yet\n"
-        "# verified for FindWhole\n"
+        f"{note}"
         f"{lookup_var} = {df_r}[[{cols}]]"
         f".drop_duplicates({py_str(field_search)}, keep={py_str(keep)})\n"
         f"{df_out} = pd.merge(\n"

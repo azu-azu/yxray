@@ -1256,14 +1256,14 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
-    # duplicate lookup keys must not grow the row count: the source side is
+    # duplicate lookup keys must not grow the row count: the lookup side is
     # deduplicated before the join, last match wins (ReplaceMultipleFound
     # defaults to True)
     assert '.drop_duplicates("EL_ID", keep="last")' in code
     assert "raise ValueError(" not in code
-    # the keep mapping is a hypothesis carried over from FindAny golden
-    # results; the generated code must say so until FindWhole is verified
-    assert 'keep="last" is inferred from FindAny golden results' in code
+    # keep="last" for RMF=True is golden-verified (3 duplicate keys with
+    # distinct values, diff 0), so the generated code carries no caveat NOTE
+    assert "is inferred" not in code
 
 
 def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
@@ -1285,6 +1285,9 @@ def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
     assert 'left_on="key_a"' in code
     assert 'right_on="key_b"' in code
     assert 'how="left"' in code
+    # RMF=False (keep="first") has no golden yet — unlike the verified
+    # RMF=True side, the generated code must carry the caveat NOTE
+    assert 'keep="first" for ReplaceMultipleFound=False is inferred' in code
 
 
 def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
