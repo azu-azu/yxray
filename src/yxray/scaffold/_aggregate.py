@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.config_utils import as_list, py_str
-from yxray.scaffold._common import frame_name
+from yxray.scaffold._common import ToolContext
 
 
-def gen_summarize(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    sf = config.get("SummarizeFields", {})
+def gen_summarize(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    sf = ctx.config.get("SummarizeFields", {})
     if not isinstance(sf, dict):
         return f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO"
     rows = as_list(sf.get("SummarizeField", []))

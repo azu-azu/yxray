@@ -33,7 +33,7 @@ from yxray.config_utils import (
     py_str,
     simple_filter_condition,
 )
-from yxray.scaffold._common import FIELD_RE, frame_name
+from yxray.scaffold._common import FIELD_RE, ToolContext
 
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
@@ -202,17 +202,10 @@ def _filter_date_warning_lines(
     return lines
 
 
-def gen_filter(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
+def gen_filter(ctx: ToolContext) -> str:
+    config = ctx.config
+    df_in = ctx.df_in
+    df_out = ctx.df_out
     expr = first_text(config, "Expression", "CustomFilterExpression")
     if expr:
         translation: FilterTranslation | None

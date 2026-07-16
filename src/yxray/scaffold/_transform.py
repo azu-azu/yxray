@@ -7,11 +7,9 @@ rest are one-line pandas translations.
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.alteryx_expr import ExprTranslationError, translate_expr
 from yxray.config_utils import as_list, field_name, py_str, sort_field_rows
-from yxray.scaffold._common import FIELD_RE, frame_name
+from yxray.scaffold._common import FIELD_RE, ToolContext
 
 
 def _translate_expr(expr: str, df_var: str) -> str:
@@ -26,18 +24,10 @@ def _translate_expr(expr: str, df_var: str) -> str:
         return FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
 
 
-def gen_formula(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    ffs = config.get("FormulaFields", {})
+def gen_formula(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    ffs = ctx.config.get("FormulaFields", {})
     formulas: list[tuple[str, str]] = []
     if isinstance(ffs, dict):
         for item in as_list(ffs.get("FormulaField", [])):
@@ -65,18 +55,10 @@ def gen_formula(
     return "\n".join(lines)
 
 
-def gen_sort(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    rows = sort_field_rows(config)
+def gen_sort(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    rows = sort_field_rows(ctx.config)
     if rows:
         fields = [r["@field"] for r in rows]
         orders = [r.get("@order", "Ascending").lower() != "descending" for r in rows]
@@ -85,19 +67,11 @@ def gen_sort(
     return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
 
 
-def gen_sample(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
+def gen_sample(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
     for key in ("RecordLimit", "N", "@N"):
-        val = config.get(key)
+        val = ctx.config.get(key)
         if val:
             n = val.get("#text", "") if isinstance(val, dict) else str(val)
             if n:
@@ -105,18 +79,10 @@ def gen_sample(
     return f"{df_out} = {df_in}.head(...)  # TODO: set sample count"
 
 
-def gen_unique(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    unique_fields = config.get("UniqueFields", {})
+def gen_unique(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    unique_fields = ctx.config.get("UniqueFields", {})
     field_names: list[str] = []
     if isinstance(unique_fields, dict):
         field_names = [

@@ -3,9 +3,11 @@
 scaffold(doc) returns a .py file string with one code block per tool,
 in topological order (preamble, ENV/paths block, main()); scaffold_simple
 / scaffold_simple_blocks return the flat .md variant without the
-project-level boilerplate. Per-tool code comes from the domain modules
-via _registry.GENERATORS — only the path-dependent Input/Output emission
-(_io) is dispatched by hand here.
+project-level boilerplate. Both share a single per-tool loop (_tool_blocks):
+each tool becomes a ToolContext dispatched through _registry.GENERATORS by
+segment alone — Input/Output included — so the only difference between the
+two outputs is the PathStyle passed in (PROJECT_PATHS vs INLINE_PATHS) and
+the surrounding boilerplate.
 
 Variable naming: each tool's output is named df<tool_id> (e.g. df34, df108),
 matching the ToolID comment above each block so the mapping is unambiguous.
@@ -23,16 +25,13 @@ from yxray.config_utils import (
     first_text,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._common import frame_name
+from yxray.scaffold._common import PathStyle, ToolContext
 from yxray.scaffold._io import (
-    SHX_NOTE_LINES,
+    INLINE_PATHS,
+    PROJECT_PATHS,
     SHX_RESTORE_LINE,
     SPATIAL_EXTS,
-    gen_input,
-    gen_output,
     is_shp,
-    read_stmt,
-    write_stmt,
 )
 from yxray.scaffold._registry import DETAIL_HINT_SEGMENTS, GENERATORS
 from yxray.tool_registry import (
@@ -80,6 +79,26 @@ def _assign_frame_names(
     return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
+def _make_context(
+    tool_id: int,
+    node: Any,
+    pred_map: dict[int, list[int]],
+    anchor_map: dict[int, dict[str, int]],
+    names: dict[int, str],
+    paths: PathStyle,
+) -> ToolContext:
+    """Bundle a tool's config + graph position + path style into one argument."""
+    return ToolContext(
+        tool_id=tool_id,
+        segment=tool_segment(node.tool_type),
+        config=node.config,
+        preds=pred_map.get(tool_id, []),
+        anchors=anchor_map.get(tool_id, {}),
+        names=names,
+        paths=paths,
+    )
+
+
 def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     """Per-node pandas code, identical to the .md Python Scaffold section.
 
@@ -99,11 +118,9 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
         segment = tool_segment(node.tool_type)
         if segment not in DETAIL_HINT_SEGMENTS:
             continue
-        preds = pred_map.get(tool_id, [])
-        anchors = anchor_map.get(tool_id, {})
-        snippets[tool_id] = GENERATORS[segment](
-            tool_id, segment, node.config, preds, anchors, names
-        )
+        # DETAIL_HINT excludes Input/Output, so the path style never matters here.
+        ctx = _make_context(tool_id, node, pred_map, anchor_map, names, INLINE_PATHS)
+        snippets[tool_id] = GENERATORS[segment](ctx)
     return snippets
 
 
@@ -226,25 +243,6 @@ def _emit_paths_block(
     return lines
 
 
-def _tool_context(
-    tool_id: int,
-    node_map: dict[int, Any],
-    pred_map: dict[int, list[int]],
-    anchor_map: dict[int, dict[str, int]],
-) -> tuple[Any, str, list[int], dict[str, int]] | None:
-    """(node, segment, preds, anchors) for a tool, or None if it has no node.
-
-    Shared by _emit_main_body() (.py) and scaffold_simple_blocks() (.md) so
-    the per-tool lookup stays in one place even though the two callers emit
-    different output shapes.
-    """
-    node = node_map.get(tool_id)
-    if node is None:
-        return None
-    segment = tool_segment(node.tool_type)
-    return node, segment, pred_map.get(tool_id, []), anchor_map.get(tool_id, {})
-
-
 def _header_comment_lines(
     tool_id: int,
     segment: str,
@@ -257,67 +255,51 @@ def _header_comment_lines(
     return lines
 
 
-def _gen_code_for_segment(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str | None:
-    """Code for a non-Input/Output segment via the generator registry.
-
-    None means the segment has no registered generator (unsupported tool);
-    callers append their own TODO fallback in that case.
-    """
-    gen = GENERATORS.get(segment)
-    if gen is None:
-        return None
-    return gen(tool_id, segment, config, preds, anchors, names)
-
-
-def _emit_main_body(
+def _tool_blocks(
     order: list[int],
     node_map: dict[int, Any],
     pred_map: dict[int, list[int]],
     anchor_map: dict[int, dict[str, int]],
-    input_paths: dict[int, str],
-    output_paths: dict[int, str],
     names: dict[int, str],
-    warnings_by_tool: dict[int, list[str]] | None = None,
-) -> list[str]:
-    body: list[str] = []
+    paths: PathStyle,
+    warnings_by_tool: dict[int, list[str]] | None,
+) -> list[ScaffoldBlock]:
+    """One ScaffoldBlock per tool, in topological order.
+
+    The single per-tool loop behind both scaffold outputs: `paths` selects
+    how Input/Output render file paths (PROJECT_PATHS for .py, INLINE_PATHS
+    for .md), and every segment — Input/Output included — dispatches through
+    GENERATORS, so there is no per-tool branching here.
+    """
+    blocks: list[ScaffoldBlock] = []
     for tool_id in order:
-        ctx = _tool_context(tool_id, node_map, pred_map, anchor_map)
-        if ctx is None:
+        node = node_map.get(tool_id)
+        if node is None:
             continue
-        node, segment, preds, anchors = ctx
-
-        body += _header_comment_lines(tool_id, segment, warnings_by_tool)
-
-        code: str | None
-        if segment in SCAFFOLD_INPUT_SEGMENTS:
-            code = gen_input(
-                tool_id, segment, node.config, preds, anchors, input_paths, names
-            )
-        elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
-            code = gen_output(
-                tool_id, segment, node.config, preds, anchors, output_paths, names
-            )
+        ctx = _make_context(tool_id, node, pred_map, anchor_map, names, paths)
+        lines = _header_comment_lines(ctx.tool_id, ctx.segment, warnings_by_tool)
+        gen = GENERATORS.get(ctx.segment)
+        if gen is None:
+            lines.append("# TODO: unsupported tool type — review manually")
+            lines.append(f"# {ctx.df_out} = ...")
         else:
-            code = _gen_code_for_segment(
-                tool_id, segment, node.config, preds, anchors, names
-            )
-            if code is None:
-                body.append("# TODO: unsupported tool type — review manually")
-                body.append(f"# {names[tool_id]} = ...")
-                body.append("")
-                continue
+            lines.append(gen(ctx))
+        blocks.append(ScaffoldBlock(ctx.tool_id, ctx.segment, lines))
+    return blocks
 
-        body.extend(code.split("\n"))
-        body.append("")
 
-    return ["    " + line if line else "" for line in body]
+def _flatten_blocks(blocks: list[ScaffoldBlock]) -> list[str]:
+    """Blocks → flat lines, one blank line after each block.
+
+    A block's code entry may be a multi-line string, so each entry is
+    exploded on newlines to keep the result a list of single lines.
+    """
+    lines: list[str] = []
+    for block in blocks:
+        for entry in block.lines:
+            lines.extend(entry.split("\n"))
+        lines.append("")
+    return lines
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -359,39 +341,9 @@ def scaffold_simple_blocks(
         for node in node_map.values()
     )
 
-    blocks: list[ScaffoldBlock] = []
-
-    for tool_id in order:
-        ctx = _tool_context(tool_id, node_map, pred_map, anchor_map)
-        if ctx is None:
-            continue
-        node, segment, preds, anchors = ctx
-
-        lines = _header_comment_lines(tool_id, segment, warnings_by_tool)
-
-        code: str | None
-        if segment in SCAFFOLD_INPUT_SEGMENTS:
-            path = first_text(node.config, "File", "FileName")
-            if is_shp(path):
-                lines += SHX_NOTE_LINES
-            code = read_stmt(names[tool_id], path, f'r"{path}"' if path else "")
-        elif segment in SCAFFOLD_OUTPUT_SEGMENTS:
-            src = preds[0] if preds else None
-            df_in = frame_name(names, src)
-            path = first_text(node.config, "File", "FileName")
-            code = write_stmt(df_in, path, f'r"{path}"' if path else "")
-        else:
-            code = _gen_code_for_segment(
-                tool_id, segment, node.config, preds, anchors, names
-            )
-            if code is None:
-                lines.append("# TODO: unsupported tool type — review manually")
-                lines.append(f"# {names[tool_id]} = ...")
-                blocks.append(ScaffoldBlock(tool_id, segment, lines))
-                continue
-
-        lines.append(code)
-        blocks.append(ScaffoldBlock(tool_id, segment, lines))
+    blocks = _tool_blocks(
+        order, node_map, pred_map, anchor_map, names, INLINE_PATHS, warnings_by_tool
+    )
 
     header: list[str] = [
         f'"""Scaffold generated by yxray from {source}"""',
@@ -422,11 +374,7 @@ def scaffold_simple(
     raw file paths, without the project-level boilerplate added to .py files.
     """
     header, blocks = scaffold_simple_blocks(doc, warnings_by_tool=warnings_by_tool)
-    lines = list(header)
-    for block in blocks:
-        lines.extend(block.lines)
-        lines.append("")
-    return "\n".join(lines)
+    return "\n".join(list(header) + _flatten_blocks(blocks))
 
 
 def scaffold(
@@ -450,16 +398,10 @@ def scaffold(
     input_paths, output_paths, has_spatial = _collect_metadata(node_map, order)
 
     names = _assign_frame_names(order, node_map)
-    body = _emit_main_body(
-        order,
-        node_map,
-        pred_map,
-        anchor_map,
-        input_paths,
-        output_paths,
-        names,
-        warnings_by_tool=warnings_by_tool,
+    blocks = _tool_blocks(
+        order, node_map, pred_map, anchor_map, names, PROJECT_PATHS, warnings_by_tool
     )
+    body = ["    " + line if line else "" for line in _flatten_blocks(blocks)]
     uses_numpy = any(_NUMPY_RE.search(line) for line in body)
     has_shp = any(is_shp(p) for p in input_paths.values())
 

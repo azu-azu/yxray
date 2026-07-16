@@ -17,8 +17,6 @@ before "fixing" any of it.
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.config_utils import (
     as_list,
     comment_safe,
@@ -26,7 +24,7 @@ from yxray.config_utils import (
     first_text,
     py_str,
 )
-from yxray.scaffold._common import anchor_src, frame_name
+from yxray.scaffold._common import ToolContext, anchor_src, frame_name
 
 
 def _findreplace_any_append(
@@ -145,22 +143,17 @@ def _findreplace_todo(df_out: str, df_f: str, find_mode: str, replace_mode: str)
     )
 
 
-def gen_findreplace(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
+def gen_findreplace(ctx: ToolContext) -> str:
+    tool_id = ctx.tool_id
+    config = ctx.config
+    df_out = ctx.df_out
     # Alteryx FindReplace XML connection anchors: Targets = main stream (FieldFind),
     # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks
     # for test fixtures.
-    f_id = anchor_src(anchors, preds, ("Targets", "F", "Find", "Input"), 0)
-    r_id = anchor_src(anchors, preds, ("Source", "R", "Replace"), 1)
-    df_f = frame_name(names, f_id, "df_find")
-    df_r = frame_name(names, r_id, "df_replace")
+    f_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "F", "Find", "Input"), 0)
+    r_id = anchor_src(ctx.anchors, ctx.preds, ("Source", "R", "Replace"), 1)
+    df_f = frame_name(ctx.names, f_id, "df_find")
+    df_r = frame_name(ctx.names, r_id, "df_replace")
 
     field_find = first_text(config, "FieldFind")
     field_search = first_text(config, "FieldSearch")

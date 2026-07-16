@@ -8,24 +8,14 @@ EPSG:4326 here.
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.config_utils import py_str
-from yxray.scaffold._common import anchor_src, frame_name
+from yxray.scaffold._common import ToolContext, anchor_src, frame_name
 
 
-def gen_createpoints(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    fields = config.get("Fields", {})
+def gen_createpoints(ctx: ToolContext) -> str:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    fields = ctx.config.get("Fields", {})
     x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
     y = fields.get("@fieldY", "") if isinstance(fields, dict) else ""
     if x and y:
@@ -50,20 +40,13 @@ def gen_createpoints(
     return f"{df_out} = {df_in}  # TODO: Create Points — X/Y fields not found"
 
 
-def gen_spatialmatch(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    t_id = anchor_src(anchors, preds, ("Targets", "Target"), 0)
-    u_id = anchor_src(anchors, preds, ("Universe",), 1)
-    df_t = frame_name(names, t_id, "df_targets")
-    df_u = frame_name(names, u_id, "df_universe")
-    method = config.get("Method", {})
+def gen_spatialmatch(ctx: ToolContext) -> str:
+    df_out = ctx.df_out
+    t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
+    u_id = anchor_src(ctx.anchors, ctx.preds, ("Universe",), 1)
+    df_t = frame_name(ctx.names, t_id, "df_targets")
+    df_u = frame_name(ctx.names, u_id, "df_universe")
+    method = ctx.config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
     return (

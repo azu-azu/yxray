@@ -9,10 +9,8 @@ pseudo-field patterns that usually indicate a source-file issue.
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.config_utils import field_name, py_str, select_field_rows
-from yxray.scaffold._common import frame_name
+from yxray.scaffold._common import ToolContext
 
 # Select tools always carry this warning: the .yxmd XML keeps the Select
 # state as of some earlier save, so it can silently disagree with what the
@@ -25,18 +23,11 @@ _SELECT_STALE_XML_WARNING = (
 )
 
 
-def gen_select(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    rows = select_field_rows(config)
+def gen_select(ctx: ToolContext) -> str:
+    tool_id = ctx.tool_id
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    rows = select_field_rows(ctx.config)
 
     edits: list[tuple[str, str | None, bool, str | None]] = []
     for r in rows:

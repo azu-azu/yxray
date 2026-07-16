@@ -10,9 +10,9 @@ scaffold, paths via INPUTS/OUTPUTS dicts) and scaffold_simple_blocks
 from __future__ import annotations
 
 import pathlib
-from typing import Any
 
-from yxray.scaffold._common import frame_name
+from yxray.config_utils import first_text
+from yxray.scaffold._common import PathStyle, ToolContext
 
 SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
 
@@ -94,29 +94,31 @@ def write_stmt(df_in: str, path: str | None, path_expr: str) -> str:
     return _file_write(path_expr, df_in, ext)
 
 
-def gen_input(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    _preds: list[int],
-    _anchors: dict[str, int],
-    input_paths: dict[int, str],
-    names: dict[int, str],
-) -> str:
-    path = input_paths.get(tool_id)
-    return read_stmt(names[tool_id], path, f'INPUTS["input_{tool_id}"]')
+# scaffold(): file paths resolve through the shared INPUTS/OUTPUTS dicts,
+# and the .shx workaround lives once in the preamble.
+PROJECT_PATHS = PathStyle(
+    input_expr=lambda tool_id, path: f'INPUTS["input_{tool_id}"]',
+    output_expr=lambda tool_id, path: f'OUTPUTS["output_{tool_id}"]',
+    inline_shx_note=False,
+)
+# .md scaffold: raw path literals, .shx note prepended to the block itself.
+INLINE_PATHS = PathStyle(
+    input_expr=lambda tool_id, path: f'r"{path}"' if path else "",
+    output_expr=lambda tool_id, path: f'r"{path}"' if path else "",
+    inline_shx_note=True,
+)
 
 
-def gen_output(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    output_paths: dict[int, str],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    path = output_paths.get(tool_id)
-    return write_stmt(df_in, path, f'OUTPUTS["output_{tool_id}"]')
+def gen_input(ctx: ToolContext) -> str:
+    path = first_text(ctx.config, "File", "FileName")
+    code = read_stmt(
+        ctx.names[ctx.tool_id], path, ctx.paths.input_expr(ctx.tool_id, path)
+    )
+    if ctx.paths.inline_shx_note and is_shp(path):
+        return "\n".join([*SHX_NOTE_LINES, code])
+    return code
+
+
+def gen_output(ctx: ToolContext) -> str:
+    path = first_text(ctx.config, "File", "FileName")
+    return write_stmt(ctx.df_in, path, ctx.paths.output_expr(ctx.tool_id, path))

@@ -8,33 +8,26 @@ stream.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from yxray.config_utils import comment_safe, first_text, py_str
-from yxray.scaffold._common import anchor_src, frame_name
+from yxray.scaffold._common import ToolContext, anchor_src, frame_name
 
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
 
 
-def gen_join(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    left_id = anchors.get("Left")
-    right_id = anchors.get("Right")
+def gen_join(ctx: ToolContext) -> str:
+    names = ctx.names
+    df_out = ctx.df_out
+    left_id = ctx.anchors.get("Left")
+    right_id = ctx.anchors.get("Right")
     df_left = frame_name(names, left_id, "df_left")
     df_right = frame_name(names, right_id, "df_right")
 
-    expr = first_text(config, "JoinExpression") or ""
+    expr = first_text(ctx.config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
 
     if not matches:
-        join_info = config.get("JoinInfo", {})
+        join_info = ctx.config.get("JoinInfo", {})
         if isinstance(join_info, list):
             join_info = join_info[0] if join_info else {}
         if isinstance(join_info, dict):
@@ -69,34 +62,20 @@ def gen_join(
     )
 
 
-def gen_union(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    if not preds:
+def gen_union(ctx: ToolContext) -> str:
+    df_out = ctx.df_out
+    if not ctx.preds:
         return f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
-    parts = ", ".join(names.get(p, "df_?") for p in preds)
+    parts = ", ".join(ctx.names.get(p, "df_?") for p in ctx.preds)
     return f"{df_out} = pd.concat([{parts}], ignore_index=True)"
 
 
-def gen_appendfields(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    t_id = anchor_src(anchors, preds, ("Targets", "Target"), 0)
-    s_id = anchor_src(anchors, preds, ("Sources", "Source"), 1)
-    df_t = frame_name(names, t_id, "df_targets")
-    df_s = frame_name(names, s_id, "df_sources")
+def gen_appendfields(ctx: ToolContext) -> str:
+    df_out = ctx.df_out
+    t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
+    s_id = anchor_src(ctx.anchors, ctx.preds, ("Sources", "Source"), 1)
+    df_t = frame_name(ctx.names, t_id, "df_targets")
+    df_s = frame_name(ctx.names, s_id, "df_sources")
     return (
         "# Append Fields — every source record is appended"
         " to every target record\n"

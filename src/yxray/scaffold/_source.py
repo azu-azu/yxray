@@ -6,22 +6,13 @@ sink that only logs. File-backed Input/Output live in _io.
 
 from __future__ import annotations
 
-from typing import Any
-
 from yxray.config_utils import as_list, field_name, py_str
-from yxray.scaffold._common import frame_name
+from yxray.scaffold._common import ToolContext
 
 
-def gen_text_input(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    _preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    fields = config.get("Fields", {})
+def gen_text_input(ctx: ToolContext) -> str:
+    df_out = ctx.df_out
+    fields = ctx.config.get("Fields", {})
     field_names: list[str] = []
     if isinstance(fields, dict):
         field_names = [
@@ -32,7 +23,7 @@ def gen_text_input(
     if not field_names:
         return f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
 
-    data = config.get("Data", {})
+    data = ctx.config.get("Data", {})
     rows: list[list[str]] = []
     for r in as_list(data.get("r")) if isinstance(data, dict) else []:
         if not isinstance(r, dict):
@@ -55,14 +46,5 @@ def gen_text_input(
     return "\n".join(lines)
 
 
-def gen_browse(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    return f'logger.info("ToolID {tool_id} (Browse): rows=%d", len({df_in}))'
+def gen_browse(ctx: ToolContext) -> str:
+    return f'logger.info("ToolID {ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))'
