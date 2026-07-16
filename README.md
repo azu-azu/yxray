@@ -266,7 +266,7 @@ CI runs the same lint, type-check, and test suite on Python 3.11, 3.12, and
 
 > **Note**: The git history was rewritten on 2026-07-01. If an old clone's
 > `main` shares no common ancestor with `origin/main`, that is expected —
-> see [Docs/history-rewrite-2026-07-01.md](Docs/history-rewrite-2026-07-01.md).
+> see [docs/history-rewrite-2026-07-01.md](docs/history-rewrite-2026-07-01.md).
 
 ---
 
