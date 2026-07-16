@@ -194,7 +194,7 @@ acd scaffold workflow.yxmd -o workflow.py
 
 The generated file is structured as a runnable Python module:
 
-- **Preamble**: imports, `ENV = os.getenv("APP_ENV", "test")`, and `SelectColumnEdit` / `apply_select_edits` helpers (emitted when any Select tool is present)
+- **Preamble**: imports and `ENV = os.getenv("APP_ENV", "test")`. The `SelectColumnEdit` / `apply_select_edits` helper definitions are **not** embedded — Select blocks carry a NOTE comment pointing to the reference implementation in `scripts/apply_select_edits.py`, which you copy into your project
 - **Paths block**: `INPUTS` / `OUTPUTS` dicts gated by `ENV`. `test` mode resolves paths relative to `BASE_DIR`; `prod` mode uses the original absolute paths from the workflow
 - **`main()` body**: one annotated code block per tool in topological order — supported tools get semi-concrete pandas code, unsupported tools get a `# TODO` comment
 - **Entry point**: `if __name__ == "__main__": logging.basicConfig(...); main()`
