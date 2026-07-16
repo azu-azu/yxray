@@ -116,6 +116,25 @@ def _file_write(path_expr: str, df_var: str, ext: str) -> str:
     return f"{df_var}.to_csv({path_expr}, index=False)"
 
 
+def _crs_normalize_stmt(target: str) -> str:
+    """Post-read CRS normalization emitted after every spatial file read.
+
+    Alteryx stores every SpatialObj in WGS84 and converts on input, so its
+    spatial tools never see mixed CRS. Without this, a .shp missing its .prj
+    sidecar loads as CRS None and gpd.sjoin warns (and silently computes on
+    raw coordinates) when matched against a CRS-tagged frame — e.g. the
+    EPSG:4326 hard-coded by the Create Points scaffold.
+    """
+    return (
+        "# Alteryx SpatialObj is always WGS84 — assume it when CRS metadata\n"
+        "# is missing (e.g. .shp without .prj), reproject anything else\n"
+        f"if {target}.crs is None:\n"
+        f'    {target} = {target}.set_crs("EPSG:4326")\n'
+        "else:\n"
+        f'    {target} = {target}.to_crs("EPSG:4326")'
+    )
+
+
 def _read_stmt(target: str, path: str | None, path_expr: str) -> str:
     """`target = pd.read_...(path_expr)`, or a TODO fallback when path is unset.
 
@@ -126,7 +145,10 @@ def _read_stmt(target: str, path: str | None, path_expr: str) -> str:
     if not path:
         return f"{target} = pd.read_csv(...)  # TODO: set file path"
     ext = pathlib.Path(path).suffix.lower()
-    return f"{target} = {_file_read(path_expr, ext)}"
+    stmt = f"{target} = {_file_read(path_expr, ext)}"
+    if ext in _SPATIAL_EXTS:
+        stmt += "\n" + _crs_normalize_stmt(target)
+    return stmt
 
 
 def _write_stmt(df_in: str, path: str | None, path_expr: str) -> str:

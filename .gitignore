@@ -32,7 +32,7 @@ security/forbidden_terms.txt
 .claude/
 .planning/
 CLAUDE.md
-Docs/internal/
+docs/internal/
 tests/eval/results/
 app/frontend/.vite/
 
