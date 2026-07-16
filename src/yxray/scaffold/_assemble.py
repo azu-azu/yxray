@@ -16,20 +16,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from yxray.alteryx_expr import (
-    ExprTranslationError,
-    translate_expr,
-)
 from yxray.config_utils import (
-    as_list,
     comment_safe,
-    field_name,
     first_text,
-    py_str,
-    sort_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._common import FIELD_RE, anchor_src, frame_name
+from yxray.scaffold._aggregate import gen_summarize
+from yxray.scaffold._combine import gen_appendfields, gen_join, gen_union
+from yxray.scaffold._common import frame_name
 from yxray.scaffold._filter import gen_filter
 from yxray.scaffold._findreplace import gen_findreplace
 from yxray.scaffold._io import (
@@ -43,7 +37,9 @@ from yxray.scaffold._io import (
     write_stmt,
 )
 from yxray.scaffold._select import gen_select
+from yxray.scaffold._source import gen_browse, gen_text_input
 from yxray.scaffold._spatial import gen_createpoints, gen_spatialmatch
+from yxray.scaffold._transform import gen_formula, gen_sample, gen_sort, gen_unique
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
@@ -75,23 +71,8 @@ __all__ = [
     "scaffold_simple_blocks",
 ]
 
-# ── Alteryx expression → pandas translation ───────────────────────────────
-
-_JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
 # Emissions of alteryx_expr that need "import numpy as np" in the preamble.
 _NUMPY_RE = re.compile(r"\bnp\.(where|select|nan)\b")
-
-
-def _translate_expr(expr: str, df_var: str) -> str:
-    """Translate an Alteryx expression to pandas.
-
-    Falls back to plain [field] → df_var["field"] substitution when the
-    expression uses syntax translate_expr does not understand.
-    """
-    try:
-        return translate_expr(expr, df_var)
-    except ExprTranslationError:
-        return FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
 
 
 # ── Connection helpers ─────────────────────────────────────────────────────
@@ -118,311 +99,6 @@ def _assign_frame_names(
     return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
-# ── Per-tool code generators ───────────────────────────────────────────────
-
-# Input/Output live in _io (path-dependent emission); Filter is a
-# subsystem of its own — see _filter.gen_filter.
-
-
-def _gen_browse(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    return f'logger.info("ToolID {tool_id} (Browse): rows=%d", len({df_in}))'
-
-
-def _gen_formula(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    ffs = config.get("FormulaFields", {})
-    formulas: list[tuple[str, str]] = []
-    if isinstance(ffs, dict):
-        for item in as_list(ffs.get("FormulaField", [])):
-            if not isinstance(item, dict):
-                continue
-            fname = item.get("@field", "") or item.get("@name", "")
-            expr = item.get("@expression", "") or item.get("@formula", "")
-            if fname and expr:
-                formulas.append((fname, expr))
-    if not formulas:
-        return f"{df_out} = {df_in}  # TODO: Formula — no fields found"
-    # Build df_out up one column at a time rather than with a single
-    # .assign(). Two reasons: Alteryx applies formulas top to bottom and a
-    # later one may reference a column an earlier one just created (an
-    # .assign() expression would evaluate against the original frame and
-    # KeyError); and subscript assignment keys are strings, so field names
-    # that aren't valid Python identifiers (e.g. "Sales Amount", "2020")
-    # work — as .assign() keyword arguments they'd be a SyntaxError.
-    lines = [
-        "# Alteryx Formula — applied top to bottom; review translation",
-        f"{df_out} = {df_in}.copy()",
-    ]
-    for fname, expr in formulas:
-        lines.append(f"{df_out}[{py_str(fname)}] = {_translate_expr(expr, df_out)}")
-    return "\n".join(lines)
-
-
-def _gen_join(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    left_id = anchors.get("Left")
-    right_id = anchors.get("Right")
-    df_left = frame_name(names, left_id, "df_left")
-    df_right = frame_name(names, right_id, "df_right")
-
-    expr = first_text(config, "JoinExpression") or ""
-    matches = _JOIN_COND_RE.findall(expr)
-
-    if not matches:
-        join_info = config.get("JoinInfo", {})
-        if isinstance(join_info, list):
-            join_info = join_info[0] if join_info else {}
-        if isinstance(join_info, dict):
-            lk = join_info.get("@left", "") or join_info.get("@Left", "")
-            rk = join_info.get("@right", "") or join_info.get("@Right", "")
-            if lk and rk:
-                matches = [(lk, rk)]
-
-    if matches:
-        if all(lk == rk for lk, rk in matches):
-            keys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
-            return (
-                f"{df_out} = pd.merge(\n"
-                f"    {df_left}, {df_right},\n"
-                f"    on={keys},\n"
-                f'    how="inner",\n'
-                f")"
-            )
-        lkeys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
-        rkeys = "[" + ", ".join(py_str(rk) for _, rk in matches) + "]"
-        return (
-            f"{df_out} = pd.merge(\n"
-            f"    {df_left}, {df_right},\n"
-            f"    left_on={lkeys},\n"
-            f"    right_on={rkeys},\n"
-            f'    how="inner",\n'
-            f")"
-        )
-    return (
-        f"# TODO: parse join condition: {comment_safe(expr) or '(none)'}\n"
-        f'{df_out} = pd.merge({df_left}, {df_right}, on=[...], how="inner")'
-    )
-
-
-def _gen_union(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    if not preds:
-        return f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
-    parts = ", ".join(names.get(p, "df_?") for p in preds)
-    return f"{df_out} = pd.concat([{parts}], ignore_index=True)"
-
-
-def _gen_summarize(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    sf = config.get("SummarizeFields", {})
-    if not isinstance(sf, dict):
-        return f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO"
-    rows = as_list(sf.get("SummarizeField", []))
-    groups = [
-        r.get("@field", "")
-        for r in rows
-        if isinstance(r, dict) and r.get("@action", "").lower() == "groupby"
-    ]
-    aggs = [
-        (r.get("@field", ""), r.get("@action", ""))
-        for r in rows
-        if isinstance(r, dict) and r.get("@action", "").lower() != "groupby"
-    ]
-    if not groups and not aggs:
-        return f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO"
-    group_str = "[" + ", ".join(py_str(g) for g in groups if g) + "]"
-    if aggs:
-        agg_map = (
-            "{"
-            + ", ".join(
-                f"{py_str(field)}: {py_str(action.lower())}"
-                for field, action in aggs
-                if field
-            )
-            + "}"
-        )
-        return (
-            f"{df_out} = (\n"
-            f"    {df_in}\n"
-            f"    .groupby({group_str})\n"
-            f"    .agg({agg_map})\n"
-            f"    .reset_index()\n"
-            f")"
-        )
-    return (
-        f"{df_out} = {df_in}.groupby({group_str}).agg({{...}}) # TODO: set aggregations"
-    )
-
-
-def _gen_sort(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    rows = sort_field_rows(config)
-    if rows:
-        fields = [r["@field"] for r in rows]
-        orders = [r.get("@order", "Ascending").lower() != "descending" for r in rows]
-        col_str = "[" + ", ".join(py_str(f) for f in fields) + "]"
-        return f"{df_out} = {df_in}.sort_values({col_str}, ascending={orders})"
-    return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
-
-
-def _gen_sample(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    for key in ("RecordLimit", "N", "@N"):
-        val = config.get(key)
-        if val:
-            n = val.get("#text", "") if isinstance(val, dict) else str(val)
-            if n:
-                return f"{df_out} = {df_in}.head({n})"
-    return f"{df_out} = {df_in}.head(...)  # TODO: set sample count"
-
-
-def _gen_unique(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    unique_fields = config.get("UniqueFields", {})
-    field_names: list[str] = []
-    if isinstance(unique_fields, dict):
-        field_names = [
-            field_name(f)
-            for f in as_list(unique_fields.get("Field"))
-            if isinstance(f, dict) and field_name(f)
-        ]
-    if field_names:
-        subset = "[" + ", ".join(py_str(n) for n in field_names) + "]"
-        return f"{df_out} = {df_in}.drop_duplicates(subset={subset})"
-    return f"{df_out} = {df_in}.drop_duplicates()"
-
-
-def _gen_text_input(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    _preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    fields = config.get("Fields", {})
-    field_names: list[str] = []
-    if isinstance(fields, dict):
-        field_names = [
-            field_name(f)
-            for f in as_list(fields.get("Field"))
-            if isinstance(f, dict) and field_name(f)
-        ]
-    if not field_names:
-        return f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
-
-    data = config.get("Data", {})
-    rows: list[list[str]] = []
-    for r in as_list(data.get("r")) if isinstance(data, dict) else []:
-        if not isinstance(r, dict):
-            continue
-        cells: list[str] = []
-        for c in as_list(r.get("c")) if "c" in r else []:
-            if isinstance(c, dict):
-                c = c.get("#text")
-            cells.append("" if c is None else str(c))
-        rows.append(cells)
-
-    lines = [
-        "# Text Input values are strings — cast dtypes if needed",
-        f"{df_out} = pd.DataFrame({{",
-    ]
-    for i, name in enumerate(field_names):
-        values = ", ".join(py_str(row[i]) if i < len(row) else '""' for row in rows)
-        lines.append(f"    {py_str(name)}: [{values}],")
-    lines.append("})")
-    return "\n".join(lines)
-
-
-def _gen_appendfields(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    t_id = anchor_src(anchors, preds, ("Targets", "Target"), 0)
-    s_id = anchor_src(anchors, preds, ("Sources", "Source"), 1)
-    df_t = frame_name(names, t_id, "df_targets")
-    df_s = frame_name(names, s_id, "df_sources")
-    return (
-        "# Append Fields — every source record is appended"
-        " to every target record\n"
-        f'{df_out} = pd.merge({df_t}, {df_s}, how="cross")'
-    )
-
-
 # ── Generator registry ─────────────────────────────────────────────────────
 
 _Generator = Callable[
@@ -430,19 +106,19 @@ _Generator = Callable[
 ]
 
 _GENERATORS: dict[str, _Generator] = {
-    **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, _gen_browse),
+    **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, gen_browse),
     **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, gen_filter),
     **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, gen_select),
-    **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
-    **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, _gen_join),
-    **dict.fromkeys(SCAFFOLD_UNION_SEGMENTS, _gen_union),
-    **dict.fromkeys(SCAFFOLD_SUMMARIZE_SEGMENTS, _gen_summarize),
-    **dict.fromkeys(SCAFFOLD_SORT_SEGMENTS, _gen_sort),
-    **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, _gen_sample),
-    **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, _gen_unique),
-    **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, _gen_text_input),
+    **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, gen_formula),
+    **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, gen_join),
+    **dict.fromkeys(SCAFFOLD_UNION_SEGMENTS, gen_union),
+    **dict.fromkeys(SCAFFOLD_SUMMARIZE_SEGMENTS, gen_summarize),
+    **dict.fromkeys(SCAFFOLD_SORT_SEGMENTS, gen_sort),
+    **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, gen_sample),
+    **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, gen_unique),
+    **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, gen_text_input),
     **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, gen_findreplace),
-    **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, _gen_appendfields),
+    **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, gen_appendfields),
     **dict.fromkeys(SCAFFOLD_CREATEPOINTS_SEGMENTS, gen_createpoints),
     **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, gen_spatialmatch),
 }
