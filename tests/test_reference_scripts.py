@@ -197,17 +197,71 @@ def test_find_any_substring_match_appends_and_keeps_row_count() -> None:
     assert list(out.columns) == ["text", "label"]
 
 
-def test_find_any_multiple_matches_last_vs_first() -> None:
+def test_find_any_leftmost_match_wins_regardless_of_rmf() -> None:
+    # lookup order is [cherry, apple] while "cherry" sits leftmost in the
+    # text: the winner is decided by position in the target text, not by
+    # lookup order, and ReplaceMultipleFound does not change it (both
+    # settings golden-verified on the same data)
     targets = pd.DataFrame({"text": ["cherry apple pie"]})
-    lookup = pd.DataFrame({"kw": ["apple", "cherry"], "label": ["APL", "CHR"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     last = _run(targets, lookup, replace_multiple_found=True)
     first = _run(targets, lookup, replace_multiple_found=False)
-    # lookup-table order decides: last match wins with RMF=True, first with False
     assert last["label"].iloc[0] == "CHR"
-    assert first["label"].iloc[0] == "APL"
+    assert first["label"].iloc[0] == "CHR"
     # never a join — one target stays one row either way
     assert len(last) == 1
     assert len(first) == 1
+
+
+def test_find_any_golden_leftmost_match_for_both_rmf_settings() -> None:
+    # Pins the semantics measured on real Alteryx golden output, run with
+    # BOTH ReplaceMultipleFound settings on the same data: the needle
+    # appearing leftmost in the target text wins. Not the first matching
+    # lookup row (row 0 would give A1 for "cherry apple pie") and not the
+    # last (rows 1/4 would give C3) — and the output is identical for
+    # RMF=True and RMF=False.
+    targets = pd.DataFrame({"text": [
+        "cherry apple pie",        # apple & cherry match; cherry is leftmost
+        "berry cherry jam",        # berry & cherry match; berry is leftmost
+        "apple only",              # single match — control
+        "no match here",           # no match — control
+        "apple berry cherry mix",  # all three match; apple is leftmost
+    ]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "berry", "cherry"],
+        "label": ["A1", "B2", "C3"],
+    })
+    expected = ["C3", "B2", "A1", pd.NA, "A1"]
+    out_false = _run(targets, lookup, replace_multiple_found=False)
+    out_true = _run(targets, lookup, replace_multiple_found=True)
+    assert list(out_false["label"]) == expected
+    assert list(out_true["label"]) == expected
+
+
+def test_find_any_same_position_tie_rmf_decides_lookup_row() -> None:
+    # Two needles starting at the same text position: RMF picks the lookup
+    # row — True takes the later row, False keeps the earlier. No golden for
+    # this tie yet — pinned as the baseline of the unified model (consistent
+    # with the golden-verified FindWhole duplicate-key behavior).
+    targets = pd.DataFrame({"text": ["apple pie"]})
+    lookup = pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]})
+    first = _run(targets, lookup, replace_multiple_found=False)
+    last = _run(targets, lookup, replace_multiple_found=True)
+    assert first["label"].iloc[0] == "SHORT"
+    assert last["label"].iloc[0] == "LONG"
+
+
+def test_find_any_duplicate_needle_rmf_picks_first_or_last_row() -> None:
+    # The same search value on multiple lookup rows matches at the same
+    # position, so RMF decides which row's values are appended — mirrors the
+    # golden-verified FindWhole duplicate-key behavior (RMF=True → last).
+    # The FindAny side itself has no golden yet — pinned as baseline.
+    targets = pd.DataFrame({"text": ["apple pie"]})
+    lookup = pd.DataFrame({"kw": ["apple", "apple"], "label": ["X", "Y"]})
+    first = _run(targets, lookup, replace_multiple_found=False)
+    last = _run(targets, lookup, replace_multiple_found=True)
+    assert first["label"].iloc[0] == "X"
+    assert last["label"].iloc[0] == "Y"
 
 
 def test_find_any_nan_and_empty_needles_do_not_match() -> None:

@@ -319,15 +319,18 @@ anchor と config タグの対応関係:
 それが `FieldFind`（Targets/メイン側）の値に部分文字列として含まれるかで
 判定される。実 Alteryx の golden 出力との突合で検証済み。
 
-**ReplaceMultipleFound の検証状態**:
+**採用規則と ReplaceMultipleFound の検証状態（統一モデル）**:
 
-| 設定 | 採用規則 | 状態 |
-|------|---------|------|
-| `RMF=True` | last match（lookup 表の並び順で最後にマッチした行） | **golden 突合で検証済み**（FindAny・FindWhole とも） |
-| `RMF=False` | first match（lookup 表の並び順で最初にマッチした行） | **推定・未検証**（下記の保留事項参照） |
+| 観点 | 規則 | 状態 |
+|------|------|------|
+| 採用マッチ（FindAny） | **target 文字列中で最も左（先頭に近い位置）に現れた検索値**の行 — lookup 順ではなく、**RMF 設定にも依らない** | **golden 突合で検証済み**（同一の5行データを RMF=True / False の両設定で実行し、同一出力を実測） |
+| `ReplaceMultipleFound` の意味 | 複数の lookup 行が**同じ最左位置**にマッチするとき（同じ検索値の重複行、同位置で始まる検索値）にどの行を採用するか: True=最後の行 / False=最初の行 | FindWhole の重複キーで True=last は**検証済み**。False=first と FindAny 側の同位置タイは**推定**（下記の保留事項参照） |
 
-以降、本章で「検証済み」と書くときは **RMF=True 側のみ**を指す。
-定量的な根拠:
+FindWhole は完全一致でセル全体がマッチするため「全重複行が同位置タイ」に
+相当し、RMF がそのまま採用行を決める — この統一モデルで FindAny の位置
+ベース実測と FindWhole の `keep="last"` 実測が矛盾なく説明できる。
+
+初回の RMF=True（当時の解釈: lookup 順 last match）検証時の定量的な根拠:
 
 | 条件 | cell_diff |
 |------|-----------|
@@ -338,14 +341,33 @@ anchor と config タグの対応関係:
 この突合時点で残っていた 22 セルは、**その後 verify 側の対応付け
 （重複 id・行の突き合わせ）の改善で解消済み**。当時の推定どおり
 helper の意味論の誤りではなく、FindReplace 翻訳側の修正は不要だった。
-上表の cell_diff は突合当時の値で、「RMF=True = last match」という
-結論の根拠として履歴のまま残している。
+上表の cell_diff は突合当時の値で、履歴のまま残している。
 
-**上記の検証がカバーする範囲**: 比較対象はいずれも「RMF=True 設定の
-golden」であり、`RMF=False` を Alteryx 側で設定した golden との突合ではない
-（cell_diff 363 は「False 実装が True の golden に合わない」ことの確認で
-あって、False 側の検証ではない）。コード・docstring では
-「True=last は検証済み / False=first は推定」を書き分けること。
+**その後の再解釈**: 後日の5行 golden（下記）により、検索値が異なる場合の
+採用は「lookup 順で最後」ではなく **text 内の出現位置**で決まると判明し、
+当時の「RMF=True = lookup 順 last」という解釈は覆った。位置ベースの新実装で
+同じ実データ golden を再突合して diff 0 を確認済みで、そのデータでは新旧
+どちらの規則でも同じ結果になっていた（統一モデルと過去 golden は矛盾しない）。
+
+**採用規則（FindAny）の実測**: 5行の targets × apple/berry/cherry の
+lookup（この並び順）を `ReplaceMultipleFound=False` と `True` の**両設定**で
+実行した golden により、採用規則は「lookup 順で最初にマッチした行」でも
+「最後」でもなく、**target 文字列中で最も左に現れた検索値**であることが
+確定した。判別に効いた行:
+
+| text | lookup 順 first なら | lookup 順 last なら | 実測（RMF=True / False とも同一） |
+|------|---------------------|--------------------|------|
+| cherry apple pie | A1（apple） | C3（cherry） | **C3** — text 先頭の cherry |
+| berry cherry jam | B2（berry） | C3（cherry） | **B2** — text 先頭の berry |
+| apple berry cherry mix | A1（apple） | C3（cherry） | **A1** — text 先頭の apple |
+
+3行を同時に説明できるのは「text 内の出現位置が最も左」の規則だけ。さらに
+**RMF=True でも出力が完全に同一**だったことから、この位置ベースの規則は
+RMF 設定に依らないことも確定した（lookup 順 last なら3行とも C3 になる
+はず）。この5行は `test_find_any_golden_leftmost_match_for_both_rmf_settings`
+として両設定分を固定している。同位置タイ（複数の lookup 行が同じ開始位置で
+マッチする場合）の規則のみ golden 未取得のため推定（True=後の行 /
+False=先の行 — FindWhole の重複キー実測と整合する統一モデル）。
 
 FindReplace はモードに関係なく **1 target = 1 出力行** を保証するツールで、
 ルックアップキーが重複していても行は増えない。この行数不変の保証が、
@@ -362,8 +384,12 @@ lookup 側を `drop_duplicates(subset=[search_field], keep=...)` で重複排除
 は実 Alteryx の golden 突合で検証済み — 同じキーを3行（append 値はそれぞれ
 別の値）入れた FindWhole ワークフローで、行・列・セルとも diff 0 を確認
 （同名キー・RMF=True 設定）。`RMF=False → keep="first"` は引き続き推定・
-未検証（RMF=False の golden が未取得。下記の保留事項参照）で、生成コードにも
-RMF=False のときだけその旨の NOTE が付く。もし逆だった場合、直すのは
+未検証（FindWhole の RMF=False golden が未取得。下記の保留事項参照）で、
+生成コードにも RMF=False のときだけその旨の NOTE が付く。なお統一モデル
+（採用は最左マッチ、RMF は同位置タイの採用行を決める）で見ると、FindWhole は
+完全一致で全重複行が「同位置タイ」に相当するため RMF がそのまま採用行を
+決める — True=last（検証済み）はこのモデルと整合し、False=first も同モデル
+からの予測になる。もし逆だった場合、直すのは
 `scaffold.py` の `keep = "last" if replace_multiple_found else "first"` の
 1行だけ。
 
@@ -410,9 +436,10 @@ df3 = simulate_find_any_append(
   golden 出力との突合（行・列・セルとも diff 0）で検証済み
   （詳細は後述「出力列と FieldFind == FieldSearch」）
 - **1 target = 1 出力行** — FindReplace は join ではないので、複数の
-  lookup 行にマッチしても行は増えない。どの行の値を採用するかは
-  `ReplaceMultipleFound` で決まる（True=last match は検証済み /
-  False=first match は推定）
+  lookup 行にマッチしても行は増えない。採用されるのは text 内で最も左に
+  マッチした検索値の行（RMF に依らず・golden 検証済み）。
+  `ReplaceMultipleFound` は同位置タイの採用行を決める
+  （True=後の行 / False=先の行、推定）
 - **NaN の誤マッチ防止** — `astype(str)` だと NaN が `"nan"` になり誤マッチ
   するため、NaN は判定から除外する
 - **空文字 needle の除外** — `"" in "ABC-123"` は `True` なので、空文字の
@@ -490,15 +517,21 @@ df3 = simulate_find_any_append(
 以降の項目は**コード変更のタスクではなく、実 Alteryx で仕様を確定するための
 チェックリスト**である。翻訳の実装が未完成という意味ではない。
 
-- [ ] **RMF=False（first match）** — 現在の golden 突合は RMF=True 設定の
-  出力に対する比較のみ（cell_diff 363 は「False 実装が True の golden に
-  合わない」ことの確認であり、False 側の検証ではない）。Alteryx 側を
-  `ReplaceMultipleFound=False` に設定した golden を追加し、first match 採用を
-  実測する。FindAny（helper の first match）と FindWhole（`keep="first"`）の
-  両方が対象。確定したら helper docstring の「推定」表記と、FindWhole 生成
-  コードの NOTE（`scaffold.py` の `_findreplace_whole_append`、
+- [ ] **FindWhole の RMF=False（keep="first"）** — 統一モデル（採用は最左
+  マッチ、RMF は同位置タイの採用行を決める）からは keep="first" が予測される
+  が未実測。lookup 表に同じキーを複数行（値違い）入れた FindWhole
+  ワークフローを RMF=False で実行し、lookup 順で最初の重複が採用されるかを
+  実測する。確定したら FindWhole 生成コードの NOTE
+  （`scaffold.py` の `_findreplace_whole_append`、
   `test_scaffold_findreplace_whole_match_first_match_dedup` の NOTE
   アサーション）を更新する
+- [ ] **同位置タイブレーク（FindAny）** — 複数の lookup 行が target の同じ
+  開始位置でマッチする場合（同じ検索値の重複行、"app" と "apple" のような
+  同位置で始まる検索値）にどの行が採用されるか未実測。現実装は統一モデルの
+  推定として True=後の行 / False=先の行
+  （`test_find_any_same_position_tie_rmf_decides_lookup_row`・
+  `test_find_any_duplicate_needle_rmf_picks_first_or_last_row` で固定）。
+  重複・入れ子の検索値を含む golden を両 RMF 設定で実測する
 - [ ] **NoCase=True（大文字小文字無視）** — golden 突合に case-insensitive の
   ケースが含まれていたか確認。なければ追加する
 - [ ] **空文字の検索値** — 参照実装（`scripts/simulate_find_any_append.py`）は
