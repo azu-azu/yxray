@@ -59,7 +59,7 @@ def simulate_find_any_append(
     search_field: str,
     append_fields: list[str],
     case_sensitive: bool = True,  # Alteryx の NoCase=False（大小を区別）に対応
-    replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。FindAny + Append では True/False で出力差なし（golden 実測）— 判定には未使用、設定値の記録として受け取る
+    replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。Append では出力に影響しない（golden 実測）ため判定には未使用。互換のため念のため残している引数（生成コードには出力されない）
     log_label: str = "",  # ログ見出しの先頭に付ける識別ラベル（例: "ToolID 7"）
     verbose: bool = True,
 ) -> pd.DataFrame:
@@ -333,8 +333,7 @@ def main() -> None:
         find_field="text",
         search_field="kw",
         append_fields=["label", "code"],
-        replace_multiple_found=True,   # Alteryx の ReplaceMultipleFound
-        case_sensitive=True,           # Alteryx の NoCase=False
+        case_sensitive=True,  # Alteryx の NoCase=False
     )
 
     print("\n-- result --")
