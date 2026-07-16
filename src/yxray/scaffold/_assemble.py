@@ -1,8 +1,11 @@
-"""Alteryx → Python scaffold generator.
+"""Whole-scaffold assembly: the package's public API lives here.
 
 scaffold(doc) returns a .py file string with one code block per tool,
-in topological order. Supported tools get real (if partial) pandas code;
-unsupported tools get a TODO comment.
+in topological order (preamble, ENV/paths block, main()); scaffold_simple
+/ scaffold_simple_blocks return the flat .md variant without the
+project-level boilerplate. Per-tool code comes from the domain modules
+via _registry.GENERATORS — only the path-dependent Input/Output emission
+(_io) is dispatched by hand here.
 
 Variable naming: each tool's output is named df<tool_id> (e.g. df34, df108),
 matching the ToolID comment above each block so the mapping is unambiguous.
@@ -12,7 +15,6 @@ from __future__ import annotations
 
 import pathlib
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,11 +23,7 @@ from yxray.config_utils import (
     first_text,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._aggregate import gen_summarize
-from yxray.scaffold._combine import gen_appendfields, gen_join, gen_union
 from yxray.scaffold._common import frame_name
-from yxray.scaffold._filter import gen_filter
-from yxray.scaffold._findreplace import gen_findreplace
 from yxray.scaffold._io import (
     SHX_NOTE_LINES,
     SHX_RESTORE_LINE,
@@ -36,29 +34,12 @@ from yxray.scaffold._io import (
     read_stmt,
     write_stmt,
 )
-from yxray.scaffold._select import gen_select
-from yxray.scaffold._source import gen_browse, gen_text_input
-from yxray.scaffold._spatial import gen_createpoints, gen_spatialmatch
-from yxray.scaffold._transform import gen_formula, gen_sample, gen_sort, gen_unique
+from yxray.scaffold._registry import DETAIL_HINT_SEGMENTS, GENERATORS
 from yxray.tool_registry import (
-    SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
-    SCAFFOLD_CREATEPOINTS_SEGMENTS,
-    SCAFFOLD_FILTER_SEGMENTS,
-    SCAFFOLD_FINDREPLACE_SEGMENTS,
-    SCAFFOLD_FORMULA_SEGMENTS,
     SCAFFOLD_INPUT_SEGMENTS,
-    SCAFFOLD_JOIN_SEGMENTS,
     SCAFFOLD_OUTPUT_SEGMENTS,
-    SCAFFOLD_SAMPLE_SEGMENTS,
-    SCAFFOLD_SELECT_SEGMENTS,
-    SCAFFOLD_SORT_SEGMENTS,
     SCAFFOLD_SPATIAL_SEGMENTS,
-    SCAFFOLD_SPATIALMATCH_SEGMENTS,
-    SCAFFOLD_SUMMARIZE_SEGMENTS,
-    SCAFFOLD_TEXTINPUT_SEGMENTS,
-    SCAFFOLD_UNION_SEGMENTS,
-    SCAFFOLD_UNIQUE_SEGMENTS,
     tool_segment,
 )
 from yxray.topology import build_predecessor_map, topo_order
@@ -99,43 +80,11 @@ def _assign_frame_names(
     return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
-# ── Generator registry ─────────────────────────────────────────────────────
-
-_Generator = Callable[
-    [int, str, dict[str, Any], list[int], dict[str, int], dict[int, str]], str
-]
-
-_GENERATORS: dict[str, _Generator] = {
-    **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, gen_browse),
-    **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, gen_filter),
-    **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, gen_select),
-    **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, gen_formula),
-    **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, gen_join),
-    **dict.fromkeys(SCAFFOLD_UNION_SEGMENTS, gen_union),
-    **dict.fromkeys(SCAFFOLD_SUMMARIZE_SEGMENTS, gen_summarize),
-    **dict.fromkeys(SCAFFOLD_SORT_SEGMENTS, gen_sort),
-    **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, gen_sample),
-    **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, gen_unique),
-    **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, gen_text_input),
-    **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, gen_findreplace),
-    **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, gen_appendfields),
-    **dict.fromkeys(SCAFFOLD_CREATEPOINTS_SEGMENTS, gen_createpoints),
-    **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, gen_spatialmatch),
-}
-
-# Segments whose scaffold snippet is self-contained enough to show as a
-# single node's "python hint" (used by the inspect report's right pane).
-# Excludes Input/Output (depend on file paths, which the panel already shows
-# separately) and Text Input (would enumerate every data row — the panel
-# shows the data).
-_DETAIL_HINT_SEGMENTS = frozenset(_GENERATORS) - SCAFFOLD_TEXTINPUT_SEGMENTS
-
-
 def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     """Per-node pandas code, identical to the .md Python Scaffold section.
 
     Only returns entries for tool_ids whose segment is in
-    _DETAIL_HINT_SEGMENTS; callers should fall back to the generic
+    DETAIL_HINT_SEGMENTS; callers should fall back to the generic
     python_hint for everything else.
     """
     node_map = {
@@ -148,11 +97,11 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     snippets: dict[int, str] = {}
     for tool_id, node in node_map.items():
         segment = tool_segment(node.tool_type)
-        if segment not in _DETAIL_HINT_SEGMENTS:
+        if segment not in DETAIL_HINT_SEGMENTS:
             continue
         preds = pred_map.get(tool_id, [])
         anchors = anchor_map.get(tool_id, {})
-        snippets[tool_id] = _GENERATORS[segment](
+        snippets[tool_id] = GENERATORS[segment](
             tool_id, segment, node.config, preds, anchors, names
         )
     return snippets
@@ -321,7 +270,7 @@ def _gen_code_for_segment(
     None means the segment has no registered generator (unsupported tool);
     callers append their own TODO fallback in that case.
     """
-    gen = _GENERATORS.get(segment)
+    gen = GENERATORS.get(segment)
     if gen is None:
         return None
     return gen(tool_id, segment, config, preds, anchors, names)
