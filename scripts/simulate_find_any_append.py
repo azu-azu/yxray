@@ -159,7 +159,11 @@ def simulate_find_any_append(
             continue
 
         needle_cmp = needle if case_sensitive else needle.lower()
-        contains = haystack_cmp.str.contains(needle_cmp, regex=False, na=False)
+        # str.find 1回で「マッチしたか」(pos >= 0) と「開始位置」を同時に得る。
+        # str.contains + str.find の2回に分けると文字列走査が needle ごとに
+        # 倍になり、データが多いとき目に見えて遅くなる。
+        pos = haystack_cmp.str.find(needle_cmp).fillna(-1).astype("int64")
+        contains = pos >= 0
         if not contains.any():
             continue
 
@@ -176,7 +180,6 @@ def simulate_find_any_append(
         # （同じ検索値の重複行など）: True は後の行で上書きし、False は先の
         # 行を維持する（FindWhole の重複キー実測 True=last と整合する統一
         # モデル。FindAny 側の同位置タイ自体は golden 未取得のため推定）。
-        pos = haystack_cmp.str.find(needle_cmp).fillna(-1).astype("int64")
         if replace_multiple_found:
             fill = contains & ((best_pos < 0) | (pos <= best_pos))
         else:
