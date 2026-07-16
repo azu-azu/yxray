@@ -21,12 +21,14 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
     and would otherwise appear as spurious sources (in_degree == 0).
     Any remaining nodes after cycle detection are appended in original order.
     """
+
     # 1. 対象ノードを集める。ToolContainer は見た目上のグループ化用で
     #    データフローを持たないノードなので除外する（残すと入次数0の
     #    「偽のソース」として順序に混ざってしまう）。
     node_ids = [
         int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type
     ]
+
     # 2. Connection を依存グラフとしてモデル化し、入次数と後続ノードを作る。
     #    除外済みノード（ToolContainer 等）や未知ノードに触れる接続は無視する。
     in_degree: dict[int, int] = {nid: 0 for nid in node_ids}
@@ -36,12 +38,14 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
         if s in successors and d in in_degree:
             successors[s].append(d)
             in_degree[d] += 1
+
     # 3. 入次数0のノード（依存のないソース）を min-heap に積む。
     #    同時に実行可能なノードが複数ある場合、ToolID が小さいものから
     #    取り出すため。
     heap: list[int] = [nid for nid in node_ids if in_degree[nid] == 0]
     heapq.heapify(heap)
     result: list[int] = []
+
     # 4. ノードを取り出しては後続の依存を減らし、入次数が0になったものを
     #    順次 heap に追加する（Kahn's algorithm 本体）。
     while heap:
@@ -51,6 +55,7 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
             in_degree[s] -= 1
             if in_degree[s] == 0:
                 heapq.heappush(heap, s)
+
     # 5. heap が空になっても取り出せなかったノードはサイクルに含まれる。
     #    落とさずに元の並び順のまま末尾へ追加する。
     visited = set(result)
