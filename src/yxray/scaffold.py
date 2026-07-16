@@ -628,6 +628,12 @@ def _findreplace_whole_append(
     replace_multiple_found: bool,
 ) -> str:
     cols = ", ".join(py_str(n) for n in (field_search, *append_names))
+    # When find/search names differ, pd.merge keeps the right_on key column in
+    # the output. That matches real Alteryx: FindWhole automatically carries
+    # the search key column into the Append output even when it is not
+    # selected as an append field (golden-verified) — asymmetric with FindAny,
+    # where the search value column never appears. Do not "fix" this with a
+    # drop(columns=[field_search]).
     key = (
         f"    on={py_str(field_find)},"
         if field_find == field_search

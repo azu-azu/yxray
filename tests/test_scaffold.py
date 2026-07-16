@@ -1288,6 +1288,10 @@ def test_scaffold_findreplace_whole_match_first_match_dedup() -> None:
     # RMF=False (keep="first") has no golden yet — unlike the verified
     # RMF=True side, the generated code must carry the caveat NOTE
     assert 'keep="first" for ReplaceMultipleFound=False is inferred' in code
+    # the right_on key column stays in the merge output on purpose: real
+    # Alteryx FindWhole carries the search key column into the Append output
+    # automatically (golden-verified) — asymmetric with FindAny
+    assert ".drop(columns=" not in code
 
 
 def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
