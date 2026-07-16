@@ -30,8 +30,8 @@ from yxray.config_utils import (
     sort_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold_common import FIELD_RE, frame_name
-from yxray.scaffold_filter import _gen_filter
+from yxray.scaffold._common import FIELD_RE, frame_name
+from yxray.scaffold._filter import gen_filter
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
@@ -217,7 +217,7 @@ def _gen_output(
     return _write_stmt(df_in, path, f'OUTPUTS["output_{tool_id}"]')
 
 
-# Filter is a subsystem of its own — see scaffold_filter._gen_filter.
+# Filter is a subsystem of its own — see _filter.gen_filter.
 
 
 # Select tools always carry this warning: the .yxmd XML keeps the Select
@@ -887,7 +887,7 @@ _Generator = Callable[
 
 _GENERATORS: dict[str, _Generator] = {
     **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, _gen_browse),
-    **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, _gen_filter),
+    **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, gen_filter),
     **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
     **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
     **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, _gen_join),

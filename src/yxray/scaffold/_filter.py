@@ -12,7 +12,7 @@ from the other per-tool generators:
 * Detecting the IsEmpty-vs-datetime contradiction (IsEmpty's == "" half
   goes dead once a column is coerced to datetime) and noting it.
 
-Only _gen_filter is called by the generator registry; the rest are its
+Only gen_filter is called by the generator registry; the rest are its
 internals (a few are also imported by tests).
 """
 
@@ -33,7 +33,7 @@ from yxray.config_utils import (
     py_str,
     simple_filter_condition,
 )
-from yxray.scaffold_common import FIELD_RE, frame_name
+from yxray.scaffold._common import FIELD_RE, frame_name
 
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
@@ -202,7 +202,7 @@ def _filter_date_warning_lines(
     return lines
 
 
-def _gen_filter(
+def gen_filter(
     tool_id: int,
     segment: str,
     config: dict[str, Any],

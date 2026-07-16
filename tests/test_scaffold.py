@@ -6,7 +6,7 @@ from yxray.scaffold import (
     scaffold,
     scaffold_simple,
 )
-from yxray.scaffold_filter import (
+from yxray.scaffold._filter import (
     _date_columns_in_fragment,
     _fields_in_fragment,
     _isempty_columns_in_fragment,

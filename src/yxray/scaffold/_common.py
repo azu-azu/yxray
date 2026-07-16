@@ -1,8 +1,8 @@
 """Primitives shared by the scaffold generators.
 
-Kept in a dependency-free module so per-tool generator modules (e.g.
-scaffold_filter) and the scaffold driver can both import them without a
-circular import.
+The bottom of the package's dependency chain: per-tool generator modules
+(e.g. _filter) import only from here (and from modules outside the
+package), so nothing in the package can import cycle back into them.
 """
 
 from __future__ import annotations
