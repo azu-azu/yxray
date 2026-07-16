@@ -735,6 +735,53 @@ def test_scaffold_select_with_rename() -> None:
     assert "SelectColumnEdit" in code
 
 
+def test_scaffold_select_with_type_change() -> None:
+    """@type (present only when the Select changes a column's type) is
+    forwarded to SelectColumnEdit; deselected columns never carry it."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [
+                        {
+                            "@field": "amount",
+                            "@selected": "True",
+                            "@type": "Double",
+                        },
+                        {
+                            "@field": "old_col",
+                            "@selected": "True",
+                            "@rename": "new_col",
+                            "@type": "V_WString",
+                        },
+                        {
+                            "@field": "junk",
+                            "@selected": "False",
+                            "@type": "Int32",
+                        },
+                        {"@field": "plain", "@selected": "True"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'SelectColumnEdit("amount", type="Double")' in code
+    assert (
+        'SelectColumnEdit("old_col", new_name="new_col", type="V_WString")' in code
+    )
+    assert 'SelectColumnEdit("junk", selected=False)' in code
+    assert 'SelectColumnEdit("plain")' in code
+
+
 def test_scaffold_select_does_not_emit_helper_definitions() -> None:
     """Helper definitions are no longer embedded in the generated .py;
     the scaffold emits the call plus a NOTE to provide them separately."""
