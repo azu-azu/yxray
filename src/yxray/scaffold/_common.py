@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["FIELD_RE", "frame_name"]
+__all__ = ["FIELD_RE", "anchor_src", "frame_name"]
 
 # [field] notation in Alteryx expressions.
 FIELD_RE = re.compile(r"\[([^\]]+)\]")
@@ -24,3 +24,16 @@ def frame_name(
     if tool_id is None:
         return fallback
     return names.get(tool_id, fallback)
+
+
+def anchor_src(
+    anchors: dict[str, int],
+    preds: list[int],
+    names: tuple[str, ...],
+    index: int,
+) -> int | None:
+    """Src tool for a named input anchor, falling back to predecessor order."""
+    for name in names:
+        if name in anchors:
+            return anchors[name]
+    return preds[index] if len(preds) > index else None

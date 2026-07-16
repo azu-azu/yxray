@@ -26,12 +26,12 @@ from yxray.config_utils import (
     field_name,
     first_text,
     py_str,
-    select_field_rows,
     sort_field_rows,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._common import FIELD_RE, frame_name
+from yxray.scaffold._common import FIELD_RE, anchor_src, frame_name
 from yxray.scaffold._filter import gen_filter
+from yxray.scaffold._findreplace import gen_findreplace
 from yxray.scaffold._io import (
     SHX_NOTE_LINES,
     SHX_RESTORE_LINE,
@@ -42,6 +42,8 @@ from yxray.scaffold._io import (
     read_stmt,
     write_stmt,
 )
+from yxray.scaffold._select import gen_select
+from yxray.scaffold._spatial import gen_createpoints, gen_spatialmatch
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
@@ -120,94 +122,6 @@ def _assign_frame_names(
 
 # Input/Output live in _io (path-dependent emission); Filter is a
 # subsystem of its own — see _filter.gen_filter.
-
-
-# Select tools always carry this warning: the .yxmd XML keeps the Select
-# state as of some earlier save, so it can silently disagree with what the
-# Alteryx GUI actually shows (e.g. a field the GUI flags as "not found" /
-# 見つかりません still looks like a regular entry in the XML).
-_SELECT_STALE_XML_WARNING = (
-    "# WARNING: Select XML may be stale (saved-state) and can differ from the\n"
-    '# actual Select contents — fields shown as "not found" in the Alteryx GUI\n'
-    "# may still appear here as regular entries. Always verify in the GUI."
-)
-
-
-def _gen_select(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    rows = select_field_rows(config)
-
-    edits: list[tuple[str, str | None, bool, str | None]] = []
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        name = field_name(r)
-        if not name:
-            continue
-        selected = r.get("@selected", "True").lower() not in ("false",)
-        new_name: str | None = r.get("@rename") or r.get("@Rename") or None
-        if new_name == name:
-            new_name = None
-        # @type は型変更された列にのみ現れる（V_WString / Int32 など）
-        alteryx_type: str | None = r.get("@type") or r.get("@Type") or None
-        edits.append((name, new_name, selected, alteryx_type))
-
-    if not edits:
-        return (
-            f"{_SELECT_STALE_XML_WARNING}\n"
-            f"{df_out} = {df_in}  # TODO: Select — no columns found"
-        )
-
-    only_unknown = (
-        len(edits) == 1
-        and edits[0][0] == "*Unknown"
-        and edits[0][1] is None
-        and edits[0][2] is True
-    )
-    unknown_deselected = any(
-        name == "*Unknown" and not selected for name, _, selected, _ in edits
-    )
-
-    var = f"_COLS_{tool_id}"
-    col_lines: list[str] = [_SELECT_STALE_XML_WARNING]
-    if only_unknown:
-        col_lines.append(
-            "# WARNING: Select only specifies *Unknown — no explicit column edits;"
-            " likely a source-file issue (passthrough)"
-        )
-    if unknown_deselected:
-        col_lines.append(
-            "# WARNING: *Unknown=False — apply_select_edits keeps only explicitly"
-            " selected columns; verify column list matches Alteryx output"
-        )
-    col_lines.append(
-        "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
-    )
-    col_lines.append("# copy them from scripts/apply_select_edits.py")
-    col_lines.append(f"{var} = [")
-    for name, new_name, selected, alteryx_type in edits:
-        if not selected:
-            # drop される列に new_name / type を出しても意味がないので省く
-            col_lines.append(f"    SelectColumnEdit({py_str(name)}, selected=False),")
-            continue
-        args = [py_str(name)]
-        if new_name:
-            args.append(f"new_name={py_str(new_name)}")
-        if alteryx_type:
-            args.append(f"type={py_str(alteryx_type)}")
-        col_lines.append(f"    SelectColumnEdit({', '.join(args)}),")
-    col_lines.append("]")
-    col_lines.append(f"{df_out} = apply_select_edits({df_in}, {var})")
-    return "\n".join(col_lines)
 
 
 def _gen_browse(
@@ -446,19 +360,6 @@ def _gen_unique(
     return f"{df_out} = {df_in}.drop_duplicates()"
 
 
-def _anchor_src(
-    anchors: dict[str, int],
-    preds: list[int],
-    names: tuple[str, ...],
-    index: int,
-) -> int | None:
-    """Src tool for a named input anchor, falling back to predecessor order."""
-    for name in names:
-        if name in anchors:
-            return anchors[name]
-    return preds[index] if len(preds) > index else None
-
-
 def _gen_text_input(
     tool_id: int,
     segment: str,
@@ -502,201 +403,6 @@ def _gen_text_input(
     return "\n".join(lines)
 
 
-def _findreplace_any_append(
-    tool_id: int,
-    df_out: str,
-    df_f: str,
-    df_r: str,
-    field_find: str,
-    field_search: str,
-    append_names: list[str],
-    case_sensitive: bool,
-) -> str:
-    fields = ", ".join(py_str(n) for n in append_names)
-    # The helper output is "original Targets columns + append_fields" only;
-    # the search value (FieldSearch) is used to look up but never added to
-    # the output — matching real Alteryx Append output (verified against
-    # golden output, diff 0). So FieldFind == FieldSearch needs no special
-    # handling: the key column is never duplicated.
-    # ReplaceMultipleFound is NOT emitted: it has no effect on Append output
-    # (golden-verified with both settings) and showing it would suggest it
-    # matters. The helper still accepts the kwarg for callers that pass it.
-    header = (
-        "# Find Replace (FindAny) — substring lookup: each Source"
-        " search value\n"
-        "# is matched inside the Targets find field\n"
-        "# NOTE: simulate_find_any_append() is not generated — copy"
-        " it from\n"
-        "# scripts/simulate_find_any_append.py\n"
-    )
-    return (
-        header + f"{df_out} = simulate_find_any_append(\n"
-        f"    {df_f},\n"
-        f"    {df_r},\n"
-        f"    find_field={py_str(field_find)},\n"
-        f"    search_field={py_str(field_search)},\n"
-        f"    append_fields=[{fields}],\n"
-        f"    case_sensitive={case_sensitive},\n"
-        f"    log_label={py_str(f'ToolID {tool_id}')},\n"
-        f")"
-    )
-
-
-def _findreplace_whole_append(
-    tool_id: int,
-    df_out: str,
-    df_f: str,
-    df_r: str,
-    field_find: str,
-    field_search: str,
-    append_names: list[str],
-) -> str:
-    cols = ", ".join(py_str(n) for n in (field_search, *append_names))
-    # When find/search names differ, pd.merge keeps the right_on key column in
-    # the output. That matches real Alteryx: FindWhole automatically carries
-    # the search key column into the Append output even when it is not
-    # selected as an append field (golden-verified) — asymmetric with FindAny,
-    # where the search value column never appears. Do not "fix" this with a
-    # drop(columns=[field_search]).
-    key = (
-        f"    on={py_str(field_find)},"
-        if field_find == field_search
-        else f"    left_on={py_str(field_find)},\n    right_on={py_str(field_search)},"
-    )
-    # Find Replace never grows the row count (1 target = 1 row), so the
-    # lookup side must be deduplicated before a left join. The LAST duplicate
-    # always wins, regardless of ReplaceMultipleFound — golden-verified with
-    # BOTH RMF settings (3 duplicate keys with distinct values, identical
-    # output). RMF has no observed effect in Append mode.
-    lookup_var = f"_LOOKUP_{tool_id}"
-    return (
-        "# Find Replace (append fields on whole match) as a left join"
-        " — review translation\n"
-        "# lookup deduplicated so 1 target = 1 row; the last duplicate wins\n"
-        "# regardless of ReplaceMultipleFound (golden-verified)\n"
-        f"{lookup_var} = {df_r}[[{cols}]]"
-        f'.drop_duplicates({py_str(field_search)}, keep="last")\n'
-        f"{df_out} = pd.merge(\n"
-        f"    {df_f},\n"
-        f"    {lookup_var},\n"
-        f"{key}\n"
-        f'    how="left",\n'
-        f")"
-    )
-
-
-def _findreplace_whole_replace(
-    df_out: str,
-    df_f: str,
-    df_r: str,
-    field_find: str,
-    field_search: str,
-    replace_field: str,
-    tool_id: int,
-) -> str:
-    map_var = f"_MAP_{tool_id}"
-    return (
-        "# Find Replace (whole match) via lookup map"
-        " — review translation\n"
-        f"{map_var} = dict(zip({df_r}[{py_str(field_search)}],"
-        f" {df_r}[{py_str(replace_field)}]))\n"
-        f"{df_out} = {df_f}.copy()\n"
-        f"{df_out}[{py_str(field_find)}] = ("
-        f"{df_out}[{py_str(field_find)}].map({map_var})"
-        f".fillna({df_out}[{py_str(field_find)}]))"
-    )
-
-
-def _findreplace_todo(df_out: str, df_f: str, find_mode: str, replace_mode: str) -> str:
-    # Name both axes so a reviewer can tell "cannot translate" apart from
-    # "forgot to translate".
-    return (
-        f"# TODO: Find Replace — FindMode='{comment_safe(find_mode) or '?'}',"
-        f" ReplaceMode='{comment_safe(replace_mode) or '?'}'\n"
-        "# is not translated; input passed through unchanged\n"
-        f"{df_out} = {df_f}"
-    )
-
-
-def _gen_findreplace(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    # Alteryx FindReplace XML connection anchors: Targets = main stream (FieldFind),
-    # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks
-    # for test fixtures.
-    f_id = _anchor_src(anchors, preds, ("Targets", "F", "Find", "Input"), 0)
-    r_id = _anchor_src(anchors, preds, ("Source", "R", "Replace"), 1)
-    df_f = frame_name(names, f_id, "df_find")
-    df_r = frame_name(names, r_id, "df_replace")
-
-    field_find = first_text(config, "FieldFind")
-    field_search = first_text(config, "FieldSearch")
-    find_mode = first_text(config, "FindMode")
-    replace_mode = first_text(config, "ReplaceMode")
-    append_fields = config.get("ReplaceAppendFields", {})
-    append_names: list[str] = []
-    if isinstance(append_fields, dict):
-        append_names = [
-            field_name(f)
-            for f in as_list(append_fields.get("Field"))
-            if isinstance(f, dict) and field_name(f)
-        ]
-    # ReplaceMultipleFound は読まない: Append モードでは出力に影響しない
-    # ことが golden 実測で確定しており（FindAny・FindWhole とも両設定で同一
-    # 出力）、生成コードに出すと意味があるように見えてしまうため。
-    nocase_raw = config.get("NoCase", {})
-    case_sensitive = not (
-        isinstance(nocase_raw, dict) and nocase_raw.get("@value", "").lower() == "true"
-    )
-
-    whole_match = find_mode == "FindWhole" and bool(field_find and field_search)
-    any_match = find_mode == "FindAny" and bool(field_find and field_search)
-
-    if any_match and replace_mode == "Append" and append_names:
-        return _findreplace_any_append(
-            tool_id,
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            append_names,
-            case_sensitive,
-        )
-    if whole_match and replace_mode == "Append" and append_names:
-        return _findreplace_whole_append(
-            tool_id,
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            append_names,
-        )
-    # ReplaceMode is the primary discriminator: the XML can retain settings
-    # for the non-selected mode (a stale ReplaceFoundField survives switching
-    # the GUI to Append), so the tag's presence alone must never select the
-    # Replace branch.
-    replace_field = first_text(config, "ReplaceFoundField")
-    if whole_match and replace_mode == "Replace" and replace_field:
-        return _findreplace_whole_replace(
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            replace_field,
-            tool_id,
-        )
-    return _findreplace_todo(df_out, df_f, find_mode, replace_mode)
-
-
 def _gen_appendfields(
     tool_id: int,
     segment: str,
@@ -706,78 +412,14 @@ def _gen_appendfields(
     names: dict[int, str],
 ) -> str:
     df_out = names[tool_id]
-    t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
-    s_id = _anchor_src(anchors, preds, ("Sources", "Source"), 1)
+    t_id = anchor_src(anchors, preds, ("Targets", "Target"), 0)
+    s_id = anchor_src(anchors, preds, ("Sources", "Source"), 1)
     df_t = frame_name(names, t_id, "df_targets")
     df_s = frame_name(names, s_id, "df_sources")
     return (
         "# Append Fields — every source record is appended"
         " to every target record\n"
         f'{df_out} = pd.merge({df_t}, {df_s}, how="cross")'
-    )
-
-
-def _gen_createpoints(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    _anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    src = preds[0] if preds else None
-    df_in = frame_name(names, src)
-    df_out = names[tool_id]
-    fields = config.get("Fields", {})
-    x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
-    y = fields.get("@fieldY", "") if isinstance(fields, dict) else ""
-    if x and y:
-        return (
-            "# spatial tool — requires geopandas\n"
-            "# NOTE: 'geometry' is Alteryx's 'Centroid' SpatialObj field —\n"
-            "# shown only in the Map tab, never in the Results grid or\n"
-            "# golden CSVs; drop it on the comparison side, not here\n"
-            "# X/Y coerced to float64 first: points_from_xy() calls float()\n"
-            "# per value, which raises TypeError on pd.NA (nullable dtypes)\n"
-            "# or strings; rows with missing X/Y are kept, as Alteryx does\n"
-            f"_x = pd.to_numeric({df_in}[{py_str(x)}],"
-            ' errors="coerce").astype("float64")\n'
-            f"_y = pd.to_numeric({df_in}[{py_str(y)}],"
-            ' errors="coerce").astype("float64")\n'
-            f"{df_out} = gpd.GeoDataFrame(\n"
-            f"    {df_in},\n"
-            f"    geometry=gpd.points_from_xy(_x, _y),\n"
-            f'    crs="EPSG:4326",\n'
-            f")"
-        )
-    return f"{df_out} = {df_in}  # TODO: Create Points — X/Y fields not found"
-
-
-def _gen_spatialmatch(
-    tool_id: int,
-    segment: str,
-    config: dict[str, Any],
-    preds: list[int],
-    anchors: dict[str, int],
-    names: dict[int, str],
-) -> str:
-    df_out = names[tool_id]
-    t_id = _anchor_src(anchors, preds, ("Targets", "Target"), 0)
-    u_id = _anchor_src(anchors, preds, ("Universe",), 1)
-    df_t = frame_name(names, t_id, "df_targets")
-    df_u = frame_name(names, u_id, "df_universe")
-    method = config.get("Method", {})
-    method_name = method.get("@method", "") if isinstance(method, dict) else ""
-    predicate = method_name.lower() if method_name else "intersects"
-    return (
-        "# spatial tool — requires geopandas;"
-        " review predicate and output fields\n"
-        f"{df_out} = gpd.sjoin(\n"
-        f"    {df_t},\n"
-        f"    {df_u},\n"
-        f'    how="inner",\n'
-        f"    predicate={py_str(predicate)},\n"
-        f")"
     )
 
 
@@ -790,7 +432,7 @@ _Generator = Callable[
 _GENERATORS: dict[str, _Generator] = {
     **dict.fromkeys(SCAFFOLD_BROWSE_SEGMENTS, _gen_browse),
     **dict.fromkeys(SCAFFOLD_FILTER_SEGMENTS, gen_filter),
-    **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, _gen_select),
+    **dict.fromkeys(SCAFFOLD_SELECT_SEGMENTS, gen_select),
     **dict.fromkeys(SCAFFOLD_FORMULA_SEGMENTS, _gen_formula),
     **dict.fromkeys(SCAFFOLD_JOIN_SEGMENTS, _gen_join),
     **dict.fromkeys(SCAFFOLD_UNION_SEGMENTS, _gen_union),
@@ -799,10 +441,10 @@ _GENERATORS: dict[str, _Generator] = {
     **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, _gen_sample),
     **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, _gen_unique),
     **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, _gen_text_input),
-    **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, _gen_findreplace),
+    **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, gen_findreplace),
     **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, _gen_appendfields),
-    **dict.fromkeys(SCAFFOLD_CREATEPOINTS_SEGMENTS, _gen_createpoints),
-    **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, _gen_spatialmatch),
+    **dict.fromkeys(SCAFFOLD_CREATEPOINTS_SEGMENTS, gen_createpoints),
+    **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, gen_spatialmatch),
 }
 
 # Segments whose scaffold snippet is self-contained enough to show as a
