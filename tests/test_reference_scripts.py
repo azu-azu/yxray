@@ -198,16 +198,50 @@ def test_find_any_substring_match_appends_and_keeps_row_count() -> None:
 
 
 def test_find_any_multiple_matches_last_vs_first() -> None:
+    # lookup order is [cherry, apple] while "cherry" sits leftmost in the
+    # text, so the two RMF rules give different answers here
     targets = pd.DataFrame({"text": ["cherry apple pie"]})
-    lookup = pd.DataFrame({"kw": ["apple", "cherry"], "label": ["APL", "CHR"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     last = _run(targets, lookup, replace_multiple_found=True)
     first = _run(targets, lookup, replace_multiple_found=False)
-    # lookup-table order decides: last match wins with RMF=True, first with False
-    assert last["label"].iloc[0] == "CHR"
-    assert first["label"].iloc[0] == "APL"
+    # RMF=True: lookup-table order decides — the last matching lookup row wins
+    assert last["label"].iloc[0] == "APL"
+    # RMF=False: position in the target text decides — the leftmost match
+    # wins (cherry at position 0), NOT the first matching lookup row
+    assert first["label"].iloc[0] == "CHR"
     # never a join — one target stays one row either way
     assert len(last) == 1
     assert len(first) == 1
+
+
+def test_find_any_rmf_false_leftmost_match_in_text_wins() -> None:
+    # Pins the RMF=False semantics measured on real Alteryx golden output:
+    # the needle appearing leftmost in the target text wins — not the first
+    # matching lookup row (row 0 would give A1) and not the last (rows 1/4
+    # would give C3).
+    targets = pd.DataFrame({"text": [
+        "cherry apple pie",        # apple & cherry match; cherry is leftmost
+        "berry cherry jam",        # berry & cherry match; berry is leftmost
+        "apple only",              # single match — control
+        "no match here",           # no match — control
+        "apple berry cherry mix",  # all three match; apple is leftmost
+    ]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "berry", "cherry"],
+        "label": ["A1", "B2", "C3"],
+    })
+    out = _run(targets, lookup, replace_multiple_found=False)
+    assert list(out["label"]) == ["C3", "B2", "A1", pd.NA, "A1"]
+
+
+def test_find_any_rmf_false_same_position_tie_keeps_earlier_lookup_row() -> None:
+    # Two needles starting at the same text position: the earlier lookup row
+    # is kept. No golden for this tie yet — pinned as the comparison baseline
+    # for future verification.
+    targets = pd.DataFrame({"text": ["apple pie"]})
+    lookup = pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]})
+    out = _run(targets, lookup, replace_multiple_found=False)
+    assert out["label"].iloc[0] == "SHORT"
 
 
 def test_find_any_nan_and_empty_needles_do_not_match() -> None:
