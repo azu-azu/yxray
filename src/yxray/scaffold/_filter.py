@@ -132,9 +132,7 @@ def _fields_in_fragment(fragment: str) -> set[str]:
 
 
 def _date_columns_in_fragment(fragment: str) -> set[str]:
-    return {
-        m.group(1) or m.group(2) for m in _ADJACENT_DATE_RE.finditer(fragment)
-    }
+    return {m.group(1) or m.group(2) for m in _ADJACENT_DATE_RE.finditer(fragment)}
 
 
 def _isempty_columns_in_fragment(fragment: str) -> set[str]:
@@ -146,7 +144,7 @@ def _isempty_dead_code_note(col: str, *, confident: bool) -> str:
     if confident:
         return (
             f'# NOTE: after conversion, IsEmpty\'s == "" check on "{name}"'
-            ' always evaluates False — isna() alone is enough (it also'
+            " always evaluates False — isna() alone is enough (it also"
             " catches NaT)."
         )
     return (
@@ -214,9 +212,7 @@ def gen_filter(ctx: ToolContext) -> str:
             pandas_expr = translation.combined
         except ExprTranslationError:
             translation = None
-            pandas_expr = FIELD_RE.sub(
-                lambda m: f"{df_in}[{py_str(m.group(1))}]", expr
-            )
+            pandas_expr = FIELD_RE.sub(lambda m: f"{df_in}[{py_str(m.group(1))}]", expr)
         lines = ["# Alteryx expression — review translation"]
         if _DATE_EXPR_RE.search(pandas_expr):
             lines += [
