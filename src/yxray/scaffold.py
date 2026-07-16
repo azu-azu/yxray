@@ -587,7 +587,6 @@ def _findreplace_any_append(
     field_search: str,
     append_names: list[str],
     case_sensitive: bool,
-    replace_multiple_found: bool,
 ) -> str:
     fields = ", ".join(py_str(n) for n in append_names)
     # The helper output is "original Targets columns + append_fields" only;
@@ -595,6 +594,9 @@ def _findreplace_any_append(
     # the output — matching real Alteryx Append output (verified against
     # golden output, diff 0). So FieldFind == FieldSearch needs no special
     # handling: the key column is never duplicated.
+    # ReplaceMultipleFound is NOT emitted: it has no effect on Append output
+    # (golden-verified with both settings) and showing it would suggest it
+    # matters. The helper still accepts the kwarg for callers that pass it.
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
@@ -611,7 +613,6 @@ def _findreplace_any_append(
         f"    search_field={py_str(field_search)},\n"
         f"    append_fields=[{fields}],\n"
         f"    case_sensitive={case_sensitive},\n"
-        f"    replace_multiple_found={replace_multiple_found},\n"
         f"    log_label={py_str(f'ToolID {tool_id}')},\n"
         f")"
     )
@@ -722,10 +723,9 @@ def _gen_findreplace(
             for f in as_list(append_fields.get("Field"))
             if isinstance(f, dict) and field_name(f)
         ]
-    rmf_raw = config.get("ReplaceMultipleFound", {})
-    replace_multiple_found = not (
-        isinstance(rmf_raw, dict) and rmf_raw.get("@value", "").lower() == "false"
-    )
+    # ReplaceMultipleFound は読まない: Append モードでは出力に影響しない
+    # ことが golden 実測で確定しており（FindAny・FindWhole とも両設定で同一
+    # 出力）、生成コードに出すと意味があるように見えてしまうため。
     nocase_raw = config.get("NoCase", {})
     case_sensitive = not (
         isinstance(nocase_raw, dict) and nocase_raw.get("@value", "").lower() == "true"
@@ -744,7 +744,6 @@ def _gen_findreplace(
             field_search,
             append_names,
             case_sensitive,
-            replace_multiple_found,
         )
     if whole_match and replace_mode == "Append" and append_names:
         return _findreplace_whole_append(

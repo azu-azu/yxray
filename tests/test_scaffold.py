@@ -1340,7 +1340,10 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     assert ".drop(columns=" not in code
     assert 'append_fields=["col_a", "col_b"]' in code
     assert "case_sensitive=True" in code
-    assert "replace_multiple_found=True" in code
+    # ReplaceMultipleFound has no effect on Append output (golden-verified),
+    # so the generated call must not emit it — showing it would suggest the
+    # setting matters
+    assert "replace_multiple_found" not in code
     assert 'log_label="ToolID 3"' in code
     # substring semantics live inside the helper — no equality join emitted
     assert "pd.merge" not in code
@@ -1348,7 +1351,7 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     assert "# NOTE: simulate_find_any_append() is not generated" in code
 
 
-def test_scaffold_findreplace_findany_first_match_flag() -> None:
+def test_scaffold_findreplace_findany_rmf_not_emitted() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
@@ -1363,8 +1366,10 @@ def test_scaffold_findreplace_findany_first_match_flag() -> None:
         "R",
     )
     code = scaffold(doc)
-    # first-match handling is a helper flag now, not drop_duplicates + merge
-    assert "replace_multiple_found=False" in code
+    # ReplaceMultipleFound (either setting) has no effect on Append output
+    # (golden-verified), so the XML tag must not surface in the generated
+    # call, and substring semantics stay inside the helper
+    assert "replace_multiple_found" not in code
     assert "drop_duplicates" not in code
     assert "duplicated().any()" not in code
     assert "pd.merge" not in code
