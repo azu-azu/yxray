@@ -243,7 +243,7 @@ df_out = gpd.sjoin(
     df_universe,
     how="inner",
     predicate="intersects",   # Alteryx の Method 設定から取得
-)
+).drop(columns=["index_right"])  # sjoin の人工列。Alteryx 出力に対応物なし
 ```
 
 `to_crs()` も CRS チェックも行っていないが、これは処理漏れではなく、
