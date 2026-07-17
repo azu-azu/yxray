@@ -170,22 +170,48 @@ def _parse_nodes(
 ) -> list[AlteryxNode]:
     """Extract AlteryxNode objects from the XML root element."""
     nodes_list: list[AlteryxNode] = []
-    for node_elem in root.findall("Nodes//Node"):
-        tool_id_str = node_elem.get("ToolID")
-        if tool_id_str is None:
-            continue
-        tool_id = ToolID(int(tool_id_str))
+    for node_elem in root.findall("Nodes/Node"):
+        _collect_node(
+            node_elem,
+            parent_container_id=None,
+            filter_ui_tools=filter_ui_tools,
+            nodes_list=nodes_list,
+        )
+    return nodes_list
 
-        gui: etree._Element | None = node_elem.find("GuiSettings")
-        plugin: str = gui.get("Plugin", "") if gui is not None else ""
 
-        if (
-            filter_ui_tools
-            and plugin.startswith("AlteryxGuiToolkit.")
-            and "ToolContainer" not in plugin
-        ):
-            continue
+def _collect_node(
+    node_elem: etree._Element,
+    *,
+    parent_container_id: int | None,
+    filter_ui_tools: bool,
+    nodes_list: list[AlteryxNode],
+) -> None:
+    """Append node_elem to nodes_list, then recurse into its <ChildNodes>.
 
+    Container membership is serialized two ways depending on the Designer
+    version that wrote the file: older exports set
+    Properties/EngineSettings/@ToolContainerID on every member node; newer
+    exports nest members directly inside the container's own <ChildNodes>
+    element instead. Both are honored here — the explicit attribute wins
+    when present, otherwise a nested node inherits its parent container's
+    ToolID.
+    """
+    tool_id_str = node_elem.get("ToolID")
+    if tool_id_str is None:
+        return
+    tool_id = ToolID(int(tool_id_str))
+
+    gui: etree._Element | None = node_elem.find("GuiSettings")
+    plugin: str = gui.get("Plugin", "") if gui is not None else ""
+
+    keep = not (
+        filter_ui_tools
+        and plugin.startswith("AlteryxGuiToolkit.")
+        and "ToolContainer" not in plugin
+    )
+
+    if keep:
         pos: etree._Element | None = gui.find("Position") if gui is not None else None
         x: float = float(pos.get("x", "0")) if pos is not None else 0.0
         y: float = float(pos.get("y", "0")) if pos is not None else 0.0
@@ -205,7 +231,9 @@ def _parse_nodes(
             props_engine.get("ToolContainerID") if props_engine is not None else None
         )
         container_id: int | None = (
-            int(container_id_str) if container_id_str is not None else None
+            int(container_id_str)
+            if container_id_str is not None
+            else parent_container_id
         )
 
         # Macro tools place <EngineSettings Macro="..." /> directly under <Node>,
@@ -232,7 +260,16 @@ def _parse_nodes(
                 raw_xml=_node_raw_xml(node_elem),
             )
         )
-    return nodes_list
+
+    child_nodes: etree._Element | None = node_elem.find("ChildNodes")
+    if child_nodes is not None:
+        for child_elem in child_nodes.findall("Node"):
+            _collect_node(
+                child_elem,
+                parent_container_id=tool_id,
+                filter_ui_tools=filter_ui_tools,
+                nodes_list=nodes_list,
+            )
 
 
 def _parse_connections(root: etree._Element) -> list[AlteryxConnection]:

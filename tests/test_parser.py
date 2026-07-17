@@ -26,6 +26,7 @@ import pytest
 
 from tests.fixtures import (
     BINARY_CONTENT,
+    CHILDNODES_CONTAINER_YXMD,
     CONTAINER_YXMD,
     EMPTY_FILE,
     EMPTY_WORKFLOW_YXMD,
@@ -180,6 +181,33 @@ def test_parse_container_id(tmp_path: pathlib.Path) -> None:
     assert node_map[10].container_id is None
 
     # Member nodes point to their container
+    assert node_map[1].container_id == 10
+    assert node_map[2].container_id == 10
+
+    # Node outside the container
+    assert node_map[3].container_id is None
+
+
+def test_parse_container_id_childnodes_format(tmp_path: pathlib.Path) -> None:
+    """Nodes nested in a container's <ChildNodes> get container_id populated.
+
+    Newer Alteryx Designer exports (observed at yxmdVer="2023.2") nest member
+    nodes directly inside the container's own <ChildNodes> element instead of
+    writing a ToolContainerID attribute on each member. CHILDNODES_CONTAINER_YXMD
+    mirrors CONTAINER_YXMD's shape (container ToolID=10, members ToolID=1/2,
+    outside node ToolID=3) but uses this nested form.
+    """
+    path = write_fixture(
+        tmp_path, "childnodes_container.yxmd", CHILDNODES_CONTAINER_YXMD
+    )
+    doc, _ = parse(path, path)
+
+    node_map = {int(n.tool_id): n for n in doc.nodes}
+
+    # Container node itself is not inside another container
+    assert node_map[10].container_id is None
+
+    # Members nested in <ChildNodes> point to their container
     assert node_map[1].container_id == 10
     assert node_map[2].container_id == 10
 

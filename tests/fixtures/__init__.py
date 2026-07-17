@@ -17,6 +17,7 @@ __all__ = [
     "EMPTY_WORKFLOW_YXMD",
     "REPEATED_FIELDS_YXMD",
     "CONTAINER_YXMD",
+    "CHILDNODES_CONTAINER_YXMD",
     "MALFORMED_XML",
     "EMPTY_FILE",
     "BINARY_CONTENT",
@@ -171,6 +172,66 @@ CONTAINER_YXMD: bytes = b"""\
         <Configuration><Expression>[x] * 2</Expression></Configuration>
         <EngineSettings ToolContainerID="10"/>
       </Properties>
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="540" y="108"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><File>out.csv</File></Configuration>
+      </Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="True"/>
+      <Destination ToolID="2" Connection="Input"/>
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output"/>
+      <Destination ToolID="3" Connection="Input"/>
+    </Connection>
+  </Connections>
+</AlteryxDocument>
+"""
+
+# CHILDNODES_CONTAINER_YXMD: same shape as CONTAINER_YXMD (container ToolID=10
+# with members ToolID=1/2, plus an outside node ToolID=3) but member nodes are
+# nested inside the container's own <ChildNodes> element instead of carrying
+# a ToolContainerID attribute — the format newer Alteryx Designer versions
+# (observed at yxmdVer="2023.2") write. Verifies that parser.py assigns
+# container_id from XML nesting, not just the EngineSettings attribute.
+CHILDNODES_CONTAINER_YXMD: bytes = b"""\
+<?xml version="1.0" encoding="utf-8"?>
+<AlteryxDocument yxmdVer="2023.2">
+  <Nodes>
+    <Node ToolID="10">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="200" y="54"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>My Container</Caption>
+        </Configuration>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="1">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+            <Position x="216" y="108"/>
+          </GuiSettings>
+          <Properties>
+            <Configuration><Expression>[x] > 0</Expression></Configuration>
+          </Properties>
+        </Node>
+        <Node ToolID="2">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="378" y="108"/>
+          </GuiSettings>
+          <Properties>
+            <Configuration><Expression>[x] * 2</Expression></Configuration>
+          </Properties>
+        </Node>
+      </ChildNodes>
     </Node>
     <Node ToolID="3">
       <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
