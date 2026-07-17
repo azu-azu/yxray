@@ -1,7 +1,7 @@
 # 空間データの座標系(CRS)設計 — 入口で WGS84 に統一する
 
 CRS や Spatial Match という言葉に馴染みがない場合は、
-先に末尾の [Background concepts](#background-concepts) を読んでから戻ってくるとよい。
+先に末尾の [Background concepts](#background-concepts) を読むことを推奨する。
 
 ---
 
