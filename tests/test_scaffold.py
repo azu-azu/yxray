@@ -137,6 +137,7 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
     )
     code = scaffold(doc)
     assert "if df1.crs is None:" in code
+    assert "no CRS metadata (missing .prj?)" in code
     assert 'df1 = df1.set_crs("EPSG:4326")' in code
     assert 'df1 = df1.to_crs("EPSG:4326")' in code
 
@@ -150,8 +151,12 @@ def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
     )
     code = scaffold_simple(doc)
     assert "if df1.crs is None:" in code
+    assert "no CRS metadata (missing .prj?)" in code
     assert 'df1 = df1.set_crs("EPSG:4326")' in code
     assert 'df1 = df1.to_crs("EPSG:4326")' in code
+    # the warning uses logger, so the .md header must set one up
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
 
 
 def test_scaffold_csv_read_has_no_crs_normalization() -> None:
@@ -217,6 +222,53 @@ def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
     code = scaffold_simple(doc)
     assert "SHAPE_RESTORE_SHX" not in code
     assert "import os" not in code
+
+
+def test_scaffold_shp_read_guards_missing_dbf() -> None:
+    # GDAL treats the .dbf sidecar as optional: a .shp without it opens
+    # geometry-only with no error (SHAPE_RESTORE_SHX even revives a lone
+    # .shp), and every attribute column Alteryx declares silently
+    # vanishes. The emitted read fails loudly before that can happen.
+    # .DBF too — GDAL's sidecar lookup is case-insensitive, so uppercase
+    # sets from Windows must pass the guard.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold(doc)
+    guard = 'any(_shp.with_suffix(s).exists() for s in (".dbf", ".DBF"))'
+    assert guard in code
+    assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
+    assert "df1 = gpd.read_file(_shp)" in code
+
+
+def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.shp"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "from pathlib import Path" in code
+    assert '_shp = Path(r"C:\\data\\mesh.shp")' in code
+    assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
+
+
+def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
+    # Only .shp splits its attributes into a sidecar; single-file spatial
+    # formats read whole, so no guard and no pathlib import.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            config={"FileName": r"C:\data\mesh.gpkg"},
+        )
+    )
+    code = scaffold_simple(doc)
+    assert ".dbf" not in code
+    assert "from pathlib import Path" not in code
 
 
 def test_scaffold_windows_path_extracts_filename_in_test_block() -> None:

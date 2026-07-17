@@ -1,10 +1,10 @@
 """Input/Output tools and file read/write emission for the scaffold.
 
 Everything that depends on the file path — extension dispatch
-(csv/excel/spatial), post-read CRS normalization, and the .shp-without-.shx
-GDAL workaround — lives here, shared by gen_input/gen_output (the .py
-scaffold, paths via INPUTS/OUTPUTS dicts) and scaffold_simple_blocks
-(the .md scaffold, raw path literals).
+(csv/excel/spatial), post-read CRS normalization, the .shp-without-.shx
+GDAL workaround, and the .dbf-sidecar guard — lives here, shared by
+gen_input/gen_output (the .py scaffold, paths via INPUTS/OUTPUTS dicts)
+and scaffold_simple_blocks (the .md scaffold, raw path literals).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _file_write(path_expr: str, df_var: str, ext: str) -> str:
     return f"{df_var}.to_csv({path_expr}, index=False)"
 
 
-def _crs_normalize_stmt(target: str) -> str:
+def _crs_normalize_stmt(target: str, src_expr: str) -> str:
     """Post-read CRS normalization emitted after every spatial file read.
 
     Alteryx stores every SpatialObj in WGS84 and converts on input, so its
@@ -61,14 +61,41 @@ def _crs_normalize_stmt(target: str) -> str:
     sidecar loads as CRS None and gpd.sjoin warns (and silently computes on
     raw coordinates) when matched against a CRS-tagged frame — e.g. the
     EPSG:4326 hard-coded by the Create Points scaffold.
+
+    The CRS-None branch warns: the 4326 assumption matches what Alteryx
+    would do, but if the source data was really in another CRS the spatial
+    results are silently wrong, so the run should say the guess happened.
     """
     return (
         "# Alteryx SpatialObj is always WGS84 — assume it when CRS metadata\n"
         "# is missing (e.g. .shp without .prj), reproject anything else\n"
         f"if {target}.crs is None:\n"
+        "    logger.warning(\n"
+        '        "no CRS metadata (missing .prj?) — assuming EPSG:4326: %s",\n'
+        f"        {src_expr},\n"
+        "    )\n"
         f'    {target} = {target}.set_crs("EPSG:4326")\n'
         "else:\n"
         f'    {target} = {target}.to_crs("EPSG:4326")'
+    )
+
+
+def _shp_read_stmt(target: str, path_expr: str) -> str:
+    """.shp read with a .dbf-sidecar guard in front.
+
+    GDAL treats the .dbf as optional — a .shp whose .dbf sidecar is missing
+    (or SHAPE_RESTORE_SHX reviving a lone .shp) opens geometry-only with no
+    error, and every attribute column Alteryx declares silently vanishes.
+    Fail loudly before the read instead. .DBF too: sidecar lookup is
+    case-insensitive in GDAL, so uppercase sets from Windows must pass.
+    """
+    return (
+        "# attribute columns live in the same-name .dbf sidecar; GDAL opens\n"
+        "# a .shp without it geometry-only, with no error — fail loudly\n"
+        f"_shp = Path({path_expr})\n"
+        'if not any(_shp.with_suffix(s).exists() for s in (".dbf", ".DBF")):\n'
+        '    raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")\n'
+        f"{target} = gpd.read_file(_shp)\n" + _crs_normalize_stmt(target, "_shp")
     )
 
 
@@ -82,9 +109,11 @@ def read_stmt(target: str, path: str | None, path_expr: str) -> str:
     if not path:
         return f"{target} = pd.read_csv(...)  # TODO: set file path"
     ext = pathlib.Path(path).suffix.lower()
+    if ext == ".shp":
+        return _shp_read_stmt(target, path_expr)
     stmt = f"{target} = {_file_read(path_expr, ext)}"
     if ext in SPATIAL_EXTS:
-        stmt += "\n" + _crs_normalize_stmt(target)
+        stmt += "\n" + _crs_normalize_stmt(target, path_expr)
     return stmt
 
 
@@ -121,6 +150,20 @@ def _path_requirements(path: str | None) -> frozenset[Requirement]:
     return frozenset()
 
 
+def _read_requirements(path: str | None) -> frozenset[Requirement]:
+    """What the read_stmt emission relies on, beyond pandas.
+
+    Spatial reads also declare LOGGING (the CRS-None branch warns);
+    .shp reads additionally declare PATHLIB (the .dbf guard builds a Path).
+    """
+    reqs = set(_path_requirements(path))
+    if reqs:
+        reqs.add(Requirement.LOGGING)
+    if is_shp(path):
+        reqs.add(Requirement.PATHLIB)
+    return frozenset(reqs)
+
+
 def gen_input(ctx: ToolContext) -> GeneratedCode:
     path = first_text(ctx.config, "File", "FileName")
     code = read_stmt(
@@ -128,7 +171,7 @@ def gen_input(ctx: ToolContext) -> GeneratedCode:
     )
     if ctx.paths.inline_shx_note and is_shp(path):
         code = "\n".join([*SHX_NOTE_LINES, code])
-    return GeneratedCode(code, requirements=_path_requirements(path))
+    return GeneratedCode(code, requirements=_read_requirements(path))
 
 
 def gen_output(ctx: ToolContext) -> GeneratedCode:
