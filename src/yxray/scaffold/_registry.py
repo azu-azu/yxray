@@ -12,7 +12,7 @@ from collections.abc import Callable
 
 from yxray.scaffold._aggregate import gen_summarize
 from yxray.scaffold._combine import gen_appendfields, gen_join, gen_union
-from yxray.scaffold._common import ToolContext
+from yxray.scaffold._common import GeneratedCode, ToolContext
 from yxray.scaffold._filter import gen_filter
 from yxray.scaffold._findreplace import gen_findreplace
 from yxray.scaffold._io import gen_input, gen_output
@@ -40,7 +40,7 @@ from yxray.tool_registry import (
     SCAFFOLD_UNIQUE_SEGMENTS,
 )
 
-Generator = Callable[[ToolContext], str]
+Generator = Callable[[ToolContext], GeneratedCode]
 
 GENERATORS: dict[str, Generator] = {
     **dict.fromkeys(SCAFFOLD_INPUT_SEGMENTS, gen_input),

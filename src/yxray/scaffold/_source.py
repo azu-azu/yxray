@@ -7,10 +7,10 @@ sink that only logs. File-backed Input/Output live in _io.
 from __future__ import annotations
 
 from yxray.config_utils import as_list, field_name, py_str
-from yxray.scaffold._common import ToolContext
+from yxray.scaffold._common import GeneratedCode, Requirement, ToolContext
 
 
-def gen_text_input(ctx: ToolContext) -> str:
+def gen_text_input(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     fields = ctx.config.get("Fields", {})
     field_names: list[str] = []
@@ -21,7 +21,9 @@ def gen_text_input(ctx: ToolContext) -> str:
             if isinstance(f, dict) and field_name(f)
         ]
     if not field_names:
-        return f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
+        return GeneratedCode(
+            f"{df_out} = pd.DataFrame(...)  # TODO: Text Input — no fields found"
+        )
 
     data = ctx.config.get("Data", {})
     rows: list[list[str]] = []
@@ -43,8 +45,11 @@ def gen_text_input(ctx: ToolContext) -> str:
         values = ", ".join(py_str(row[i]) if i < len(row) else '""' for row in rows)
         lines.append(f"    {py_str(name)}: [{values}],")
     lines.append("})")
-    return "\n".join(lines)
+    return GeneratedCode("\n".join(lines))
 
 
-def gen_browse(ctx: ToolContext) -> str:
-    return f'logger.info("ToolID {ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))'
+def gen_browse(ctx: ToolContext) -> GeneratedCode:
+    return GeneratedCode(
+        f'logger.info("ToolID {ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))',
+        requirements=frozenset({Requirement.LOGGING}),
+    )

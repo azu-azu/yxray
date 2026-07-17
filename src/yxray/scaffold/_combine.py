@@ -10,12 +10,17 @@ from __future__ import annotations
 import re
 
 from yxray.config_utils import comment_safe, first_text, py_str
-from yxray.scaffold._common import ToolContext, anchor_src, frame_name
+from yxray.scaffold._common import (
+    GeneratedCode,
+    ToolContext,
+    anchor_src,
+    frame_name,
+)
 
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
 
 
-def gen_join(ctx: ToolContext) -> str:
+def gen_join(ctx: ToolContext) -> GeneratedCode:
     names = ctx.names
     df_out = ctx.df_out
     left_id = ctx.anchors.get("Left")
@@ -39,7 +44,7 @@ def gen_join(ctx: ToolContext) -> str:
     if matches:
         if all(lk == rk for lk, rk in matches):
             keys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
-            return (
+            return GeneratedCode(
                 f"{df_out} = pd.merge(\n"
                 f"    {df_left}, {df_right},\n"
                 f"    on={keys},\n"
@@ -48,7 +53,7 @@ def gen_join(ctx: ToolContext) -> str:
             )
         lkeys = "[" + ", ".join(py_str(lk) for lk, _ in matches) + "]"
         rkeys = "[" + ", ".join(py_str(rk) for _, rk in matches) + "]"
-        return (
+        return GeneratedCode(
             f"{df_out} = pd.merge(\n"
             f"    {df_left}, {df_right},\n"
             f"    left_on={lkeys},\n"
@@ -56,27 +61,29 @@ def gen_join(ctx: ToolContext) -> str:
             f'    how="inner",\n'
             f")"
         )
-    return (
+    return GeneratedCode(
         f"# TODO: parse join condition: {comment_safe(expr) or '(none)'}\n"
         f'{df_out} = pd.merge({df_left}, {df_right}, on=[...], how="inner")'
     )
 
 
-def gen_union(ctx: ToolContext) -> str:
+def gen_union(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     if not ctx.preds:
-        return f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
+        return GeneratedCode(
+            f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
+        )
     parts = ", ".join(ctx.names.get(p, "df_?") for p in ctx.preds)
-    return f"{df_out} = pd.concat([{parts}], ignore_index=True)"
+    return GeneratedCode(f"{df_out} = pd.concat([{parts}], ignore_index=True)")
 
 
-def gen_appendfields(ctx: ToolContext) -> str:
+def gen_appendfields(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
     s_id = anchor_src(ctx.anchors, ctx.preds, ("Sources", "Source"), 1)
     df_t = frame_name(ctx.names, t_id, "df_targets")
     df_s = frame_name(ctx.names, s_id, "df_sources")
-    return (
+    return GeneratedCode(
         "# Append Fields — every source record is appended"
         " to every target record\n"
         f'{df_out} = pd.merge({df_t}, {df_s}, how="cross")'

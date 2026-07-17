@@ -1666,3 +1666,70 @@ def test_node_code_snippets_excludes_input_output() -> None:
     snippets = node_code_snippets(doc)
     assert 1 not in snippets
     assert 2 not in snippets
+
+
+# ── Requirement declarations drive header/preamble imports ─────────────────
+
+
+def test_scaffold_createpoints_todo_fallback_skips_geopandas_import() -> None:
+    # No X/Y fields → the generator emits a passthrough TODO with no gpd
+    # code, so it declares no GEOPANDAS requirement and neither output
+    # imports geopandas (previously the segment scan imported it anyway).
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="CreatePoints", x=10, y=0, config={},
+        )
+    )
+    assert "import geopandas as gpd" not in scaffold(doc)
+    assert "import geopandas as gpd" not in scaffold_simple(doc)
+    assert "TODO: Create Points" in scaffold(doc)
+
+
+def test_scaffold_simple_spatial_input_imports_geopandas() -> None:
+    # gpd.read_file comes from the Input generator, which declares
+    # GEOPANDAS itself — no spatial tool in the workflow.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            config={"File": r"C:\data\areas.geojson"},
+        ),
+    )
+    code = scaffold_simple(doc)
+    assert "import geopandas as gpd" in code
+    assert "gpd.read_file" in code
+
+
+def test_scaffold_simple_formula_numpy_import_follows_translation() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {
+                        "@field": "flag",
+                        "@expression": "IIF([x] > 0, 1, 0)",
+                    }
+                }
+            },
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "import numpy as np" in code
+
+
+def test_scaffold_simple_no_numpy_import_without_numpy_emission() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {
+                        "@field": "total",
+                        "@expression": "[Price] * [Qty]",
+                    }
+                }
+            },
+        )
+    )
+    code = scaffold_simple(doc)
+    assert "import numpy as np" not in code

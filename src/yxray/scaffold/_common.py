@@ -10,9 +10,18 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Any
 
-__all__ = ["FIELD_RE", "PathStyle", "ToolContext", "anchor_src", "frame_name"]
+__all__ = [
+    "FIELD_RE",
+    "GeneratedCode",
+    "PathStyle",
+    "Requirement",
+    "ToolContext",
+    "anchor_src",
+    "frame_name",
+]
 
 # [field] notation in Alteryx expressions.
 FIELD_RE = re.compile(r"\[([^\]]+)\]")
@@ -40,6 +49,33 @@ def anchor_src(
         if name in anchors:
             return anchors[name]
     return preds[index] if len(preds) > index else None
+
+
+class Requirement(Enum):
+    """An import a generated block needs beyond pandas (always imported).
+
+    Identifiers, not import statements: assembly owns the spelling
+    ("import numpy as np", ...) so generators never write import lines
+    and there is no string vocabulary to keep in sync.
+    """
+
+    NUMPY = auto()
+    GEOPANDAS = auto()
+    LOGGING = auto()
+
+
+@dataclass(frozen=True)
+class GeneratedCode:
+    """One tool's generated code plus the imports it relies on.
+
+    Generators declare requirements at the point of emission; assembly
+    unions them into header/preamble imports. This replaces re-deriving
+    imports by scanning the emitted strings, which silently broke
+    whenever a generator's output vocabulary changed.
+    """
+
+    code: str
+    requirements: frozenset[Requirement] = frozenset()
 
 
 @dataclass(frozen=True)

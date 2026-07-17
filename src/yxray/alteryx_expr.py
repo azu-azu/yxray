@@ -8,7 +8,11 @@ ExprTranslationError so callers can fall back to plain [field]
 substitution.
 
 Emitted code assumes `np` (numpy) and `pd` (pandas) are in scope when
-the corresponding constructs appear.
+the corresponding constructs appear; translations report whether they
+actually emitted numpy (ExprTranslation.uses_numpy /
+FilterTranslation.uses_numpy) so callers can emit the import only when
+needed. The flag is set at the emission sites themselves — adding a new
+np.* emission and keeping the flag correct happen in this file.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from dataclasses import dataclass
 from yxray.config_utils import py_str
 
 __all__ = [
+    "ExprTranslation",
     "ExprTranslationError",
     "FilterMask",
     "FilterTranslation",
@@ -239,6 +244,11 @@ def _raise(message: str) -> str:
     raise ExprTranslationError(message)
 
 
+# _FUNCTIONS entries whose emitted code contains np.* — kept adjacent to
+# the table so adding a numpy-emitting function updates both together.
+_NUMPY_FUNCTIONS = frozenset({"iif", "null"})
+
+
 # ── Parser ─────────────────────────────────────────────────────────────────
 
 # One top-level boolean operand: its emitted code plus the [start, stop)
@@ -262,6 +272,9 @@ class _Parser:
         self.tokens = tokens
         self.pos = 0
         self.df_var = df_var
+        # Whether any emission so far contains np.* (IF/IIF → np.where /
+        # np.select / np.nan, Null() → np.nan).
+        self.uses_numpy = False
 
     def peek(self) -> _Token:
         return self.tokens[self.pos]
@@ -326,6 +339,8 @@ class _Parser:
         return operands, "|"
 
     def if_expr(self) -> _Emitted:
+        # Always emits np.where or np.select (and possibly np.nan).
+        self.uses_numpy = True
         self.expect_keyword("if")
         conditions = [self.expr()[0]]
         self.expect_keyword("then")
@@ -464,13 +479,28 @@ class _Parser:
                 args.append(self.expr())
         self.expect_kind("rparen")
         if emitter := _FUNCTIONS.get(name.lower()):
+            if name.lower() in _NUMPY_FUNCTIONS:
+                self.uses_numpy = True
             return emitter(args), _ATOM
         # Unknown function: keep it verbatim so the reviewer sees what to port.
         arg_codes = ", ".join(a[0] for a in args)
         return f"{name}({arg_codes})", _ATOM
 
 
-def translate_expr(expr: str, df_var: str) -> str:
+@dataclass(frozen=True, slots=True)
+class ExprTranslation:
+    """Result of translate_expr(): the code plus what it relies on.
+
+    uses_numpy is True when the emitted code contains np.* — tracked at
+    the emission sites, not re-derived from the string — so callers can
+    emit `import numpy as np` exactly when needed.
+    """
+
+    code: str
+    uses_numpy: bool
+
+
+def translate_expr(expr: str, df_var: str) -> ExprTranslation:
     """Translate an Alteryx expression into pandas/numpy code.
 
     Raises ExprTranslationError when the expression uses syntax this
@@ -479,7 +509,8 @@ def translate_expr(expr: str, df_var: str) -> str:
     tokens = _tokenize(expr)
     if tokens[0].kind == "end":
         raise ExprTranslationError("empty expression")
-    return _Parser(tokens, df_var).parse()
+    parser = _Parser(tokens, df_var)
+    return ExprTranslation(code=parser.parse(), uses_numpy=parser.uses_numpy)
 
 
 # ── Filter mask splitting ──────────────────────────────────────────────────
@@ -505,12 +536,14 @@ class FilterTranslation:
     combined is the whole expression as one pandas expression — identical
     to translate_expr() output. masks/joiner carry the same expression
     split at the top-level AND/OR chain (one level only); a single mask
-    means the expression has no top-level chain to split.
+    means the expression has no top-level chain to split. uses_numpy is
+    True when the translation emitted np.* (see ExprTranslation).
     """
 
     combined: str
     masks: tuple[FilterMask, ...]
     joiner: str  # "&" or "|" ("&" when there is only one mask)
+    uses_numpy: bool
 
 
 def _fragment(tokens: list[_Token], start: int, stop: int) -> str:
@@ -550,4 +583,9 @@ def translate_filter_masks(expr: str, df_var: str) -> FilterTranslation:
         FilterMask(code=emitted[0], fragment=_fragment(tokens, start, stop))
         for emitted, start, stop in operands
     )
-    return FilterTranslation(combined=combined[0], masks=masks, joiner=joiner)
+    return FilterTranslation(
+        combined=combined[0],
+        masks=masks,
+        joiner=joiner,
+        uses_numpy=parser.uses_numpy,
+    )

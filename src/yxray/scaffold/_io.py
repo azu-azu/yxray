@@ -12,7 +12,12 @@ from __future__ import annotations
 import pathlib
 
 from yxray.config_utils import first_text
-from yxray.scaffold._common import PathStyle, ToolContext
+from yxray.scaffold._common import (
+    GeneratedCode,
+    PathStyle,
+    Requirement,
+    ToolContext,
+)
 
 SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
 
@@ -109,16 +114,26 @@ INLINE_PATHS = PathStyle(
 )
 
 
-def gen_input(ctx: ToolContext) -> str:
+def _path_requirements(path: str | None) -> frozenset[Requirement]:
+    """GEOPANDAS when the file is spatial (read/write goes through gpd)."""
+    if path and pathlib.Path(path).suffix.lower() in SPATIAL_EXTS:
+        return frozenset({Requirement.GEOPANDAS})
+    return frozenset()
+
+
+def gen_input(ctx: ToolContext) -> GeneratedCode:
     path = first_text(ctx.config, "File", "FileName")
     code = read_stmt(
         ctx.names[ctx.tool_id], path, ctx.paths.input_expr(ctx.tool_id, path)
     )
     if ctx.paths.inline_shx_note and is_shp(path):
-        return "\n".join([*SHX_NOTE_LINES, code])
-    return code
+        code = "\n".join([*SHX_NOTE_LINES, code])
+    return GeneratedCode(code, requirements=_path_requirements(path))
 
 
-def gen_output(ctx: ToolContext) -> str:
+def gen_output(ctx: ToolContext) -> GeneratedCode:
     path = first_text(ctx.config, "File", "FileName")
-    return write_stmt(ctx.df_in, path, ctx.paths.output_expr(ctx.tool_id, path))
+    return GeneratedCode(
+        write_stmt(ctx.df_in, path, ctx.paths.output_expr(ctx.tool_id, path)),
+        requirements=_path_requirements(path),
+    )
