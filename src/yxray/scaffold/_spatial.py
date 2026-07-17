@@ -8,7 +8,15 @@ EPSG:4326 here.
 
 from __future__ import annotations
 
-from yxray.config_utils import py_str
+from typing import Any
+
+from yxray.config_utils import (
+    as_list,
+    comment_safe,
+    field_name,
+    py_str,
+    select_field_rows,
+)
 from yxray.scaffold._common import (
     GeneratedCode,
     Requirement,
@@ -52,6 +60,70 @@ def gen_createpoints(ctx: ToolContext) -> GeneratedCode:
     )
 
 
+def _matched_select_rows(config: dict[str, Any]) -> list[Any]:
+    """SelectField rows of the Matched output's embedded Select, or []."""
+    select_conf = config.get("SelectConfiguration", {})
+    if not isinstance(select_conf, dict):
+        return []
+    for conf in as_list(select_conf.get("Configuration")):
+        if not isinstance(conf, dict):
+            continue
+        if str(conf.get("@outputConnection", "Matched")).lower() == "matched":
+            return select_field_rows(conf)
+    return []
+
+
+def _embedded_select_deviations(rows: list[Any]) -> list[str]:
+    """Deviations of an embedded Select from its all-pass default state.
+
+    A default embedded Select (every field selected, no rename, no type
+    change) makes the sjoin translation complete apart from naming; only a
+    deviation is worth a warning in the generated code.
+    """
+    deselected: list[str] = []
+    renamed: list[str] = []
+    retyped: list[str] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        name = field_name(r)
+        if not name:
+            continue
+        if str(r.get("@selected", "True")).lower() == "false":
+            deselected.append(name)
+            continue
+        new_name = r.get("@rename") or r.get("@Rename")
+        if new_name and new_name != name:
+            renamed.append(f"{name} -> {new_name}")
+        alteryx_type = r.get("@type") or r.get("@Type")
+        if alteryx_type:
+            retyped.append(f"{name} ({alteryx_type})")
+    deviations: list[str] = []
+    if deselected:
+        deviations.append("deselected: " + ", ".join(deselected))
+    if renamed:
+        deviations.append("renamed: " + ", ".join(renamed))
+    if retyped:
+        deviations.append("type changed: " + ", ".join(retyped))
+    return deviations
+
+
+# The embedded Select names fields with their input prefix (Target_ID),
+# while sjoin's output keeps raw names plus _left/_right collision
+# suffixes — emitting SelectColumnEdit rows against the XML names would be
+# a silent no-op (apply_select_edits ignores missing columns), so until
+# the name mapping is pinned down by golden data we only warn.
+_EMBEDDED_SELECT_WARNING_LINES = (
+    "# WARNING: the Matched output's embedded Select deviates from its"
+    " default\n"
+    "# state and is NOT translated — sjoin column names (raw names,"
+    " _left/_right\n"
+    "# suffixes on collisions) don't match the XML's Target_/Universe_"
+    " prefixed\n"
+    "# names, so align the output columns manually:"
+)
+
+
 def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
@@ -61,14 +133,20 @@ def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
     method = ctx.config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
-    return GeneratedCode(
-        "# spatial tool — requires geopandas;"
-        " review predicate and output fields\n"
+
+    lines = ["# spatial tool — requires geopandas; review predicate and output fields"]
+    deviations = _embedded_select_deviations(_matched_select_rows(ctx.config))
+    if deviations:
+        lines.append(_EMBEDDED_SELECT_WARNING_LINES)
+        lines.extend(f"#   {comment_safe(d)}" for d in deviations)
+    lines.append(
+        "# index_right (sjoin artifact) is dropped —"
+        " Alteryx output has no counterpart\n"
         f"{df_out} = gpd.sjoin(\n"
         f"    {df_t},\n"
         f"    {df_u},\n"
         f'    how="inner",\n'
         f"    predicate={py_str(predicate)},\n"
-        f")",
-        requirements=_GEOPANDAS,
+        f').drop(columns=["index_right"])'
     )
+    return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)

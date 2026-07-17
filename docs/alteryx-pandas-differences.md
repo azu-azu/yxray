@@ -709,10 +709,29 @@ rename が必要になるトリガーは **1つのストリームに空間列が
 golden 突合に現れたら、`rename_geometry("Centroid")` と config の SpatialObj
 属性読み取り（`gen_spatialmatch`）をセットで実装する。
 
-なお Spatial Match の埋め込み SelectConfiguration（`Target_`/`Universe_`
-プレフィックス付与＋列選択）も未翻訳で、`gpd.sjoin` の命名規則
-（衝突列に `_left`/`_right` サフィックス、`index_right` 追加）とは一致しない。
-Spatial Match 以降の golden 突合では列名の食い違いを前提にレビューすること。
+### 埋め込み SelectConfiguration — 逸脱警告まで実装、本翻訳は golden 待ち
+
+Spatial Match の埋め込み SelectConfiguration（`Target_`/`Universe_`
+プレフィックス付与＋列選択）に対して、`gen_spatialmatch` は現在ここまで行う:
+
+1. **`index_right` の drop** — `gpd.sjoin` の人工列で Alteryx 出力に対応物が
+   ないため、生成コード側で無条件に `.drop(columns=["index_right"])` する。
+2. **逸脱時の WARNING コメント** — Matched 出力の埋め込み Select が
+   デフォルト状態（全 selected・rename/type なし）から逸脱している場合のみ、
+   逸脱内容（deselected / renamed / type changed）を列挙する。
+   デフォルト構成なら何も出さない。
+
+実行可能な `SelectColumnEdit` への翻訳は**意図的に保留**している。埋め込み
+Select の `field` は入力プレフィックス込みの作業名（`Target_ID`）だが、
+`gpd.sjoin` の出力列は生の名前＋衝突時 `_left`/`_right` サフィックスで、
+名前が一致しない。`apply_select_edits` は存在しない列を黙って無視する設計
+（stale XML 対策）なので、XML の名前で edit を機械生成すると **silent no-op**
+になる — 「出したのに効かない」は「出さない」より悪い。名前対応が golden
+突合で確定したら、Join の SelectConfiguration（同型・同じく未翻訳）と
+共通ヘルパー化して実装する。
+
+Spatial Match 以降の golden 突合では列名の食い違い（プレフィックス vs
+サフィックス）を前提にレビューすること。
 
 ### CRS — 空間読み込み直後に WGS84 へ正規化（実装済み）
 
@@ -776,6 +795,7 @@ scaffold は .shp 読み込みの直前に .dbf 存在チェック
 | FindReplace の NoCase | ヘルパーの `case_sensitive` に反転して渡される（NoCase=True → case_sensitive=False） |
 | 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
 | Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx では Map タブのみ、通常グリッド/CSV に出ない）。golden 比較前に比較側で drop — 生成コード側では消さない |
+| Spatial Match の出力列 | `index_right`（sjoin の人工列）は生成コードが drop 済み。埋め込み Select の逸脱（deselected / rename / type）は WARNING コメントで列挙のみ — 列名の食い違い（XML は `Target_`/`Universe_` プレフィックス、sjoin は `_left`/`_right` サフィックス）を前提に手動で整合させる |
 
 ---
 
@@ -784,6 +804,6 @@ scaffold は .shp 読み込みの直前に .dbf 存在チェック
 - `scripts/simulate_find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
 - `scripts/apply_select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
-- `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin`）
+- `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin` + `index_right` drop + 埋め込み Select 逸脱の WARNING）
 - `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

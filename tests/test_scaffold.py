@@ -1626,6 +1626,87 @@ def test_scaffold_spatialmatch_sjoin() -> None:
     assert "import geopandas as gpd" in code
     assert "gpd.sjoin(" in code
     assert 'predicate="intersects"' in code
+    # index_right is a pure sjoin artifact — Alteryx output never has it
+    assert '.drop(columns=["index_right"])' in code
+
+
+def _spatialmatch_doc_with_select(select_fields: list[dict]) -> WorkflowDoc:
+    return _two_input_doc(
+        "SpatialMatch",
+        {
+            "Method": {"@method": "Intersects"},
+            "SelectConfiguration": {
+                "Configuration": {
+                    "@outputConnection": "Matched",
+                    "SelectFields": {"SelectField": select_fields},
+                }
+            },
+        },
+        "Targets",
+        "Universe",
+    )
+
+
+def test_scaffold_spatialmatch_default_embedded_select_no_warning() -> None:
+    # All fields selected, no rename/type — the embedded Select is in its
+    # default state, so the generated code must not carry the warning.
+    doc = _spatialmatch_doc_with_select(
+        [
+            {"@field": "Target_ID", "@selected": "True", "@input": "Target_"},
+            {"@field": "*Unknown", "@selected": "True"},
+        ]
+    )
+    code = scaffold(doc)
+    assert "embedded Select" not in code
+    assert '.drop(columns=["index_right"])' in code
+
+
+def test_scaffold_spatialmatch_embedded_select_deviation_warns() -> None:
+    doc = _spatialmatch_doc_with_select(
+        [
+            {"@field": "Target_ID", "@selected": "True", "@input": "Target_"},
+            {"@field": "Universe_Area", "@selected": "False", "@input": "Universe_"},
+            {
+                "@field": "Target_Name", "@selected": "True",
+                "@rename": "名称", "@input": "Target_",
+            },
+            {
+                "@field": "Universe_Code", "@selected": "True",
+                "@type": "Int32", "@input": "Universe_",
+            },
+        ]
+    )
+    code = scaffold(doc)
+    assert "embedded Select deviates" in code
+    assert "#   deselected: Universe_Area" in code
+    assert "#   renamed: Target_Name -> 名称" in code
+    assert "#   type changed: Universe_Code (Int32)" in code
+    # the warning must not turn into executable (silently no-op) edits
+    assert "apply_select_edits(" not in code
+    assert '.drop(columns=["index_right"])' in code
+
+
+def test_scaffold_spatialmatch_unmatched_select_config_ignored() -> None:
+    # Only the Matched output's embedded Select matters — the generated
+    # sjoin is the Matched stream (how="inner").
+    doc = _two_input_doc(
+        "SpatialMatch",
+        {
+            "Method": {"@method": "Intersects"},
+            "SelectConfiguration": {
+                "Configuration": {
+                    "@outputConnection": "Unmatched",
+                    "SelectFields": {
+                        "SelectField": [{"@field": "Target_ID", "@selected": "False"}]
+                    },
+                }
+            },
+        },
+        "Targets",
+        "Universe",
+    )
+    code = scaffold(doc)
+    assert "embedded Select" not in code
 
 
 # ── Unsupported ────────────────────────────────────────────────────────────
