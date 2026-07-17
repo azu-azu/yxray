@@ -7,12 +7,21 @@ rest are one-line pandas translations.
 
 from __future__ import annotations
 
-from yxray.alteryx_expr import ExprTranslationError, translate_expr
+from yxray.alteryx_expr import (
+    ExprTranslation,
+    ExprTranslationError,
+    translate_expr,
+)
 from yxray.config_utils import as_list, field_name, py_str, sort_field_rows
-from yxray.scaffold._common import FIELD_RE, ToolContext
+from yxray.scaffold._common import (
+    FIELD_RE,
+    GeneratedCode,
+    Requirement,
+    ToolContext,
+)
 
 
-def _translate_expr(expr: str, df_var: str) -> str:
+def _translate_expr(expr: str, df_var: str) -> ExprTranslation:
     """Translate an Alteryx expression to pandas.
 
     Falls back to plain [field] → df_var["field"] substitution when the
@@ -21,10 +30,13 @@ def _translate_expr(expr: str, df_var: str) -> str:
     try:
         return translate_expr(expr, df_var)
     except ExprTranslationError:
-        return FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
+        return ExprTranslation(
+            code=FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr),
+            uses_numpy=False,
+        )
 
 
-def gen_formula(ctx: ToolContext) -> str:
+def gen_formula(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     ffs = ctx.config.get("FormulaFields", {})
@@ -38,7 +50,7 @@ def gen_formula(ctx: ToolContext) -> str:
             if fname and expr:
                 formulas.append((fname, expr))
     if not formulas:
-        return f"{df_out} = {df_in}  # TODO: Formula — no fields found"
+        return GeneratedCode(f"{df_out} = {df_in}  # TODO: Formula — no fields found")
     # Build df_out up one column at a time rather than with a single
     # .assign(). Two reasons: Alteryx applies formulas top to bottom and a
     # later one may reference a column an earlier one just created (an
@@ -50,12 +62,18 @@ def gen_formula(ctx: ToolContext) -> str:
         "# Alteryx Formula — applied top to bottom; review translation",
         f"{df_out} = {df_in}.copy()",
     ]
+    uses_numpy = False
     for fname, expr in formulas:
-        lines.append(f"{df_out}[{py_str(fname)}] = {_translate_expr(expr, df_out)}")
-    return "\n".join(lines)
+        translation = _translate_expr(expr, df_out)
+        uses_numpy = uses_numpy or translation.uses_numpy
+        lines.append(f"{df_out}[{py_str(fname)}] = {translation.code}")
+    return GeneratedCode(
+        "\n".join(lines),
+        requirements=frozenset({Requirement.NUMPY}) if uses_numpy else frozenset(),
+    )
 
 
-def gen_sort(ctx: ToolContext) -> str:
+def gen_sort(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     rows = sort_field_rows(ctx.config)
@@ -63,11 +81,15 @@ def gen_sort(ctx: ToolContext) -> str:
         fields = [r["@field"] for r in rows]
         orders = [r.get("@order", "Ascending").lower() != "descending" for r in rows]
         col_str = "[" + ", ".join(py_str(f) for f in fields) + "]"
-        return f"{df_out} = {df_in}.sort_values({col_str}, ascending={orders})"
-    return f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
+        return GeneratedCode(
+            f"{df_out} = {df_in}.sort_values({col_str}, ascending={orders})"
+        )
+    return GeneratedCode(
+        f"{df_out} = {df_in}.sort_values([...])  # TODO: set sort fields"
+    )
 
 
-def gen_sample(ctx: ToolContext) -> str:
+def gen_sample(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     for key in ("RecordLimit", "N", "@N"):
@@ -75,11 +97,11 @@ def gen_sample(ctx: ToolContext) -> str:
         if val:
             n = val.get("#text", "") if isinstance(val, dict) else str(val)
             if n:
-                return f"{df_out} = {df_in}.head({n})"
-    return f"{df_out} = {df_in}.head(...)  # TODO: set sample count"
+                return GeneratedCode(f"{df_out} = {df_in}.head({n})")
+    return GeneratedCode(f"{df_out} = {df_in}.head(...)  # TODO: set sample count")
 
 
-def gen_unique(ctx: ToolContext) -> str:
+def gen_unique(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     unique_fields = ctx.config.get("UniqueFields", {})
@@ -92,5 +114,5 @@ def gen_unique(ctx: ToolContext) -> str:
         ]
     if field_names:
         subset = "[" + ", ".join(py_str(n) for n in field_names) + "]"
-        return f"{df_out} = {df_in}.drop_duplicates(subset={subset})"
-    return f"{df_out} = {df_in}.drop_duplicates()"
+        return GeneratedCode(f"{df_out} = {df_in}.drop_duplicates(subset={subset})")
+    return GeneratedCode(f"{df_out} = {df_in}.drop_duplicates()")

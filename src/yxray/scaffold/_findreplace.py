@@ -24,7 +24,12 @@ from yxray.config_utils import (
     first_text,
     py_str,
 )
-from yxray.scaffold._common import ToolContext, anchor_src, frame_name
+from yxray.scaffold._common import (
+    GeneratedCode,
+    ToolContext,
+    anchor_src,
+    frame_name,
+)
 
 
 def _findreplace_any_append(
@@ -143,7 +148,7 @@ def _findreplace_todo(df_out: str, df_f: str, find_mode: str, replace_mode: str)
     )
 
 
-def gen_findreplace(ctx: ToolContext) -> str:
+def gen_findreplace(ctx: ToolContext) -> GeneratedCode:
     tool_id = ctx.tool_id
     config = ctx.config
     df_out = ctx.df_out
@@ -179,25 +184,29 @@ def gen_findreplace(ctx: ToolContext) -> str:
     any_match = find_mode == "FindAny" and bool(field_find and field_search)
 
     if any_match and replace_mode == "Append" and append_names:
-        return _findreplace_any_append(
-            tool_id,
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            append_names,
-            case_sensitive,
+        return GeneratedCode(
+            _findreplace_any_append(
+                tool_id,
+                df_out,
+                df_f,
+                df_r,
+                field_find,
+                field_search,
+                append_names,
+                case_sensitive,
+            )
         )
     if whole_match and replace_mode == "Append" and append_names:
-        return _findreplace_whole_append(
-            tool_id,
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            append_names,
+        return GeneratedCode(
+            _findreplace_whole_append(
+                tool_id,
+                df_out,
+                df_f,
+                df_r,
+                field_find,
+                field_search,
+                append_names,
+            )
         )
     # ReplaceMode is the primary discriminator: the XML can retain settings
     # for the non-selected mode (a stale ReplaceFoundField survives switching
@@ -205,13 +214,15 @@ def gen_findreplace(ctx: ToolContext) -> str:
     # Replace branch.
     replace_field = first_text(config, "ReplaceFoundField")
     if whole_match and replace_mode == "Replace" and replace_field:
-        return _findreplace_whole_replace(
-            df_out,
-            df_f,
-            df_r,
-            field_find,
-            field_search,
-            replace_field,
-            tool_id,
+        return GeneratedCode(
+            _findreplace_whole_replace(
+                df_out,
+                df_f,
+                df_r,
+                field_find,
+                field_search,
+                replace_field,
+                tool_id,
+            )
         )
-    return _findreplace_todo(df_out, df_f, find_mode, replace_mode)
+    return GeneratedCode(_findreplace_todo(df_out, df_f, find_mode, replace_mode))

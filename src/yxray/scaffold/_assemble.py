@@ -16,7 +16,6 @@ matching the ToolID comment above each block so the mapping is unambiguous.
 from __future__ import annotations
 
 import pathlib
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,20 +24,17 @@ from yxray.config_utils import (
     first_text,
 )
 from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._common import PathStyle, ToolContext
+from yxray.scaffold._common import PathStyle, Requirement, ToolContext
 from yxray.scaffold._io import (
     INLINE_PATHS,
     PROJECT_PATHS,
     SHX_RESTORE_LINE,
-    SPATIAL_EXTS,
     is_shp,
 )
 from yxray.scaffold._registry import DETAIL_HINT_SEGMENTS, GENERATORS
 from yxray.tool_registry import (
-    SCAFFOLD_BROWSE_SEGMENTS,
     SCAFFOLD_INPUT_SEGMENTS,
     SCAFFOLD_OUTPUT_SEGMENTS,
-    SCAFFOLD_SPATIAL_SEGMENTS,
     tool_segment,
 )
 from yxray.topology import build_predecessor_map, topo_order
@@ -50,9 +46,6 @@ __all__ = [
     "scaffold_simple",
     "scaffold_simple_blocks",
 ]
-
-# Emissions of alteryx_expr that need "import numpy as np" in the preamble.
-_NUMPY_RE = re.compile(r"\bnp\.(where|select|nan)\b")
 
 
 # ── Connection helpers ─────────────────────────────────────────────────────
@@ -79,12 +72,48 @@ def _assign_frame_names(
     return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
 
 
+@dataclass(frozen=True)
+class ScaffoldPlan:
+    """One workflow analysis, shared by every scaffold entry point.
+
+    The graph information code generation needs, computed once by
+    build_plan(). Not a DTO whose every field every consumer uses —
+    node_code_snippets ignores source. Deliberately excludes .py-output
+    metadata (input/output file paths, spatial flags): that stays in
+    _collect_metadata(), whose definitions are specific to scaffold().
+
+    frozen=True only prevents rebinding the fields; the dicts and lists
+    are shared references, so treat them as read-only.
+    """
+
+    source: str
+    node_map: dict[int, Any]
+    pred_map: dict[int, list[int]]
+    anchor_map: dict[int, dict[str, int]]
+    order: list[int]
+    names: dict[int, str]
+
+
+def build_plan(doc: WorkflowDoc) -> ScaffoldPlan:
+    """Analyze a workflow once: graph maps, topological order, frame names."""
+    node_map = {
+        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
+    }
+    order = topo_order(doc)
+    return ScaffoldPlan(
+        source=pathlib.Path(doc.filepath).name,
+        node_map=node_map,
+        pred_map=build_predecessor_map(doc),
+        anchor_map=_build_anchor_map(doc),
+        order=order,
+        names=_assign_frame_names(order, node_map),
+    )
+
+
 def _make_context(
+    plan: ScaffoldPlan,
     tool_id: int,
     node: Any,
-    pred_map: dict[int, list[int]],
-    anchor_map: dict[int, dict[str, int]],
-    names: dict[int, str],
     paths: PathStyle,
 ) -> ToolContext:
     """Bundle a tool's config + graph position + path style into one argument."""
@@ -92,9 +121,9 @@ def _make_context(
         tool_id=tool_id,
         segment=tool_segment(node.tool_type),
         config=node.config,
-        preds=pred_map.get(tool_id, []),
-        anchors=anchor_map.get(tool_id, {}),
-        names=names,
+        preds=plan.pred_map.get(tool_id, []),
+        anchors=plan.anchor_map.get(tool_id, {}),
+        names=plan.names,
         paths=paths,
     )
 
@@ -106,21 +135,15 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
     DETAIL_HINT_SEGMENTS; callers should fall back to the generic
     python_hint for everything else.
     """
-    node_map = {
-        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
-    }
-    pred_map = build_predecessor_map(doc)
-    anchor_map = _build_anchor_map(doc)
-    names = _assign_frame_names(topo_order(doc), node_map)
-
+    plan = build_plan(doc)
     snippets: dict[int, str] = {}
-    for tool_id, node in node_map.items():
+    for tool_id, node in plan.node_map.items():
         segment = tool_segment(node.tool_type)
         if segment not in DETAIL_HINT_SEGMENTS:
             continue
         # DETAIL_HINT excludes Input/Output, so the path style never matters here.
-        ctx = _make_context(tool_id, node, pred_map, anchor_map, names, INLINE_PATHS)
-        snippets[tool_id] = GENERATORS[segment](ctx)
+        ctx = _make_context(plan, tool_id, node, INLINE_PATHS)
+        snippets[tool_id] = GENERATORS[segment](ctx).code
     return snippets
 
 
@@ -128,16 +151,20 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
 
 
 def _collect_metadata(
-    node_map: dict[int, Any],
-    order: list[int],
-) -> tuple[dict[int, str], dict[int, str], bool]:
-    """Pre-pass: collect input/output paths and which helper imports are needed."""
+    plan: ScaffoldPlan,
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Pre-pass: collect input/output file paths for the ENV paths block.
+
+    .py-output metadata, deliberately kept out of ScaffoldPlan: the ENV
+    paths block only exists in scaffold(). Which imports the preamble
+    needs is no longer derived here — generators declare that through
+    GeneratedCode.requirements.
+    """
     input_paths: dict[int, str] = {}
     output_paths: dict[int, str] = {}
-    has_spatial = False
 
-    for tool_id in order:
-        node = node_map.get(tool_id)
+    for tool_id in plan.order:
+        node = plan.node_map.get(tool_id)
         if node is None:
             continue
         segment = tool_segment(node.tool_type)
@@ -149,17 +176,8 @@ def _collect_metadata(
             path = first_text(node.config, "File", "FileName")
             if path:
                 output_paths[tool_id] = path
-        elif segment in SCAFFOLD_SPATIAL_SEGMENTS:
-            has_spatial = True
 
-    # Spatial file I/O emits gpd.read_file/to_file even without spatial tools.
-    if not has_spatial:
-        has_spatial = any(
-            pathlib.Path(p).suffix.lower() in SPATIAL_EXTS
-            for p in (*input_paths.values(), *output_paths.values())
-        )
-
-    return input_paths, output_paths, has_spatial
+    return input_paths, output_paths
 
 
 def _emit_preamble(
@@ -256,11 +274,7 @@ def _header_comment_lines(
 
 
 def _tool_blocks(
-    order: list[int],
-    node_map: dict[int, Any],
-    pred_map: dict[int, list[int]],
-    anchor_map: dict[int, dict[str, int]],
-    names: dict[int, str],
+    plan: ScaffoldPlan,
     paths: PathStyle,
     warnings_by_tool: dict[int, list[str]] | None,
 ) -> list[ScaffoldBlock]:
@@ -272,20 +286,28 @@ def _tool_blocks(
     GENERATORS, so there is no per-tool branching here.
     """
     blocks: list[ScaffoldBlock] = []
-    for tool_id in order:
-        node = node_map.get(tool_id)
+    for tool_id in plan.order:
+        node = plan.node_map.get(tool_id)
         if node is None:
             continue
-        ctx = _make_context(tool_id, node, pred_map, anchor_map, names, paths)
+        ctx = _make_context(plan, tool_id, node, paths)
         lines = _header_comment_lines(ctx.tool_id, ctx.segment, warnings_by_tool)
         gen = GENERATORS.get(ctx.segment)
+        requirements: frozenset[Requirement] = frozenset()
         if gen is None:
             lines.append("# TODO: unsupported tool type — review manually")
             lines.append(f"# {ctx.df_out} = ...")
         else:
-            lines.append(gen(ctx))
-        blocks.append(ScaffoldBlock(ctx.tool_id, ctx.segment, lines))
+            generated = gen(ctx)
+            lines.append(generated.code)
+            requirements = generated.requirements
+        blocks.append(ScaffoldBlock(ctx.tool_id, ctx.segment, lines, requirements))
     return blocks
+
+
+def _block_requirements(blocks: list[ScaffoldBlock]) -> frozenset[Requirement]:
+    """Union of every block's declared imports."""
+    return frozenset().union(*(block.requirements for block in blocks))
 
 
 def _flatten_blocks(blocks: list[ScaffoldBlock]) -> list[str]:
@@ -307,11 +329,16 @@ def _flatten_blocks(blocks: list[ScaffoldBlock]) -> list[str]:
 
 @dataclass(frozen=True)
 class ScaffoldBlock:
-    """One tool's chunk of the simple scaffold: header comments + code."""
+    """One tool's chunk of the simple scaffold: header comments + code.
+
+    requirements carries the imports the block's generator declared
+    (see GeneratedCode); assembly unions them into the header/preamble.
+    """
 
     tool_id: int
     segment: str
     lines: list[str]
+    requirements: frozenset[Requirement] = frozenset()
 
 
 def scaffold_simple_blocks(
@@ -324,42 +351,25 @@ def scaffold_simple_blocks(
     (the .md writer) can interleave other material — e.g. the original
     <Node> XML — between tool blocks.
     """
-    node_map = {
-        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
-    }
-    pred_map = build_predecessor_map(doc)
-    anchor_map = _build_anchor_map(doc)
-    order = topo_order(doc)
-    source = pathlib.Path(doc.filepath).name
-    names = _assign_frame_names(order, node_map)
-    has_spatial = any(
-        tool_segment(node.tool_type) in SCAFFOLD_SPATIAL_SEGMENTS
-        for node in node_map.values()
-    )
-    has_browse = any(
-        tool_segment(node.tool_type) in SCAFFOLD_BROWSE_SEGMENTS
-        for node in node_map.values()
-    )
-
-    blocks = _tool_blocks(
-        order, node_map, pred_map, anchor_map, names, INLINE_PATHS, warnings_by_tool
-    )
+    plan = build_plan(doc)
+    blocks = _tool_blocks(plan, INLINE_PATHS, warnings_by_tool)
+    requirements = _block_requirements(blocks)
 
     header: list[str] = [
-        f'"""Scaffold generated by yxray from {source}"""',
+        f'"""Scaffold generated by yxray from {plan.source}"""',
         "",
     ]
-    if has_browse:
+    if Requirement.LOGGING in requirements:
         header += ["import logging", ""]
-    if has_spatial or any("gpd." in line for block in blocks for line in block.lines):
+    if Requirement.GEOPANDAS in requirements:
         header.append("import geopandas as gpd")
-    if any(_NUMPY_RE.search(line) for block in blocks for line in block.lines):
+    if Requirement.NUMPY in requirements:
         header.append("import numpy as np")
     header += [
         "import pandas as pd",
         "",
     ]
-    if has_browse:
+    if Requirement.LOGGING in requirements:
         header += ["logger = logging.getLogger(__name__)", ""]
     return header, blocks
 
@@ -387,25 +397,20 @@ def scaffold(
     Supported tools get semi-concrete pandas code; unsupported tools get
     a TODO comment block.
     """
-    node_map = {
-        int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
-    }
-    pred_map = build_predecessor_map(doc)
-    anchor_map = _build_anchor_map(doc)
-    order = topo_order(doc)
-    source = pathlib.Path(doc.filepath).name
+    plan = build_plan(doc)
+    input_paths, output_paths = _collect_metadata(plan)
 
-    input_paths, output_paths, has_spatial = _collect_metadata(node_map, order)
-
-    names = _assign_frame_names(order, node_map)
-    blocks = _tool_blocks(
-        order, node_map, pred_map, anchor_map, names, PROJECT_PATHS, warnings_by_tool
-    )
+    blocks = _tool_blocks(plan, PROJECT_PATHS, warnings_by_tool)
+    requirements = _block_requirements(blocks)
     body = ["    " + line if line else "" for line in _flatten_blocks(blocks)]
-    uses_numpy = any(_NUMPY_RE.search(line) for line in body)
     has_shp = any(is_shp(p) for p in input_paths.values())
 
-    lines = _emit_preamble(source, has_spatial, uses_numpy, has_shp)
+    lines = _emit_preamble(
+        plan.source,
+        has_spatial=Requirement.GEOPANDAS in requirements,
+        uses_numpy=Requirement.NUMPY in requirements,
+        has_shp=has_shp,
+    )
     lines += _emit_paths_block(input_paths, output_paths)
     lines += ["", "", "def main() -> None:"]
     lines += body

@@ -10,7 +10,7 @@ pseudo-field patterns that usually indicate a source-file issue.
 from __future__ import annotations
 
 from yxray.config_utils import field_name, py_str, select_field_rows
-from yxray.scaffold._common import ToolContext
+from yxray.scaffold._common import GeneratedCode, ToolContext
 
 # Select tools always carry this warning: the .yxmd XML keeps the Select
 # state as of some earlier save, so it can silently disagree with what the
@@ -23,7 +23,7 @@ _SELECT_STALE_XML_WARNING = (
 )
 
 
-def gen_select(ctx: ToolContext) -> str:
+def gen_select(ctx: ToolContext) -> GeneratedCode:
     tool_id = ctx.tool_id
     df_in = ctx.df_in
     df_out = ctx.df_out
@@ -45,7 +45,7 @@ def gen_select(ctx: ToolContext) -> str:
         edits.append((name, new_name, selected, alteryx_type))
 
     if not edits:
-        return (
+        return GeneratedCode(
             f"{_SELECT_STALE_XML_WARNING}\n"
             f"{df_out} = {df_in}  # TODO: Select — no columns found"
         )
@@ -90,4 +90,4 @@ def gen_select(ctx: ToolContext) -> str:
         col_lines.append(f"    SelectColumnEdit({', '.join(args)}),")
     col_lines.append("]")
     col_lines.append(f"{df_out} = apply_select_edits({df_in}, {var})")
-    return "\n".join(col_lines)
+    return GeneratedCode("\n".join(col_lines))

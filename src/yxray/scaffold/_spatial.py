@@ -9,17 +9,25 @@ EPSG:4326 here.
 from __future__ import annotations
 
 from yxray.config_utils import py_str
-from yxray.scaffold._common import ToolContext, anchor_src, frame_name
+from yxray.scaffold._common import (
+    GeneratedCode,
+    Requirement,
+    ToolContext,
+    anchor_src,
+    frame_name,
+)
+
+_GEOPANDAS = frozenset({Requirement.GEOPANDAS})
 
 
-def gen_createpoints(ctx: ToolContext) -> str:
+def gen_createpoints(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     fields = ctx.config.get("Fields", {})
     x = fields.get("@fieldX", "") if isinstance(fields, dict) else ""
     y = fields.get("@fieldY", "") if isinstance(fields, dict) else ""
     if x and y:
-        return (
+        code = (
             "# spatial tool — requires geopandas\n"
             "# NOTE: 'geometry' is Alteryx's 'Centroid' SpatialObj field —\n"
             "# shown only in the Map tab, never in the Results grid or\n"
@@ -37,10 +45,14 @@ def gen_createpoints(ctx: ToolContext) -> str:
             f'    crs="EPSG:4326",\n'
             f")"
         )
-    return f"{df_out} = {df_in}  # TODO: Create Points — X/Y fields not found"
+        return GeneratedCode(code, requirements=_GEOPANDAS)
+    # TODO fallback emits no gpd code, so it declares nothing.
+    return GeneratedCode(
+        f"{df_out} = {df_in}  # TODO: Create Points — X/Y fields not found"
+    )
 
 
-def gen_spatialmatch(ctx: ToolContext) -> str:
+def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
     u_id = anchor_src(ctx.anchors, ctx.preds, ("Universe",), 1)
@@ -49,7 +61,7 @@ def gen_spatialmatch(ctx: ToolContext) -> str:
     method = ctx.config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"
-    return (
+    return GeneratedCode(
         "# spatial tool — requires geopandas;"
         " review predicate and output fields\n"
         f"{df_out} = gpd.sjoin(\n"
@@ -57,5 +69,6 @@ def gen_spatialmatch(ctx: ToolContext) -> str:
         f"    {df_u},\n"
         f'    how="inner",\n'
         f"    predicate={py_str(predicate)},\n"
-        f")"
+        f")",
+        requirements=_GEOPANDAS,
     )

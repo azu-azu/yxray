@@ -33,7 +33,12 @@ from yxray.config_utils import (
     py_str,
     simple_filter_condition,
 )
-from yxray.scaffold._common import FIELD_RE, ToolContext
+from yxray.scaffold._common import (
+    FIELD_RE,
+    GeneratedCode,
+    Requirement,
+    ToolContext,
+)
 
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
@@ -200,7 +205,7 @@ def _filter_date_warning_lines(
     return lines
 
 
-def gen_filter(ctx: ToolContext) -> str:
+def gen_filter(ctx: ToolContext) -> GeneratedCode:
     config = ctx.config
     df_in = ctx.df_in
     df_out = ctx.df_out
@@ -233,11 +238,15 @@ def gen_filter(ctx: ToolContext) -> str:
             lines += mask_lines
         else:
             lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
-        return "\n".join(lines)
+        uses_numpy = translation is not None and translation.uses_numpy
+        return GeneratedCode(
+            "\n".join(lines),
+            requirements=frozenset({Requirement.NUMPY}) if uses_numpy else frozenset(),
+        )
     simple_expr = _simple_filter_pandas(config, df_in)
     if simple_expr:
-        return (
+        return GeneratedCode(
             "# from Simple-mode filter settings — review translation\n"
             f"{df_out} = {df_in}[{simple_expr}]"
         )
-    return f"{df_out} = {df_in}  # TODO: Filter expression missing"
+    return GeneratedCode(f"{df_out} = {df_in}  # TODO: Filter expression missing")

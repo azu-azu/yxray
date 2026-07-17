@@ -8,7 +8,7 @@ from yxray.alteryx_expr import (
 
 
 def t(expr: str) -> str:
-    return translate_expr(expr, "df")
+    return translate_expr(expr, "df").code
 
 
 # ── Fields, literals, operators ─────────────────────────────────────────────
@@ -280,7 +280,7 @@ def test_masks_parenthesized_chain_is_one_mask() -> None:
 )
 def test_masks_combined_matches_translate_expr(expr: str) -> None:
     result = translate_filter_masks(expr, "df")
-    assert result.combined == translate_expr(expr, "df")
+    assert result.combined == translate_expr(expr, "df").code
 
 
 def test_masks_fragments_drop_comments_and_newlines() -> None:
@@ -325,3 +325,33 @@ def test_bare_identifier_raises() -> None:
 def test_empty_expression_raises() -> None:
     with pytest.raises(ExprTranslationError):
         t("   ")
+
+
+# ── uses_numpy: declared at emission, not re-derived from strings ──────────
+
+
+def test_uses_numpy_false_for_plain_comparison() -> None:
+    assert translate_expr("[Age] > 18", "df").uses_numpy is False
+
+
+def test_uses_numpy_true_for_if_expression() -> None:
+    assert translate_expr('IF [x] > 1 THEN "hi" ELSE "lo" ENDIF', "df").uses_numpy
+
+
+def test_uses_numpy_true_for_iif() -> None:
+    assert translate_expr("IIF([x] > 0, 1, 0)", "df").uses_numpy
+
+
+def test_uses_numpy_true_for_null_function() -> None:
+    assert translate_expr("Null()", "df").uses_numpy
+
+
+def test_uses_numpy_false_for_pandas_only_functions() -> None:
+    assert translate_expr("ToNumber([x]) + 1", "df").uses_numpy is False
+
+
+def test_masks_report_numpy() -> None:
+    with_np = translate_filter_masks("IF [x] > 1 THEN 1 ELSE 0 ENDIF", "df")
+    without_np = translate_filter_masks("[a] = 1 AND [b] = 2", "df")
+    assert with_np.uses_numpy is True
+    assert without_np.uses_numpy is False
