@@ -19,7 +19,13 @@ from yxray.scaffold._io import gen_input, gen_output
 from yxray.scaffold._select import gen_select
 from yxray.scaffold._source import gen_browse, gen_text_input
 from yxray.scaffold._spatial import gen_createpoints, gen_spatialmatch
-from yxray.scaffold._transform import gen_formula, gen_sample, gen_sort, gen_unique
+from yxray.scaffold._transform import (
+    gen_formula,
+    gen_recordid,
+    gen_sample,
+    gen_sort,
+    gen_unique,
+)
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
@@ -30,6 +36,7 @@ from yxray.tool_registry import (
     SCAFFOLD_INPUT_SEGMENTS,
     SCAFFOLD_JOIN_SEGMENTS,
     SCAFFOLD_OUTPUT_SEGMENTS,
+    SCAFFOLD_RECORDID_SEGMENTS,
     SCAFFOLD_SAMPLE_SEGMENTS,
     SCAFFOLD_SELECT_SEGMENTS,
     SCAFFOLD_SORT_SEGMENTS,
@@ -55,6 +62,7 @@ GENERATORS: dict[str, Generator] = {
     **dict.fromkeys(SCAFFOLD_SORT_SEGMENTS, gen_sort),
     **dict.fromkeys(SCAFFOLD_SAMPLE_SEGMENTS, gen_sample),
     **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, gen_unique),
+    **dict.fromkeys(SCAFFOLD_RECORDID_SEGMENTS, gen_recordid),
     **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, gen_text_input),
     **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, gen_findreplace),
     **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, gen_appendfields),

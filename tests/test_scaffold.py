@@ -1272,6 +1272,31 @@ def test_scaffold_unique_without_fields_keeps_default() -> None:
     assert "df2 = df1.drop_duplicates()" in code
 
 
+# ── RecordID ───────────────────────────────────────────────────────────────
+
+
+def test_scaffold_recordid_uses_configured_field_and_start() -> None:
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2), tool_type="RecordID", x=10, y=0,
+            config={
+                "FieldName": {"#text": "RowNum"},
+                "StartValue": {"#text": "0"},
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert "df2 = df1.reset_index(drop=True)" in code
+    assert 'df2["RowNum"] = df2.index + 0' in code
+
+
+def test_scaffold_recordid_without_config_uses_defaults() -> None:
+    doc = _chain_doc(AlteryxNode(tool_id=ToolID(2), tool_type="RecordID", x=10, y=0))
+    code = scaffold(doc)
+    assert "df2 = df1.reset_index(drop=True)" in code
+    assert 'df2["RecordID"] = df2.index + 1' in code
+
+
 # ── Text Input ─────────────────────────────────────────────────────────────
 
 

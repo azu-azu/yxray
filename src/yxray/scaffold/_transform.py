@@ -1,4 +1,4 @@
-"""Single-input row transforms (Formula, Sort, Sample, Unique).
+"""Single-input row transforms (Formula, Sort, Sample, Unique, RecordID).
 
 Formula is the interesting one — it leans on alteryx_expr for expression
 translation and preserves Alteryx's top-to-bottom formula semantics; the
@@ -12,7 +12,7 @@ from yxray.alteryx_expr import (
     ExprTranslationError,
     translate_expr,
 )
-from yxray.config_utils import as_list, field_name, py_str, sort_field_rows
+from yxray.config_utils import as_list, field_name, get_text, py_str, sort_field_rows
 from yxray.scaffold._common import (
     FIELD_RE,
     GeneratedCode,
@@ -99,6 +99,21 @@ def gen_sample(ctx: ToolContext) -> GeneratedCode:
             if n:
                 return GeneratedCode(f"{df_out} = {df_in}.head({n})")
     return GeneratedCode(f"{df_out} = {df_in}.head(...)  # TODO: set sample count")
+
+
+def gen_recordid(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    field = get_text(ctx.config, "FieldName") or "RecordID"
+    start_text = get_text(ctx.config, "StartValue")
+    try:
+        start = int(start_text) if start_text else 1
+    except ValueError:
+        start = 1
+    return GeneratedCode(
+        f"{df_out} = {df_in}.reset_index(drop=True)\n"
+        f"{df_out}[{py_str(field)}] = {df_out}.index + {start}"
+    )
 
 
 def gen_unique(ctx: ToolContext) -> GeneratedCode:
