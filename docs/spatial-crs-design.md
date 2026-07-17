@@ -112,12 +112,17 @@ SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
 これらの拡張子は `pd.read_csv()` ではなく `gpd.read_file()` で読み込まれる。
 
 さらに空間ファイルを読んだ場合に限り、`read_stmt()` が
-直後に `_crs_normalize_stmt()` の出力を追加する。
+直後に `_crs_normalize_stmt()` の出力を追加する
+(.shp の場合は `_shp_read_stmt()` 経由で、.dbf サイドカーの
+存在チェックも前置される —
+[shapefile-sidecar-anatomy.md](shapefile-sidecar-anatomy.md) 参照)。
 
 ```python
+if ext == ".shp":
+    return _shp_read_stmt(target, path_expr)
 stmt = f"{target} = {_file_read(path_expr, ext)}"
 if ext in SPATIAL_EXTS:
-    stmt += "\n" + _crs_normalize_stmt(target)
+    stmt += "\n" + _crs_normalize_stmt(target, path_expr)
 ```
 
 生成されるコードは概ね次のようになる。
@@ -128,10 +133,18 @@ df = gpd.read_file(path)
 # Alteryx SpatialObj is always WGS84 — assume it when CRS metadata
 # is missing (e.g. .shp without .prj), reproject anything else
 if df.crs is None:
+    logger.warning(
+        "no CRS metadata (missing .prj?) — assuming EPSG:4326: %s",
+        path,
+    )
     df = df.set_crs("EPSG:4326")
 else:
     df = df.to_crs("EPSG:4326")
 ```
+
+CRS なしの分岐が warning を出すのは、4326 仮定が
+「Alteryx と同じ挙動」である一方、元データが別座標系だった場合に
+結果が静かに狂う仮定でもあるため、発動したことをログに残す判断である。
 
 ### `set_crs` と `to_crs` の違い
 
@@ -169,7 +182,9 @@ sample.prj   座標系情報
 ```
 
 このうち `.prj` が欠けると、GeoPandas には座標系が分からず
-`df.crs is None` になる。
+`df.crs is None` になる
+(サイドカー構成の詳細と .dbf 欠落時の挙動は
+[shapefile-sidecar-anatomy.md](shapefile-sidecar-anatomy.md) を参照)。
 
 そのまま Create Points 由来の EPSG:4326 データと `sjoin` すると、
 
