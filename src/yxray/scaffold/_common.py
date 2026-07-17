@@ -62,6 +62,7 @@ class Requirement(Enum):
     NUMPY = auto()
     GEOPANDAS = auto()
     LOGGING = auto()
+    PATHLIB = auto()
 
 
 @dataclass(frozen=True)
