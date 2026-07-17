@@ -726,6 +726,27 @@ scaffold はこの不変条件を読み込み側で写す: 空間ファイルの
 「CRS None なら `set_crs("EPSG:4326")`（WGS84 とみなす）、付いていれば
 `to_crs("EPSG:4326")`（Alteryx の入力時変換の再現）」を生成する。
 以降の空間ツールは混在 CRS を見ない前提でよい。
+CRS None 分岐は「4326 と仮定した」ことを `logger.warning` で実行ログに残す
+（元データが別座標系だった場合に結果が静かに狂う仮定のため）。
+設計全体は [spatial-crs-design.md](spatial-crs-design.md) を参照。
+
+### Shapefile のサイドカー — .dbf が無いと属性列が静かに消える（ガード実装済み）
+
+.shp の属性列（MESHCODE 等）は本体ではなく**同名の .dbf サイドカー**に
+入っている。Alteryx も GeoPandas も、.shp を1個指定すれば同フォルダの
+同名サイドカーを自動で読むので、一式が揃っていれば挙動差はない。
+
+差が出るのは欠落時の挙動である。GDAL は .dbf を任意扱いで、無くても
+**エラーを出さず geometry 1列だけで開く**。さらに scaffold が Alteryx
+パリティのために出す `SHAPE_RESTORE_SHX=YES` は .shp 単体すら黙って
+開けてしまう。「.shp だけ別フォルダにコピーした」状態でも警告ゼロで
+`gpd.sjoin` まで到達し、universe 側の属性列が結果に乗らない — という
+事故が実際に起きた。
+
+scaffold は .shp 読み込みの直前に .dbf 存在チェック
+（欠落時 `FileNotFoundError`、`.dbf`/`.DBF` 両対応）を生成する。
+調査の経緯・検証表・採用しなかった対案は
+[shapefile-sidecar-anatomy.md](shapefile-sidecar-anatomy.md) を参照。
 
 ---
 
@@ -750,7 +771,8 @@ scaffold はこの不変条件を読み込み側で写す: 空間ファイルの
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `simulate_find_any_append(...)` の呼び出しに変換（定義は生成されない — `scripts/simulate_find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
-| 空間ファイル読み込み（.shp 等） | 読み込み直後に WGS84 へ正規化（CRS None は `set_crs`、その他は `to_crs`）— scaffold が自動生成。`.prj` 欠落 .shp × Create Points の sjoin で出る CRS mismatch 警告の恒久対策 |
+| 空間ファイル読み込み（.shp 等） | 読み込み直後に WGS84 へ正規化（CRS None は warning 付き `set_crs`、その他は `to_crs`）— scaffold が自動生成。`.prj` 欠落 .shp × Create Points の sjoin で出る CRS mismatch 警告の恒久対策 |
+| .shp の属性列が geometry しか無い | 同名 `.dbf` サイドカーが同フォルダに無い（GDAL は無音で geometry のみ開く）。scaffold 生成の存在チェックが `FileNotFoundError` で検知 — ファイル一式を揃える |
 | FindReplace の NoCase | ヘルパーの `case_sensitive` に反転して渡される（NoCase=True → case_sensitive=False） |
 | 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
 | Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx では Map タブのみ、通常グリッド/CSV に出ない）。golden 比較前に比較側で drop — 生成コード側では消さない |
