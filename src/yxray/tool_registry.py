@@ -39,6 +39,13 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "# TODO: loop over files — pd.concat([pd.read_csv(f) for f in files])",
         "no",
     ),
+    "Directory": ToolInfo(
+        "Directory",
+        "input",
+        "# TODO: list folder contents — glob.glob(os.path.join(dir, file_spec)) "
+        "or pathlib.Path(dir).rglob(file_spec) if recursive",
+        "partial",
+    ),
     "DbFileOutput": ToolInfo(
         "Output", "output", "df.to_csv(...) / df.to_excel(..., index=False)", "yes"
     ),
@@ -75,6 +82,13 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "Multi-Field Formula",
         "transform",
         "# TODO: apply same formula across columns — df.apply(..., axis=1)",
+        "no",
+    ),
+    "MultiRowFormula": ToolInfo(
+        "Multi-Row Formula",
+        "transform",
+        "# TODO: multi-row formula — [Row-N:Field]/[Row+N:Field] references; "
+        "typically df[col].shift(n), or groupby(...).shift(n) if GroupByFields is set",
         "no",
     ),
     "AlteryxJoin": ToolInfo(
@@ -174,6 +188,35 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "transform",
         'gpd.sjoin(targets, universe, predicate="intersects")',
         "partial",
+    ),
+    "SpatialInfo": ToolInfo(
+        "Spatial Info",
+        "transform",
+        "# TODO: spatial info — depends on SelectedItems, e.g. "
+        "gdf.geometry.centroid / .area / .length / .is_valid",
+        "no",
+    ),
+    "Buffer": ToolInfo(
+        "Buffer",
+        "transform",
+        "gdf.geometry.buffer(distance)  "
+        "# reproject to a projected CRS first — see Docs/spatial-crs-design.md",
+        "partial",
+    ),
+    "Distance": ToolInfo(
+        "Distance",
+        "transform",
+        "# TODO: distance — straight-line: gpd.sjoin_nearest(targets, sources, "
+        'distance_col="Distance"); drive-time/drive-distance mode has no pandas '
+        "equivalent (needs a routing service)",
+        "no",
+    ),
+    "PolySplit": ToolInfo(
+        "Poly Split",
+        "transform",
+        "# TODO: poly split — SplitTo Object: gdf.explode(index_parts=False); "
+        "SplitTo Point/Line: extract vertices from geometry.coords/.boundary",
+        "no",
     ),
     "GenerateRows": ToolInfo(
         "Generate Rows", "transform", "pd.DataFrame(range(...))", "yes"
