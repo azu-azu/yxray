@@ -2131,6 +2131,32 @@ function _renderClusterInfoBlock(toolType, memberIds, body) {
   body.appendChild(wrap);
 }
 
+// Shows the header-level Expand/Collapse button (next to the panel title,
+// which stays visible while #panel-body scrolls) and wires its click handler.
+function _setPanelExpandBtn(text, onclick) {
+  var btn = document.getElementById('panel-expand-btn');
+  btn.textContent = text;
+  btn.onclick = onclick;
+  btn.style.display = '';
+}
+
+// Hides the header-level Expand/Collapse button for panels that don't need
+// it (memo nodes, plain nodes, an expanded member's own detail view).
+function _hidePanelExpandBtn() {
+  document.getElementById('panel-expand-btn').style.display = 'none';
+}
+
+// Shows the "↓ JSON" cluster-download button in the fixed action bar
+// (its click handler is bound once at startup — see bottom of file).
+function _showClusterJsonBtn() {
+  document.getElementById('panel-cluster-json-btn').style.display = '';
+}
+
+// Hides the "↓ JSON" cluster-download button for non-cluster panels.
+function _hideClusterJsonBtn() {
+  document.getElementById('panel-cluster-json-btn').style.display = 'none';
+}
+
 // Shared render helper: builds Expand/Collapse button + member list for a cluster.
 // Called from openPanel() and from within the buttons themselves so the panel
 // stays open and its content flips between "Expand" and "Collapse" states.
@@ -2144,19 +2170,9 @@ function _refreshClusterPanel(groupKey) {
     document.getElementById('panel-title-text').textContent =
       c.toolType + ' \xd7' + c.memberIds.length + ' nodes';
     _renderClusterInfoBlock(c.toolType, c.memberIds, body);
-    var expandBtn = document.createElement('button');
-    expandBtn.className = 'ctrl-btn';
-    expandBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;background:var(--accent);color:#fff;border-color:var(--accent);font-size:13px;';
-    expandBtn.textContent = 'Expand';
-    expandBtn.onclick = function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); };
-    body.appendChild(expandBtn);
+    _setPanelExpandBtn('Expand cluster', function() { expandCluster(groupKey); _refreshClusterPanel(groupKey); });
     _setPanelBtn('excel');
-    var jsonBtn = document.createElement('button');
-    jsonBtn.className = 'ctrl-btn';
-    jsonBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
-    jsonBtn.textContent = '↓ JSON';
-    jsonBtn.onclick = function() { downloadClusterJSON(); };
-    body.appendChild(jsonBtn);
+    _showClusterJsonBtn();
     if (c.isManual) {
       var removeBtn = document.createElement('button');
       removeBtn.className = 'ctrl-btn';
@@ -2182,19 +2198,9 @@ function _refreshClusterPanel(groupKey) {
     document.getElementById('panel-title-text').textContent =
       group.toolType + ' \xd7' + group.memberIds.length + ' nodes';
     _renderClusterInfoBlock(group.toolType, group.memberIds, body);
-    var collapseBtn = document.createElement('button');
-    collapseBtn.className = 'ctrl-btn';
-    collapseBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;font-size:13px;';
-    collapseBtn.textContent = 'Collapse';
-    collapseBtn.onclick = function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); };
-    body.appendChild(collapseBtn);
+    _setPanelExpandBtn('Collapse cluster', function() { recollapseGroup(groupKey); _refreshClusterPanel(groupKey); });
     _setPanelBtn('excel');
-    var jsonBtn2 = document.createElement('button');
-    jsonBtn2.className = 'ctrl-btn';
-    jsonBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:6px;font-size:13px;';
-    jsonBtn2.textContent = '↓ JSON';
-    jsonBtn2.onclick = function() { downloadClusterJSON(); };
-    body.appendChild(jsonBtn2);
+    _showClusterJsonBtn();
     if (group.isManual) {
       var removeBtn2 = document.createElement('button');
       removeBtn2.className = 'ctrl-btn';
@@ -2398,6 +2404,8 @@ function _setPanelBtn(mode) {
 function openPanel(nodeId) {
   _panelNodeId = nodeId;
   _setPanelBtn('copy');
+  _hidePanelExpandBtn();
+  _hideClusterJsonBtn();
   var body = document.getElementById('panel-body');
   body.innerHTML = '';
 
@@ -3123,6 +3131,7 @@ document.getElementById('panel-copy-btn').addEventListener('click', function() {
   else copyPanelContent();
 });
 document.getElementById('panel-copy-json-btn').addEventListener('click', copyPanelJSON);
+document.getElementById('panel-cluster-json-btn').addEventListener('click', downloadClusterJSON);
 document.getElementById('panel-copy-id-btn').addEventListener('click', copyPanelId);
 document.getElementById('panel-copy-tool-id-btn').addEventListener('click', copyPanelToolId);
 document.getElementById('panel-close-btn').addEventListener('click', closePanel);
