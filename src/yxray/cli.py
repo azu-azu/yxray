@@ -409,6 +409,10 @@ app.command("i", hidden=True)(_inspect_impl)
 
 def _collect_deps(code: str) -> list[str]:
     deps = ["pandas"]
+    if "import geopandas as gpd" in code:
+        deps.append("geopandas")
+    if "import numpy as np" in code:
+        deps.append("numpy")
     if "read_excel" in code or "to_excel" in code:
         deps.append("openpyxl")
     return deps
@@ -542,6 +546,7 @@ def _explain_impl(  # noqa: B008
       acd explain workflow.yxmd
       acd ex workflow.yxmd -o build/
     """
+    from yxray.output_collisions import detect_duplicate_outputs
     from yxray.scaffold import scaffold, scaffold_simple_blocks
     from yxray.staleness import detect_stale_select_fields
 
@@ -557,9 +562,12 @@ def _explain_impl(  # noqa: B008
         raise typer.Exit(code=2) from None
 
     stale_warnings = detect_stale_select_fields(doc)
+    duplicate_output_warnings = detect_duplicate_outputs(doc)
     warnings_by_tool: dict[int, list[str]] = {}
     for w in stale_warnings:
         warnings_by_tool.setdefault(w.tool_id, []).append(w.message)
+    for dw in duplicate_output_warnings:
+        warnings_by_tool.setdefault(dw.tool_id, []).append(dw.message)
 
     md_header, md_blocks = scaffold_simple_blocks(
         doc, warnings_by_tool=warnings_by_tool

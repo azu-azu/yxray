@@ -27,7 +27,7 @@ from tests.fixtures.cli import (
     POSITION_YXMD_A,
     POSITION_YXMD_B,
 )
-from yxray.cli import app
+from yxray.cli import _collect_deps, app
 from yxray.manual_clusters import workflow_fingerprint
 from yxray.parser import parse_one
 
@@ -362,6 +362,35 @@ def test_diff_include_positions_detects_position_change(tmp_path: pathlib.Path) 
         app, ["diff", str(path_a), str(path_b), "--include-positions"]
     )
     assert result_with_flag.exit_code == 1
+
+
+def test_collect_deps_always_includes_pandas() -> None:
+    assert _collect_deps("import pandas as pd\n") == ["pandas"]
+
+
+def test_collect_deps_detects_geopandas_import() -> None:
+    code = "import geopandas as gpd\nimport pandas as pd\n"
+    assert _collect_deps(code) == ["pandas", "geopandas"]
+
+
+def test_collect_deps_detects_numpy_import() -> None:
+    code = "import numpy as np\nimport pandas as pd\n"
+    assert _collect_deps(code) == ["pandas", "numpy"]
+
+
+def test_collect_deps_detects_excel_usage() -> None:
+    code = 'import pandas as pd\ndf = pd.read_excel("x.xlsx")\n'
+    assert _collect_deps(code) == ["pandas", "openpyxl"]
+
+
+def test_collect_deps_combines_all_detected_deps() -> None:
+    code = (
+        "import geopandas as gpd\n"
+        "import numpy as np\n"
+        "import pandas as pd\n"
+        'df.to_excel("out.xlsx")\n'
+    )
+    assert _collect_deps(code) == ["pandas", "geopandas", "numpy", "openpyxl"]
 
 
 def test_explain_output_flag_writes_to_custom_dir(tmp_path: pathlib.Path) -> None:
