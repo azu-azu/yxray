@@ -14,6 +14,7 @@ from yxray.config_utils import (
     as_list,
     comment_safe,
     field_name,
+    first_text,
     py_str,
     select_field_rows,
 )
@@ -92,10 +93,10 @@ def _embedded_select_deviations(rows: list[Any]) -> list[str]:
         if str(r.get("@selected", "True")).lower() == "false":
             deselected.append(name)
             continue
-        new_name = r.get("@rename") or r.get("@Rename")
+        new_name = first_text(r, "@rename", "@Rename")
         if new_name and new_name != name:
             renamed.append(f"{name} -> {new_name}")
-        alteryx_type = r.get("@type") or r.get("@Type")
+        alteryx_type = first_text(r, "@type", "@Type")
         if alteryx_type:
             retyped.append(f"{name} ({alteryx_type})")
     deviations: list[str] = []

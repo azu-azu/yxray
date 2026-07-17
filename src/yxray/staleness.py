@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from yxray.config_utils import field_name, select_field_rows
+from yxray.config_utils import field_name, first_text, select_field_rows
 from yxray.models.workflow import WorkflowDoc
 from yxray.tool_registry import classify_tool
 from yxray.topology import build_predecessor_map, topo_order
@@ -45,7 +45,7 @@ def _is_select(tool_type: str) -> bool:
 
 
 def _get_rename(row: dict[str, Any]) -> str | None:
-    return row.get("@rename") or row.get("@Rename") or None
+    return first_text(row, "@rename", "@Rename") or None
 
 
 def detect_stale_select_fields(doc: WorkflowDoc) -> list[StaleFieldWarning]:

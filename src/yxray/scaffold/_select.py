@@ -9,7 +9,7 @@ pseudo-field patterns that usually indicate a source-file issue.
 
 from __future__ import annotations
 
-from yxray.config_utils import field_name, py_str, select_field_rows
+from yxray.config_utils import field_name, first_text, py_str, select_field_rows
 from yxray.scaffold._common import GeneratedCode, ToolContext
 
 # Select tools always carry this warning: the .yxmd XML keeps the Select
@@ -37,11 +37,11 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
         if not name:
             continue
         selected = r.get("@selected", "True").lower() not in ("false",)
-        new_name: str | None = r.get("@rename") or r.get("@Rename") or None
+        new_name: str | None = first_text(r, "@rename", "@Rename") or None
         if new_name == name:
             new_name = None
         # @type は型変更された列にのみ現れる（V_WString / Int32 など）
-        alteryx_type: str | None = r.get("@type") or r.get("@Type") or None
+        alteryx_type: str | None = first_text(r, "@type", "@Type") or None
         edits.append((name, new_name, selected, alteryx_type))
 
     if not edits:

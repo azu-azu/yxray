@@ -323,7 +323,7 @@ def _describe_join(config: dict[str, Any], _members: list[Any] | None) -> str:
 
 
 def _get_rename(row: dict[str, Any]) -> str:
-    return row.get("@rename") or row.get("@Rename") or ""
+    return first_text(row, "@rename", "@Rename")
 
 
 def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
@@ -347,7 +347,7 @@ def _describe_select(config: dict[str, Any], _members: list[Any] | None) -> str:
         for row in rows
         if isinstance(row, dict)
         and field_name(row)
-        and (row.get("@type") or row.get("@Type"))
+        and first_text(row, "@type", "@Type")
     ]
     if not selected:
         return "Selects or changes fields"
