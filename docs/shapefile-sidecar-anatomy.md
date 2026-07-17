@@ -29,12 +29,12 @@ GDAL は .dbf を任意扱いで開き、scaffold が Alteryx パリティのた
 「Shapefile」は実際には、同じベース名を持つ複数ファイルの集合を指す。
 
 ```
-1_5mesh.shp   図形本体(ポリゴン等)── これだけでは属性列は無い
-1_5mesh.dbf   属性テーブル(MESHCODE, BR_Top, … の列と値)
-1_5mesh.shx   図形のインデックス
-1_5mesh.prj   座標参照系(CRS)
-1_5mesh.cpg   文字エンコーディング(あれば)
-1_5mesh.qmd   QGIS のメタデータ(読み込みには不要)
+mesh.shp   図形本体(ポリゴン等)── これだけでは属性列は無い
+mesh.dbf   属性テーブル(MESHCODE, BR_Top, … の列と値)
+mesh.shx   図形のインデックス
+mesh.prj   座標参照系(CRS)
+mesh.cpg   文字エンコーディング(あれば)
+mesh.qmd   QGIS のメタデータ(読み込みには不要)
 ```
 
 読み込みに使うのは `.shp + .dbf + .shx + .prj` の4点セットと考えてよい。
@@ -179,7 +179,7 @@ if df1.crs is None:
 
 ```python
 from pathlib import Path
-path = Path("1_5mesh.shp")
+path = Path("mesh.shp")
 for file in path.parent.glob(f"{path.stem}.*"):
     print(file.name)
 ```

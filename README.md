@@ -13,8 +13,7 @@ Alteryx workflow inspector and diff tool. Reads `.yxmd` files as structured data
 |---|---|---|
 | `acd inspect <workflow.yxmd>` | `i` | Visualize a single workflow as an interactive HTML graph |
 | `acd diff <a.yxmd> <b.yxmd>` | `d` | Compare two workflows and report field-level differences |
-| `acd explain <workflow.yxmd>` | `ex` | Show each tool's Python/pandas equivalent in topological order |
-| `acd scaffold <workflow.yxmd>` | `sc` | Generate a Python/pandas skeleton from a workflow |
+| `acd explain <workflow.yxmd>` | `ex` | Show each tool's Python/pandas equivalent in topological order, and write a `.md`/`.py`/`pyproject.toml` scaffold trio to the output dir |
 | `acd cluster backup <clusters.json>` | — | Back up manual cluster JSON before editing or reuse |
 
 ---
@@ -156,13 +155,6 @@ Show each tool's nearest Python/pandas equivalent in topological order:
 acd explain workflow.yxmd
 ```
 
-JSON output:
-
-```bash
-acd explain workflow.yxmd --json
-acd explain workflow.yxmd --json | jq '.[].python_hint'
-```
-
 Unsupported tools are flagged with a `# TODO` comment.
 
 The `.md` report follows each ToolID's Python snippet with the original Alteryx `<Node>…</Node>` XML, so generated code and its source configuration can be compared per tool. The inspect report's right pane shows the same XML as a **source (Node XML)** section at the bottom.
@@ -175,24 +167,7 @@ Use `--output`/`-o` to write the `.md`/`.py`/`pyproject.toml` trio into a differ
 acd explain workflow.yxmd -o build/
 ```
 
----
-
-### scaffold
-
-Generate a Python/pandas skeleton from a workflow:
-
-```bash
-acd scaffold workflow.yxmd
-# → prints scaffold to stdout
-```
-
-Write to a file:
-
-```bash
-acd scaffold workflow.yxmd -o workflow.py
-```
-
-The generated file is structured as a runnable Python module:
+The `.py` file written by `explain` (see above) is structured as a runnable Python module:
 
 - **Preamble**: imports and `ENV = os.getenv("APP_ENV", "test")`. The `SelectColumnEdit` / `apply_select_edits` helper definitions are **not** embedded — Select blocks carry a NOTE comment pointing to the reference implementation in `scripts/apply_select_edits.py`, which you copy into your project
 - **Paths block**: `INPUTS` / `OUTPUTS` dicts gated by `ENV`. `test` mode resolves paths relative to `BASE_DIR`; `prod` mode uses the original absolute paths from the workflow
@@ -276,13 +251,16 @@ CI runs the same lint, type-check, and test suite on Python 3.11, 3.12, and
 yxray/
 ├── src/
 │   └── yxray/
-│       ├── cli.py              # Typer CLI (acd inspect / diff / explain / scaffold)
+│       ├── cli.py              # Typer CLI (acd inspect / diff / explain)
 │       ├── parser.py           # lxml-based .yxmd loader
 │       ├── exceptions.py       # ParseError hierarchy
 │       ├── config_utils.py     # XML config helpers (as_list, get_text, ...)
 │       ├── topology.py         # Graph helpers (topo_order, compute_node_layer)
 │       ├── summarizer.py       # Rule-based tool descriptions + key insights
 │       ├── explain.py          # Alteryx → Python/pandas hint engine
+│       ├── tool_registry.py    # Per-tool python_hint metadata
+│       ├── alteryx_expr.py     # Alteryx expression → Python translation
+│       ├── staleness.py        # Stale Select field detection (renamed-upstream warnings)
 │       ├── manual_clusters.py  # Manual cluster JSON validation and backups
 │       ├── scaffold/           # Python/pandas skeleton generator (per-tool modules + registry)
 │       ├── models/             # Frozen dataclasses (WorkflowDoc, DiffResult, ...)
