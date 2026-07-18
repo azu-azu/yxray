@@ -666,6 +666,15 @@ def test_scaffold_filter_date_warning_survives_translation_fallback() -> None:
     assert "# WARNING: date comparison" in code
 
 
+def test_scaffold_filter_no_date_warning_on_fallback_without_date_functions() -> None:
+    # Same fallback path as above, but nothing in the raw expression looks
+    # like a date function — _ALTERYX_DATE_FN_RE must not fire on unrelated
+    # untranslatable syntax.
+    code = scaffold_simple(_expr_filter_doc("[a] ?? weird syntax"))
+    assert "# TODO: could not translate expression" in code
+    assert "# WARNING: date comparison" not in code
+
+
 # ── Formula ────────────────────────────────────────────────────────────────
 
 
