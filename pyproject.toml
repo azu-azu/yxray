@@ -58,6 +58,9 @@ ignore = []
 # reference_impl/ holds reference implementations kept close to their
 # golden-verified originals; Japanese comments run past 88 chars
 "reference_impl/*" = ["E501"]
+# tools/ holds standalone analysis scripts (not part of the yxray package)
+# with the same dense Japanese comment style
+"tools/*" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
