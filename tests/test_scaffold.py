@@ -651,6 +651,21 @@ def test_scaffold_filter_untranslatable_expression_gets_todo_marker() -> None:
     )
 
 
+def test_scaffold_filter_date_warning_survives_translation_fallback() -> None:
+    # translate_filter_masks() fails on the whole expression (the "?? weird"
+    # operand), so pandas_expr falls back to the raw Alteryx source and
+    # never contains pd.to_datetime — _DATE_EXPR_RE alone would miss that
+    # this filter still compares a date. _ALTERYX_DATE_FN_RE catches it from
+    # the untranslated ToDate(...) call instead.
+    code = scaffold_simple(
+        _expr_filter_doc(
+            '[EventDate] >= ToDate("2024-01-01") AND [Other] ?? weird'
+        )
+    )
+    assert "# TODO: could not translate expression" in code
+    assert "# WARNING: date comparison" in code
+
+
 # ── Formula ────────────────────────────────────────────────────────────────
 
 

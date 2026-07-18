@@ -44,6 +44,12 @@ from yxray.scaffold._common import (
 # Translated filter expressions that compare against datetime values;
 # CSV-loaded columns are strings, so warn about the dtype mismatch.
 _DATE_EXPR_RE = re.compile(r"\bpd\.(to_datetime|Timestamp|DateOffset)\b")
+# Same intent as _DATE_EXPR_RE, but for the pre-translation Alteryx source:
+# when translate_filter_masks() fails outright, pandas_expr is the raw
+# expression (fallback_field_substitute doesn't touch function calls), so
+# _DATE_EXPR_RE's pd.* pattern never matches even though the filter does
+# compare dates — this is the only way to still catch it.
+_ALTERYX_DATE_FN_RE = re.compile(r"\b(?:ToDate|DateTime)\w*\s*\(", re.IGNORECASE)
 # [col] adjacent to a ToDate/DateTime* call across a comparison operator,
 # in either order — the column that is actually being date-compared.
 # Multi-char operators must precede their single-char prefix (>= before >)
@@ -225,7 +231,10 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
                 "# TODO: could not translate expression — port manually:"
                 f" {comment_safe(expr)}"
             )
-        if _DATE_EXPR_RE.search(pandas_expr):
+        is_date_expr = _DATE_EXPR_RE.search(pandas_expr) or (
+            translation is None and _ALTERYX_DATE_FN_RE.search(expr)
+        )
+        if is_date_expr:
             lines += [
                 "# WARNING: date comparison — columns read from CSV are"
                 " strings; convert",
