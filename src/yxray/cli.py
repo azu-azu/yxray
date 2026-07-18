@@ -192,7 +192,7 @@ def _diff_impl(  # noqa: B008
     ),
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
-        "--no-filter-ui-tools",
+        "--filter-ui-tools/--no-filter-ui-tools",
         help=(
             "Include AlteryxGuiToolkit.* app interface nodes"
             " (Tab, TextBox, Action, etc.) filtered by default"
@@ -348,7 +348,7 @@ def _inspect_impl(  # noqa: B008
     ),
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
-        "--no-filter-ui-tools",
+        "--filter-ui-tools/--no-filter-ui-tools",
         help=(
             "Include AlteryxGuiToolkit.* app interface nodes"
             " (Tab, TextBox, Action, etc.) filtered by default"

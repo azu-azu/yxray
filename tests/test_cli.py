@@ -26,6 +26,8 @@ from tests.fixtures.cli import (
     MINIMAL_YXMD_B,
     POSITION_YXMD_A,
     POSITION_YXMD_B,
+    UI_TOOL_YXMD,
+    UI_TOOL_YXMD_CHANGED,
 )
 from yxray.cli import _collect_deps, app
 from yxray.manual_clusters import workflow_fingerprint
@@ -177,6 +179,51 @@ def test_inspect_cluster_file_embeds_manual_clusters(
     assert result.exit_code == 0
     html = output.read_text(encoding="utf-8")
     assert '"manual_clusters": [{"label": "prep", "tool_ids": [901, 902]}]' in html
+
+
+def test_inspect_no_filter_ui_tools_flag_includes_interface_nodes(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Regression: --filter-ui-tools/--no-filter-ui-tools must actually toggle.
+
+    Previously registered as a single "--no-filter-ui-tools" name (no "/" pair),
+    which click/typer never negates from its True default — the flag was a
+    silent no-op and every invocation behaved as if UI tools were filtered.
+    """
+    workflow = tmp_path / "workflow.yxmd"
+    workflow.write_bytes(UI_TOOL_YXMD)
+
+    default_result = runner.invoke(app, ["inspect", str(workflow), "-o", str(tmp_path / "a.html")])
+    unfiltered_result = runner.invoke(
+        app,
+        ["inspect", str(workflow), "--no-filter-ui-tools", "-o", str(tmp_path / "b.html")],
+    )
+    explicit_filtered_result = runner.invoke(
+        app,
+        ["inspect", str(workflow), "--filter-ui-tools", "-o", str(tmp_path / "c.html")],
+    )
+
+    assert "(1 nodes" in default_result.stderr
+    assert "(2 nodes" in unfiltered_result.stderr
+    assert "(1 nodes" in explicit_filtered_result.stderr
+
+
+def test_diff_no_filter_ui_tools_flag_detects_interface_node_changes(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Regression: diff must only see the changed TextBox when unfiltered."""
+    path_a = tmp_path / "a.yxmd"
+    path_b = tmp_path / "b.yxmd"
+    path_a.write_bytes(UI_TOOL_YXMD)
+    path_b.write_bytes(UI_TOOL_YXMD_CHANGED)
+
+    default_result = runner.invoke(app, ["diff", str(path_a), str(path_b)])
+    unfiltered_result = runner.invoke(
+        app, ["diff", str(path_a), str(path_b), "--no-filter-ui-tools"]
+    )
+
+    assert default_result.exit_code == 0  # only diff is inside a filtered-out TextBox
+    assert unfiltered_result.exit_code == 1  # unfiltered: the TextBox change is visible
 
 
 def test_cluster_backup_list_restore_commands(tmp_path: pathlib.Path) -> None:

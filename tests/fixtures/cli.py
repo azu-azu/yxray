@@ -83,3 +83,63 @@ POSITION_YXMD_B: bytes = b"""<?xml version="1.0"?>
 
 # Malformed XML — triggers MalformedXMLError → exit code 2
 MALFORMED_XML: bytes = b"<not valid xml><<"
+
+# ToolID 901 — Filter (data), ToolID 903 — TextBox (AlteryxGuiToolkit interface node)
+# Used to regression-test the --filter-ui-tools/--no-filter-ui-tools flag pair
+# (bug: previously registered as a single "--no-filter-ui-tools" name, which
+# click/typer never negates — the flag was a silent no-op).
+UI_TOOL_YXMD: bytes = b"""<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2020.1">
+  <Nodes>
+    <Node ToolID="901">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter">
+        <Position x="60" y="100"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Expression>Field1 > 0</Expression>
+        </Configuration>
+      </Properties>
+    </Node>
+    <Node ToolID="903">
+      <GuiSettings Plugin="AlteryxGuiToolkit.TextBox.TextBox">
+        <Position x="60" y="200"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Text>note</Text>
+        </Configuration>
+      </Properties>
+    </Node>
+  </Nodes>
+  <Connections/>
+</AlteryxDocument>"""
+
+# Same as UI_TOOL_YXMD but the TextBox's text differs — a change that is only
+# visible when Interface nodes are NOT filtered out.
+UI_TOOL_YXMD_CHANGED: bytes = b"""<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2020.1">
+  <Nodes>
+    <Node ToolID="901">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter">
+        <Position x="60" y="100"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Expression>Field1 > 0</Expression>
+        </Configuration>
+      </Properties>
+    </Node>
+    <Node ToolID="903">
+      <GuiSettings Plugin="AlteryxGuiToolkit.TextBox.TextBox">
+        <Position x="60" y="200"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Text>changed note</Text>
+        </Configuration>
+      </Properties>
+    </Node>
+  </Nodes>
+  <Connections/>
+</AlteryxDocument>"""
