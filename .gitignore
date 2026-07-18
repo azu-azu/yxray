@@ -51,3 +51,4 @@ examples/*_report.html
 input/
 input_diff/
 output/
+.private/
