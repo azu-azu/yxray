@@ -639,6 +639,18 @@ def test_scaffold_filter_untranslatable_expression_never_splits() -> None:
     assert 'df1["a"] ?? weird AND df1["b"] ?? syntax' in code
 
 
+def test_scaffold_filter_untranslatable_expression_gets_todo_marker() -> None:
+    # The [field] substitution fallback keeps untranslated Alteryx syntax
+    # verbatim — it reads like Python but is not runnable. A plain "review
+    # translation" header is not enough to distinguish it from a fully
+    # translated expression; it needs its own explicit TODO.
+    code = scaffold_simple(_expr_filter_doc("[a] ?? weird syntax"))
+    assert (
+        "# TODO: could not translate expression — port manually:"
+        " [a] ?? weird syntax" in code
+    )
+
+
 # ── Formula ────────────────────────────────────────────────────────────────
 
 
@@ -718,6 +730,15 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
     )
     code = scaffold(doc)
     assert 'df2["x"] ?? weird syntax' in code
+    # The [field] substitution fallback keeps untranslated Alteryx syntax
+    # verbatim — it reads like Python but is not runnable (e.g. an
+    # untranslated function call raises NameError). It needs its own
+    # explicit TODO, distinct from the block-level "review translation"
+    # header that's emitted regardless of whether translation succeeded.
+    assert (
+        '# TODO: could not translate expression for "y" — port manually:'
+        " [x] ?? weird syntax" in code
+    )
 
 
 def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:

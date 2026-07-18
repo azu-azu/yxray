@@ -12,7 +12,14 @@ from yxray.alteryx_expr import (
     ExprTranslationError,
     translate_expr,
 )
-from yxray.config_utils import as_list, field_name, get_text, py_str, sort_field_rows
+from yxray.config_utils import (
+    as_list,
+    comment_safe,
+    field_name,
+    get_text,
+    py_str,
+    sort_field_rows,
+)
 from yxray.scaffold._common import (
     FIELD_RE,
     GeneratedCode,
@@ -21,19 +28,20 @@ from yxray.scaffold._common import (
 )
 
 
-def _translate_expr(expr: str, df_var: str) -> ExprTranslation:
+def _translate_expr(expr: str, df_var: str) -> tuple[ExprTranslation, bool]:
     """Translate an Alteryx expression to pandas.
 
     Falls back to plain [field] → df_var["field"] substitution when the
-    expression uses syntax translate_expr does not understand.
+    expression uses syntax translate_expr does not understand. The bool
+    is False on fallback — the substitution keeps untranslated Alteryx
+    syntax (function names, operators) verbatim, so it looks like Python
+    but is not runnable; callers must flag it, not just emit it.
     """
     try:
-        return translate_expr(expr, df_var)
+        return translate_expr(expr, df_var), True
     except ExprTranslationError:
-        return ExprTranslation(
-            code=FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr),
-            uses_numpy=False,
-        )
+        code = FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
+        return ExprTranslation(code=code, uses_numpy=False), False
 
 
 def gen_formula(ctx: ToolContext) -> GeneratedCode:
@@ -64,8 +72,13 @@ def gen_formula(ctx: ToolContext) -> GeneratedCode:
     ]
     uses_numpy = False
     for fname, expr in formulas:
-        translation = _translate_expr(expr, df_out)
+        translation, ok = _translate_expr(expr, df_out)
         uses_numpy = uses_numpy or translation.uses_numpy
+        if not ok:
+            lines.append(
+                f'# TODO: could not translate expression for "{comment_safe(fname)}"'
+                f" — port manually: {comment_safe(expr)}"
+            )
         lines.append(f"{df_out}[{py_str(fname)}] = {translation.code}")
     return GeneratedCode(
         "\n".join(lines),

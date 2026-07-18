@@ -219,6 +219,11 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
             translation = None
             pandas_expr = FIELD_RE.sub(lambda m: f"{df_in}[{py_str(m.group(1))}]", expr)
         lines = ["# Alteryx expression — review translation"]
+        if translation is None:
+            lines.append(
+                "# TODO: could not translate expression — port manually:"
+                f" {comment_safe(expr)}"
+            )
         if _DATE_EXPR_RE.search(pandas_expr):
             lines += [
                 "# WARNING: date comparison — columns read from CSV are"
