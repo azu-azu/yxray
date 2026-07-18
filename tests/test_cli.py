@@ -193,10 +193,16 @@ def test_inspect_no_filter_ui_tools_flag_includes_interface_nodes(
     workflow = tmp_path / "workflow.yxmd"
     workflow.write_bytes(UI_TOOL_YXMD)
 
-    default_result = runner.invoke(app, ["inspect", str(workflow), "-o", str(tmp_path / "a.html")])
+    default_result = runner.invoke(
+        app,
+        ["inspect", str(workflow), "-o", str(tmp_path / "a.html")],
+    )
     unfiltered_result = runner.invoke(
         app,
-        ["inspect", str(workflow), "--no-filter-ui-tools", "-o", str(tmp_path / "b.html")],
+        [
+            "inspect", str(workflow), "--no-filter-ui-tools",
+            "-o", str(tmp_path / "b.html"),
+        ],
     )
     explicit_filtered_result = runner.invoke(
         app,
