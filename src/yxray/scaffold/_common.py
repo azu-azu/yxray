@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
+from yxray.config_utils import py_str
+
 __all__ = [
     "FIELD_RE",
     "GeneratedCode",
@@ -20,11 +22,24 @@ __all__ = [
     "Requirement",
     "ToolContext",
     "anchor_src",
+    "fallback_field_substitute",
     "frame_name",
 ]
 
 # [field] notation in Alteryx expressions.
 FIELD_RE = re.compile(r"\[([^\]]+)\]")
+
+
+def fallback_field_substitute(expr: str, df_var: str) -> str:
+    """[field] -> df_var["field"], leaving the rest of expr untouched.
+
+    Used when an Alteryx expression can't be confidently translated: it
+    resolves field references but keeps any Alteryx-only syntax (function
+    names, operators) verbatim, so the result looks like Python but is not
+    necessarily runnable — callers must flag it (e.g. with a TODO), not
+    just emit it.
+    """
+    return FIELD_RE.sub(lambda m: f'{df_var}[{py_str(m.group(1))}]', expr)
 
 
 def frame_name(

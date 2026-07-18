@@ -38,6 +38,7 @@ from yxray.scaffold._common import (
     GeneratedCode,
     Requirement,
     ToolContext,
+    fallback_field_substitute,
 )
 
 # Translated filter expressions that compare against datetime values;
@@ -217,7 +218,7 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
             pandas_expr = translation.combined
         except ExprTranslationError:
             translation = None
-            pandas_expr = FIELD_RE.sub(lambda m: f"{df_in}[{py_str(m.group(1))}]", expr)
+            pandas_expr = fallback_field_substitute(expr, df_in)
         lines = ["# Alteryx expression — review translation"]
         if translation is None:
             lines.append(

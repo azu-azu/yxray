@@ -21,10 +21,10 @@ from yxray.config_utils import (
     sort_field_rows,
 )
 from yxray.scaffold._common import (
-    FIELD_RE,
     GeneratedCode,
     Requirement,
     ToolContext,
+    fallback_field_substitute,
 )
 
 
@@ -40,7 +40,7 @@ def _translate_expr(expr: str, df_var: str) -> tuple[ExprTranslation, bool]:
     try:
         return translate_expr(expr, df_var), True
     except ExprTranslationError:
-        code = FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
+        code = fallback_field_substitute(expr, df_var)
         return ExprTranslation(code=code, uses_numpy=False), False
 
 
