@@ -75,7 +75,7 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
     col_lines.append(
         "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
     )
-    col_lines.append("# copy them from scripts/apply_select_edits.py")
+    col_lines.append("# copy them from reference_impl/apply_select_edits.py")
     col_lines.append(f"{var} = [")
     for name, new_name, selected, alteryx_type in edits:
         if not selected:

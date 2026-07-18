@@ -306,7 +306,7 @@ def main() -> None:
 
     このスクリプトは import して simulate_find_any_append() を直接呼ぶのが本来の
     使い方。ここはサンプルデータで挙動と出力を確認するためのデモで、
-    `python scripts/simulate_find_any_append.py` で実行できる。
+    `python reference_impl/simulate_find_any_append.py` で実行できる。
     実データは自分で DataFrame にして関数へ渡すこと。
     """
     targets_df = pd.DataFrame(

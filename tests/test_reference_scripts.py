@@ -1,4 +1,4 @@
-"""Behavior tests for the reference helpers in scripts/.
+"""Behavior tests for the reference helpers in reference_impl/.
 
 Generated scaffolds call these helpers without embedding their
 definitions; these tests pin the runtime behavior the generated code
@@ -13,11 +13,13 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-_SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+_REFERENCE_IMPL_DIR = Path(__file__).resolve().parents[1] / "reference_impl"
 
 
 def _load_script(name: str):
-    spec = importlib.util.spec_from_file_location(name, _SCRIPTS_DIR / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        name, _REFERENCE_IMPL_DIR / f"{name}.py"
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     # dataclasses resolves cls.__module__ through sys.modules — register

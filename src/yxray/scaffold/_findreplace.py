@@ -57,7 +57,7 @@ def _findreplace_any_append(
         "# is matched inside the Targets find field\n"
         "# NOTE: simulate_find_any_append() is not generated — copy"
         " it from\n"
-        "# scripts/simulate_find_any_append.py\n"
+        "# reference_impl/simulate_find_any_append.py\n"
     )
     return (
         header + f"{df_out} = simulate_find_any_append(\n"
