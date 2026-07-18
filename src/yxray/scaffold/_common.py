@@ -39,7 +39,7 @@ def fallback_field_substitute(expr: str, df_var: str) -> str:
     necessarily runnable — callers must flag it (e.g. with a TODO), not
     just emit it.
     """
-    return FIELD_RE.sub(lambda m: f'{df_var}[{py_str(m.group(1))}]', expr)
+    return FIELD_RE.sub(lambda m: f"{df_var}[{py_str(m.group(1))}]", expr)
 
 
 def frame_name(

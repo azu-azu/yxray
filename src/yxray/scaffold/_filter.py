@@ -212,6 +212,34 @@ def _filter_date_warning_lines(
     return lines
 
 
+def _expression_diagnostic_lines(
+    expr: str, pandas_expr: str, translation: FilterTranslation | None
+) -> list[str]:
+    """TODO (fallback only) + date-comparison WARNING (either path).
+
+    translation is None means translate_filter_masks() fell back to
+    fallback_field_substitute(): pandas_expr is then the raw Alteryx
+    source, so the date check also needs _ALTERYX_DATE_FN_RE (raw
+    ToDate/DateTime calls), not just _DATE_EXPR_RE (translated pd.* code).
+    """
+    lines: list[str] = []
+    if translation is None:
+        lines.append(
+            "# TODO: could not translate expression — port manually:"
+            f" {comment_safe(expr)}"
+        )
+    is_date_expr = _DATE_EXPR_RE.search(pandas_expr) or (
+        translation is None and _ALTERYX_DATE_FN_RE.search(expr)
+    )
+    if is_date_expr:
+        lines += [
+            "# WARNING: date comparison — columns read from CSV are"
+            " strings; convert",
+            '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
+        ]
+    return lines
+
+
 def gen_filter(ctx: ToolContext) -> GeneratedCode:
     config = ctx.config
     df_in = ctx.df_in
@@ -226,20 +254,7 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
             translation = None
             pandas_expr = fallback_field_substitute(expr, df_in)
         lines = ["# Alteryx expression — review translation"]
-        if translation is None:
-            lines.append(
-                "# TODO: could not translate expression — port manually:"
-                f" {comment_safe(expr)}"
-            )
-        is_date_expr = _DATE_EXPR_RE.search(pandas_expr) or (
-            translation is None and _ALTERYX_DATE_FN_RE.search(expr)
-        )
-        if is_date_expr:
-            lines += [
-                "# WARNING: date comparison — columns read from CSV are"
-                " strings; convert",
-                '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
-            ]
+        lines += _expression_diagnostic_lines(expr, pandas_expr, translation)
         mask_lines = (
             _filter_mask_lines(translation, df_in, df_out)
             if translation is not None
