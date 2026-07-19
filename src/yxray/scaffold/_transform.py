@@ -129,6 +129,12 @@ def gen_recordid(ctx: ToolContext) -> GeneratedCode:
     )
 
 
+def gen_countrecords(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    return GeneratedCode(f'{df_out} = pd.DataFrame({{"Count": [len({df_in})]}})')
+
+
 def gen_unique(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out

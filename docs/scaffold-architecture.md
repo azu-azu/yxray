@@ -87,7 +87,7 @@ __init__              ← 外部にはここだけ見せる
 | `_filter` | Filter 式変換サブシステム(日付比較・IsEmpty 死コード検出) | Filter |
 | `_select` | stale-XML 警告つき列編集 | Select |
 | `_combine` | 複数入力の結合(アンカー駆動) | Join, Union, AppendFields |
-| `_transform` | 単一入力の行変換 | Formula, Sort, Sample, Unique |
+| `_transform` | 単一入力の行変換 | Formula, Sort, Sample, Unique, RecordID, CountRecords |
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
@@ -135,3 +135,26 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
   (生成コードの完全一致)も更新すること。
 - このドキュメントは自動では読み込まれない。依頼時に
   「docs/scaffold-architecture.md 参照」と添えると確実。
+
+## `TOOL_REGISTRY` の `"no"`/`"partial"` を生成器に昇格させる基準
+
+`tool_registry.py` の `python_supported` が `"no"`/`"partial"` のツールは、
+`GENERATORS` 未登録のため `_assemble.py` が汎用 TODO スタブしか出さない
+(`python_hint` は `acd i`/`acd explain` のヒント表示専用で、`.py` 生成には
+使われない)。これを実際の生成器に昇格させてよいかの基準:
+
+- **設定が無い、または設定次第でコードの形が変わらない場合のみ即昇格可**。
+  例: `CountRecords`(2026-07-19 昇格) — Alteryx公式ドキュメントで
+  「UIに設定項目自体が無い」と確認済みで、`pd.DataFrame({"Count": [len(df)]})`
+  以外の出力があり得ない
+- **設定次第でコードの形が変わるツールは、実際のAlteryx出力とのgolden突合
+  なしに昇格させない**。`_findreplace.py`(golden 検証済み4モード変換)が
+  この規律の実例 — 対応済みの組み合わせだけ実コードにし、それ以外は
+  「対応不可」と分かる形の明示的TODOに落とす
+- `Directory`/`Buffer`(`"partial"`)は後者に該当し、2026-07-19 時点で
+  リポジトリ内に検証材料(実ワークフローXML)が無いため未昇格。
+  `MultiRowFormula`/`SpatialInfo`/`Distance`/`PolySplit`/`DynamicInput`
+  (`"no"`)はcommit `56b34d5` で「1つの生成スニペットに還元すると誤ったコードを
+  出すリスクの方が高い」と判断され、そもそも昇格候補から意図的に外されている
+- 昇格させる場合は本ドキュメントの表と `tool_registry.py` の該当 `ToolInfo`
+  (hint文言が実際の生成コードと食い違わないよう)を両方更新すること

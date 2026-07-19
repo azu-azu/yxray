@@ -1342,6 +1342,17 @@ def test_scaffold_recordid_without_config_uses_defaults() -> None:
     assert 'df2["RecordID"] = df2.index + 1' in code
 
 
+# ── Count Records ──────────────────────────────────────────────────────────
+
+
+def test_scaffold_countrecords_has_no_config() -> None:
+    doc = _chain_doc(
+        AlteryxNode(tool_id=ToolID(2), tool_type="CountRecords", x=10, y=0)
+    )
+    code = scaffold(doc)
+    assert 'df2 = pd.DataFrame({"Count": [len(df1)]})' in code
+
+
 # ── Text Input ─────────────────────────────────────────────────────────────
 
 

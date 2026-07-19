@@ -154,7 +154,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "df = df.reset_index(drop=True); df['RecordID'] = df.index + 1",
         "yes",
     ),
-    "CountRecords": ToolInfo("Count Records", "transform", "len(df)", "yes"),
+    "CountRecords": ToolInfo(
+        "Count Records", "transform", 'pd.DataFrame({"Count": [len(df)]})', "yes"
+    ),
     "DateTime": ToolInfo(
         "Date/Time", "transform", "pd.to_datetime(df[...], format=...)", "yes"
     ),
@@ -287,6 +289,7 @@ SCAFFOLD_SORT_SEGMENTS = frozenset({"AlteryxSort", "Sort"})
 SCAFFOLD_SAMPLE_SEGMENTS = frozenset({"AlteryxSample", "Sample"})
 SCAFFOLD_UNIQUE_SEGMENTS = frozenset({"Unique"})
 SCAFFOLD_RECORDID_SEGMENTS = frozenset({"RecordID"})
+SCAFFOLD_COUNTRECORDS_SEGMENTS = frozenset({"CountRecords"})
 SCAFFOLD_FINDREPLACE_SEGMENTS = frozenset({"FindReplace"})
 SCAFFOLD_APPENDFIELDS_SEGMENTS = frozenset({"AppendFields"})
 SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})
