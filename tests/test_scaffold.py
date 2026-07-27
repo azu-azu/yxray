@@ -136,10 +136,10 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
         )
     )
     code = scaffold(doc)
-    assert "if df1.crs is None:" in code
+    assert "if df_1.crs is None:" in code
     assert "no CRS metadata (missing .prj?)" in code
-    assert 'df1 = df1.set_crs("EPSG:4326")' in code
-    assert 'df1 = df1.to_crs("EPSG:4326")' in code
+    assert 'df_1 = df_1.set_crs("EPSG:4326")' in code
+    assert 'df_1 = df_1.to_crs("EPSG:4326")' in code
 
 
 def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
@@ -150,10 +150,10 @@ def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
         )
     )
     code = scaffold_simple(doc)
-    assert "if df1.crs is None:" in code
+    assert "if df_1.crs is None:" in code
     assert "no CRS metadata (missing .prj?)" in code
-    assert 'df1 = df1.set_crs("EPSG:4326")' in code
-    assert 'df1 = df1.to_crs("EPSG:4326")' in code
+    assert 'df_1 = df_1.set_crs("EPSG:4326")' in code
+    assert 'df_1 = df_1.to_crs("EPSG:4326")' in code
     # the warning uses logger, so the .md header must set one up
     assert "import logging" in code
     assert "logger = logging.getLogger(__name__)" in code
@@ -241,7 +241,7 @@ def test_scaffold_shp_read_guards_missing_dbf() -> None:
     guard = 'any(_shp.with_suffix(s).exists() for s in (".dbf", ".DBF"))'
     assert guard in code
     assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
-    assert "df1 = gpd.read_file(_shp)" in code
+    assert "df_1 = gpd.read_file(_shp)" in code
 
 
 def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
@@ -303,8 +303,8 @@ def test_scaffold_filter_translates_field_notation() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df1["Age"] > 18' in code
-    assert "df2 = df1[" in code
+    assert 'df_1["Age"] > 18' in code
+    assert "df_2 = df_1[" in code
 
 
 def test_scaffold_filter_date_comparison_warning() -> None:
@@ -477,7 +477,7 @@ def test_scaffold_filter_simple_mode_string_equality() -> None:
         }
     )
     code = scaffold(doc)
-    assert 'df2 = df1[df1["CAPEX/OPEX"] == "CAPEX"]' in code
+    assert 'df_2 = df_1[df_1["CAPEX/OPEX"] == "CAPEX"]' in code
     assert "Filter expression missing" not in code
 
 
@@ -490,7 +490,7 @@ def test_scaffold_filter_simple_mode_numeric_comparison() -> None:
         }
     )
     code = scaffold(doc)
-    assert 'df2 = df1[df1["Amount"] > 100]' in code
+    assert 'df_2 = df_1[df_1["Amount"] > 100]' in code
 
 
 def test_scaffold_filter_simple_mode_contains_is_literal() -> None:
@@ -505,7 +505,7 @@ def test_scaffold_filter_simple_mode_contains_is_literal() -> None:
     )
     code = scaffold(doc)
     assert (
-        'df2 = df1[df1["Name"].str.contains("ta.ro", regex=False, na=False)]'
+        'df_2 = df_1[df_1["Name"].str.contains("ta.ro", regex=False, na=False)]'
         in code
     )
 
@@ -513,7 +513,7 @@ def test_scaffold_filter_simple_mode_contains_is_literal() -> None:
 def test_scaffold_filter_simple_mode_is_null() -> None:
     doc = _simple_filter_doc({"Operator": "IsNull", "Field": "Amount"})
     code = scaffold(doc)
-    assert 'df2 = df1[df1["Amount"].isna()]' in code
+    assert 'df_2 = df_1[df_1["Amount"].isna()]' in code
 
 
 def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
@@ -525,7 +525,7 @@ def test_scaffold_filter_simple_mode_unknown_operator_falls_back() -> None:
         }
     )
     code = scaffold(doc)
-    assert "df2 = df1  # TODO: Filter expression missing" in code
+    assert "df_2 = df_1  # TODO: Filter expression missing" in code
 
 
 # ── Filter mask splitting (issue #33) ──────────────────────────────────────
@@ -550,17 +550,17 @@ def _expr_filter_doc(expr: str) -> WorkflowDoc:
 def test_scaffold_filter_three_operands_split_into_masks() -> None:
     code = scaffold_simple(_expr_filter_doc("[a] = 1 AND [b] = 2 AND [c] = 3"))
     assert "# [a] = 1" in code
-    assert 'cond_1 = df1["a"] == 1' in code
+    assert 'cond_1 = df_1["a"] == 1' in code
     assert "# [b] = 2" in code
-    assert 'cond_2 = df1["b"] == 2' in code
+    assert 'cond_2 = df_1["b"] == 2' in code
     assert "# [c] = 3" in code
-    assert 'cond_3 = df1["c"] == 3' in code
-    assert "df2 = df1[cond_1 & cond_2 & cond_3]" in code
+    assert 'cond_3 = df_1["c"] == 3' in code
+    assert "df_2 = df_1[cond_1 & cond_2 & cond_3]" in code
 
 
 def test_scaffold_filter_or_chain_split_joins_with_pipe() -> None:
     code = scaffold_simple(_expr_filter_doc("[a] = 1 OR [b] = 2 OR [c] = 3"))
-    assert "df2 = df1[cond_1 | cond_2 | cond_3]" in code
+    assert "df_2 = df_1[cond_1 | cond_2 | cond_3]" in code
 
 
 def test_scaffold_filter_two_long_operands_split_into_masks() -> None:
@@ -571,27 +571,27 @@ def test_scaffold_filter_two_long_operands_split_into_masks() -> None:
     )
     assert '# !Contains([Status], "drop")' in code
     assert (
-        "cond_1 = ~df1[\"Status\"].str.contains('drop', case=False,"
+        "cond_1 = ~df_1[\"Status\"].str.contains('drop', case=False,"
         " regex=False, na=False)" in code
     )
     assert "# !IsEmpty([Status])" in code
-    assert 'cond_2 = ~(df1["Status"].isna() | (df1["Status"] == ""))' in code
-    assert "df2 = df1[cond_1 & cond_2]" in code
+    assert 'cond_2 = ~(df_1["Status"].isna() | (df_1["Status"] == ""))' in code
+    assert "df_2 = df_1[cond_1 & cond_2]" in code
 
 
 def test_scaffold_filter_two_short_operands_stay_one_line() -> None:
     code = scaffold_simple(_expr_filter_doc('[Age] > 18 AND [Status] = "Active"'))
-    assert "df2 = df1[(df1[\"Age\"] > 18) & (df1[\"Status\"] == 'Active')]" in code
+    assert "df_2 = df_1[(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')]" in code
     assert "cond_1" not in code
 
 
 def test_scaffold_filter_line_length_boundary_88_stays_one_line() -> None:
     # One-line form is exactly 88 columns — at the limit, not over it.
-    field = "x" * 33
+    field = "x" * 29
     code = scaffold_simple(
         _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
     )
-    line = f"df2 = df1[(df1[\"{field}\"] > 18) & (df1[\"Status\"] == 'Active')]"
+    line = f"df_2 = df_1[(df_1[\"{field}\"] > 18) & (df_1[\"Status\"] == 'Active')]"
     assert len(line) == 88
     assert line in code
     assert "cond_1" not in code
@@ -599,20 +599,20 @@ def test_scaffold_filter_line_length_boundary_88_stays_one_line() -> None:
 
 def test_scaffold_filter_line_length_boundary_89_splits() -> None:
     # One character longer than the previous test: 89 columns — splits.
-    field = "x" * 34
+    field = "x" * 30
     code = scaffold_simple(
         _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
     )
-    assert f'cond_1 = df1["{field}"] > 18' in code
-    assert "cond_2 = df1[\"Status\"] == 'Active'" in code
-    assert "df2 = df1[cond_1 & cond_2]" in code
+    assert f'cond_1 = df_1["{field}"] > 18' in code
+    assert "cond_2 = df_1[\"Status\"] == 'Active'" in code
+    assert "df_2 = df_1[cond_1 & cond_2]" in code
 
 
 def test_scaffold_filter_multiline_expression_comment_not_broken() -> None:
     expr = '!Contains([Status],\n    "drop")\nAND !IsEmpty([Status])\nAND [a] = 1'
     code = scaffold_simple(_expr_filter_doc(expr))
     assert '# !Contains([Status], "drop")' in code
-    assert "df2 = df1[cond_1 & cond_2 & cond_3]" in code
+    assert "df_2 = df_1[cond_1 & cond_2 & cond_3]" in code
     # every comment line stays a comment (no raw fragment lines)
     for line in code.splitlines():
         if "drop" in line and "cond_1" not in line:
@@ -636,7 +636,7 @@ def test_scaffold_filter_untranslatable_expression_never_splits() -> None:
         _expr_filter_doc("[a] ?? weird AND [b] ?? syntax AND [c] ?? here")
     )
     assert "cond_1" not in code
-    assert 'df1["a"] ?? weird AND df1["b"] ?? syntax' in code
+    assert 'df_1["a"] ?? weird AND df_1["b"] ?? syntax' in code
 
 
 def test_scaffold_filter_untranslatable_expression_gets_todo_marker() -> None:
@@ -706,7 +706,7 @@ def test_scaffold_formula_translates_if_expression() -> None:
     code = scaffold(doc)
     assert "import numpy as np" in code
     assert (
-        "np.select([df2[\"Score\"] >= 80, df2[\"Score\"] >= 60],"
+        "np.select([df_2[\"Score\"] >= 80, df_2[\"Score\"] >= 60],"
         " ['A', 'B'], default='C')" in code
     )
     assert "THEN" not in code
@@ -727,7 +727,7 @@ def test_scaffold_filter_boolean_expression_parenthesized() -> None:
         ),
     )
     code = scaffold(doc)
-    assert "(df1[\"Age\"] > 18) & (df1[\"Status\"] == 'Active')" in code
+    assert "(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')" in code
     assert "import numpy as np" not in code
 
 
@@ -753,7 +753,7 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df2["x"] ?? weird syntax' in code
+    assert 'df_2["x"] ?? weird syntax' in code
     # The [field] substitution fallback keeps untranslated Alteryx syntax
     # verbatim — it reads like Python but is not runnable (e.g. an
     # untranslated function call raises NameError). It needs its own
@@ -789,7 +789,7 @@ def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:
         ),
     )
     code = scaffold(doc)
-    assert 'df2["Sales Amount"] = df2["Price"] * df2["Qty"]' in code
+    assert 'df_2["Sales Amount"] = df_2["Price"] * df_2["Qty"]' in code
     # The whole scaffold must be syntactically valid Python.
     compile(code, "<scaffold>", "exec")
 
@@ -860,10 +860,10 @@ def test_scaffold_formula_later_field_references_earlier() -> None:
         ),
     )
     code = scaffold(doc)
-    assert "df2 = df1.copy()" in code
-    assert 'df2["Net"] = df2["Gross"] - df2["Tax"]' in code
-    # Doubled reads Net from the built-up frame, not the original df1.
-    assert 'df2["Doubled"] = df2["Net"] * 2' in code
+    assert "df_2 = df_1.copy()" in code
+    assert 'df_2["Net"] = df_2["Gross"] - df_2["Tax"]' in code
+    # Doubled reads Net from the built-up frame, not the original df_1.
+    assert 'df_2["Doubled"] = df_2["Net"] * 2' in code
     assert ".assign(" not in code
 
 
@@ -1003,7 +1003,7 @@ def test_scaffold_select_does_not_emit_helper_definitions() -> None:
         "# NOTE: SelectColumnEdit / apply_select_edits are not generated"
         in code
     )
-    assert "apply_select_edits(df1, _COLS_2)" in code
+    assert "apply_select_edits(df_1, _COLS_2)" in code
 
 
 def test_scaffold_select_always_warns_about_stale_xml() -> None:
@@ -1096,7 +1096,7 @@ def _browse_doc() -> WorkflowDoc:
 
 def test_scaffold_browse_logs_row_count() -> None:
     code = scaffold(_browse_doc())
-    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df1))' in code
+    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df_1))' in code
     assert "unsupported tool type" not in code
 
 
@@ -1104,7 +1104,7 @@ def test_scaffold_simple_browse_defines_logger() -> None:
     code = scaffold_simple(_browse_doc())
     assert "import logging" in code
     assert "logger = logging.getLogger(__name__)" in code
-    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df1))' in code
+    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df_1))' in code
 
 
 def test_scaffold_simple_without_browse_has_no_logger() -> None:
@@ -1138,7 +1138,7 @@ def test_scaffold_join_same_key() -> None:
     code = scaffold(doc)
     assert "pd.merge" in code
     assert '"CustomerID"' in code
-    assert "df1, df2" in code
+    assert "df_1, df_2" in code
 
 
 def test_scaffold_join_different_keys() -> None:
@@ -1245,7 +1245,7 @@ def test_scaffold_union_concat() -> None:
     )
     code = scaffold(doc)
     assert "pd.concat" in code
-    assert "pd.concat([df1, df2], ignore_index=True)" in code
+    assert "pd.concat([df_1, df_2], ignore_index=True)" in code
 
 
 # ── Sort / Unique ──────────────────────────────────────────────────────────
@@ -1277,7 +1277,7 @@ def test_scaffold_sort_reads_nested_field_rows() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df2 = df1.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
+    assert 'df_2 = df_1.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
 
 
 def test_scaffold_sort_multiple_fields() -> None:
@@ -1295,7 +1295,7 @@ def test_scaffold_sort_multiple_fields() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df2 = df1.sort_values(["A", "B"], ascending=[True, False])' in code
+    assert 'df_2 = df_1.sort_values(["A", "B"], ascending=[True, False])' in code
 
 
 def test_scaffold_unique_uses_subset() -> None:
@@ -1306,7 +1306,7 @@ def test_scaffold_unique_uses_subset() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df2 = df1.drop_duplicates(subset=["EL_ID"])' in code
+    assert 'df_2 = df_1.drop_duplicates(subset=["EL_ID"])' in code
 
 
 def test_scaffold_unique_without_fields_keeps_default() -> None:
@@ -1314,7 +1314,7 @@ def test_scaffold_unique_without_fields_keeps_default() -> None:
         AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0)
     )
     code = scaffold(doc)
-    assert "df2 = df1.drop_duplicates()" in code
+    assert "df_2 = df_1.drop_duplicates()" in code
 
 
 # ── RecordID ───────────────────────────────────────────────────────────────
@@ -1331,15 +1331,15 @@ def test_scaffold_recordid_uses_configured_field_and_start() -> None:
         )
     )
     code = scaffold(doc)
-    assert "df2 = df1.reset_index(drop=True)" in code
-    assert 'df2["RowNum"] = df2.index + 0' in code
+    assert "df_2 = df_1.reset_index(drop=True)" in code
+    assert 'df_2["RowNum"] = df_2.index + 0' in code
 
 
 def test_scaffold_recordid_without_config_uses_defaults() -> None:
     doc = _chain_doc(AlteryxNode(tool_id=ToolID(2), tool_type="RecordID", x=10, y=0))
     code = scaffold(doc)
-    assert "df2 = df1.reset_index(drop=True)" in code
-    assert 'df2["RecordID"] = df2.index + 1' in code
+    assert "df_2 = df_1.reset_index(drop=True)" in code
+    assert 'df_2["RecordID"] = df_2.index + 1' in code
 
 
 # ── Count Records ──────────────────────────────────────────────────────────
@@ -1350,7 +1350,7 @@ def test_scaffold_countrecords_has_no_config() -> None:
         AlteryxNode(tool_id=ToolID(2), tool_type="CountRecords", x=10, y=0)
     )
     code = scaffold(doc)
-    assert 'df2 = pd.DataFrame({"Count": [len(df1)]})' in code
+    assert 'df_2 = pd.DataFrame({"Count": [len(df_1)]})' in code
 
 
 # ── Text Input ─────────────────────────────────────────────────────────────
@@ -1374,7 +1374,7 @@ def test_scaffold_text_input_builds_dataframe() -> None:
         )
     )
     code = scaffold(doc)
-    assert "df1 = pd.DataFrame({" in code
+    assert "df_1 = pd.DataFrame({" in code
     assert (
         '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
     )
@@ -1425,7 +1425,7 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert 'df2[["EL_ID", "フィールドA", "フィールドB"]]' in code
+    assert 'df_2[["EL_ID", "フィールドA", "フィールドB"]]' in code
     assert 'on="EL_ID"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
@@ -1482,7 +1482,7 @@ def test_scaffold_findreplace_replace_mode_lookup_map() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert '_MAP_3 = dict(zip(df2["OldCode"], df2["NewCode"]))' in code
+    assert '_MAP_3 = dict(zip(df_2["OldCode"], df_2["NewCode"]))' in code
     assert '"Code"' in code
 
 
@@ -1591,7 +1591,7 @@ def test_scaffold_findreplace_findany_replace_mode_falls_back() -> None:
     assert "FindMode='FindAny'" in code
     assert "ReplaceMode='Replace'" in code
     assert "input passed through unchanged" in code
-    assert "df3 = df1" in code
+    assert "df_3 = df_1" in code
 
 
 def test_scaffold_findreplace_stale_replace_found_field_is_ignored() -> None:
@@ -1645,7 +1645,7 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
     )
     code = scaffold(doc)
     # tool 1 (Targets / main) first, tool 2 (Source / lookup) second
-    assert "simulate_find_any_append(\n        df1,\n        df2," in code
+    assert "simulate_find_any_append(\n        df_1,\n        df_2," in code
     assert 'find_field="key_a"' in code
     assert 'search_field="key_b"' in code
     # distinct find/search names: no rename/drop workaround emitted
@@ -1664,7 +1664,7 @@ def test_scaffold_appendfields_cross_join() -> None:
         "Sources",
     )
     code = scaffold(doc)
-    assert 'df3 = pd.merge(df1, df2, how="cross")' in code
+    assert 'df_3 = pd.merge(df_1, df_2, how="cross")' in code
     assert "unsupported tool type" not in code
 
 
@@ -1691,11 +1691,11 @@ def test_scaffold_createpoints_geopandas() -> None:
     # X/Y must be coerced to plain float64 before points_from_xy:
     # pd.NA (NAType) in nullable-dtype columns makes float() raise TypeError.
     assert (
-        '_x = pd.to_numeric(df1["Longitude"],'
+        '_x = pd.to_numeric(df_1["Longitude"],'
         ' errors="coerce").astype("float64")' in code
     )
     assert (
-        '_y = pd.to_numeric(df1["Latitude"],'
+        '_y = pd.to_numeric(df_1["Latitude"],'
         ' errors="coerce").astype("float64")' in code
     )
     assert "geometry=gpd.points_from_xy(_x, _y)" in code
@@ -1802,7 +1802,7 @@ def test_scaffold_unsupported_tool_todo() -> None:
     doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="DynamicRename", x=0, y=0))
     code = scaffold(doc)
     assert "TODO" in code
-    assert "df1 = ..." in code
+    assert "df_1 = ..." in code
 
 
 # ── Topo order ─────────────────────────────────────────────────────────────
@@ -1844,7 +1844,7 @@ def test_node_code_snippets_includes_filter() -> None:
     )
     snippets = node_code_snippets(doc)
     assert 2 in snippets
-    assert 'df1["Age"] > 18' in snippets[2]
+    assert 'df_1["Age"] > 18' in snippets[2]
 
 
 def test_node_code_snippets_includes_select() -> None:

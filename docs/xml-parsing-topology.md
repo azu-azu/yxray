@@ -89,7 +89,7 @@ WorkflowDoc
 
 `scaffold/_assemble.py` が `topo_order(doc)` を呼び、返ってきた順に
 ツールを1つずつ Python/pandas コードへ変換する。上流から下流の順なので、
-各ツールの入力変数(`df<上流ToolID>`)は必ず生成済みになっている。
+各ツールの入力変数(`df_<上流ToolID>`)は必ず生成済みになっている。
 
 > かつては単一の `scaffold.py` がこれを担っていたが、現在は領域ごとの
 > `scaffold/` パッケージに分割されている。構成は

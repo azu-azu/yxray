@@ -44,7 +44,7 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
     assert hint.startswith("# ToolID 2\n")
     assert "# Alteryx expression — review translation" in hint
     assert "NOTE" not in hint
-    assert 'df1["Age"] > 18' in hint
+    assert 'df_1["Age"] > 18' in hint
 
 
 def test_python_hint_copy_indents_for_def_body() -> None:
