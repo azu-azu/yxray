@@ -7,6 +7,7 @@ relies on.
 
 import importlib.util
 import inspect
+import random
 import sys
 from pathlib import Path
 
@@ -417,6 +418,250 @@ def test_find_any_requires_an_explicit_case_sensitive() -> None:
             append_fields=["label"],
             verbose=False,
         )
+
+
+def test_find_any_needles_are_matched_literally_not_as_regex() -> None:
+    # The winner search compiles the needles into one alternation, so every
+    # needle must be escaped: "1.5" must not match "125", "a+b" must not
+    # match "aab", and "[xy]" must not match a bare "x".
+    targets = pd.DataFrame({"text": ["125", "aab", "x", "1.5 exact", "[xy] exact"]})
+    lookup = pd.DataFrame({
+        "kw": ["1.5", "a+b", "[xy]"],
+        "label": ["DOT", "PLUS", "CLASS"],
+    })
+    out = _run(targets, lookup)
+    assert list(out["label"]) == [pd.NA, pd.NA, pd.NA, "DOT", "CLASS"]
+
+
+def test_find_any_case_insensitive_duplicate_needle_keeps_earlier_row() -> None:
+    # "Apple" and "apple" are different lookup values (both survive the
+    # duplicate drop) that compare equal under NoCase. They match at the same
+    # position, so the earlier lookup row wins and its own append values must
+    # come back — the match must resolve to a lookup row, not merely to the
+    # matched text.
+    targets = pd.DataFrame({"text": ["APPLE pie"]})
+    lookup = pd.DataFrame({
+        "kw": ["Apple", "apple"],
+        "label": ["FIRST", "SECOND"],
+        "code": ["C1", "C2"],
+    })
+    out = _run(targets, lookup, append_fields=["label", "code"], case_sensitive=False)
+    assert list(out.iloc[0][["label", "code"]]) == ["FIRST", "C1"]
+
+
+def _brute_force_labels(targets, lookup, *, case_sensitive):
+    """愚直な参照実装: 全 needle を試し「最も左、同点なら lookup 順で先の行」。
+
+    実装とは独立に採用規則だけを書き下したオラクル。同じ検索値が複数行に
+    あるときは後の行が有効（辞書的上書き）なので、先に最後の行だけ残す。
+    """
+    stringify = find_any._stringify
+    last_row_of = {}
+    for row, value in enumerate(lookup["kw"]):
+        if pd.isna(value):
+            continue
+        last_row_of[value] = row
+    kept = sorted(last_row_of.values())
+
+    labels = []
+    for raw_text in targets["text"]:
+        if pd.isna(raw_text):
+            labels.append(pd.NA)
+            continue
+        haystack = stringify(raw_text)
+        if not case_sensitive:
+            haystack = haystack.lower()
+        best_pos, best_row = None, None
+        for row in kept:
+            needle = stringify(lookup["kw"].iloc[row])
+            if not needle:
+                continue
+            if not case_sensitive:
+                needle = needle.lower()
+            pos = haystack.find(needle)
+            if pos >= 0 and (best_pos is None or pos < best_pos):
+                best_pos, best_row = pos, row
+        if best_row is None:
+            labels.append(pd.NA)
+        else:
+            value = lookup["label"].iloc[best_row]
+            labels.append(stringify(value) if pd.notna(value) else pd.NA)
+    return labels
+
+
+def test_find_any_matches_the_brute_force_rule_on_random_frames() -> None:
+    # Property test with a fixed seed: whatever the winner search does
+    # internally, it must agree with the plainly written adoption rule on
+    # nested and duplicate needles, ties, several match positions, regex
+    # metacharacters, NaN/None/int/empty values, NoCase, and unmatched rows.
+    rng = random.Random(20260727)
+    alphabet = "abABC.*[]+?あ1"
+
+    def word():
+        return "".join(rng.choices(alphabet, k=rng.randint(1, 5)))
+
+    for _ in range(150):
+        texts = []
+        for _ in range(rng.randint(1, 10)):
+            roll = rng.random()
+            if roll < 0.1:
+                texts.append(None)
+            elif roll < 0.16:
+                texts.append(rng.randint(1, 200))
+            elif roll < 0.2:
+                texts.append("")
+            else:
+                texts.append(" ".join(word() for _ in range(rng.randint(1, 3))))
+        kws, labels = [], []
+        for i in range(rng.randint(1, 7)):
+            roll = rng.random()
+            kws.append(
+                None if roll < 0.12
+                else "" if roll < 0.2
+                else rng.randint(1, 200) if roll < 0.26
+                else word()
+            )
+            labels.append(f"L{i}")
+        seed_text = next((t for t in texts if isinstance(t, str) and len(t) > 2), None)
+        if seed_text is not None:
+            # guarantee nested needles, an exact duplicate and a same-start tie
+            kws += [seed_text[:1], seed_text[:2], seed_text[1:3], seed_text[:2]]
+            labels += ["N1", "N2", "MID", "DUP"]
+        targets = pd.DataFrame({"text": texts})
+        lookup = pd.DataFrame({"kw": kws, "label": labels})
+        for case_sensitive in (True, False):
+            out = _run(targets, lookup, case_sensitive=case_sensitive)
+            expected = _brute_force_labels(
+                targets, lookup, case_sensitive=case_sensitive
+            )
+            assert list(out["label"]) == expected, (
+                f"targets={texts} lookup={kws} case_sensitive={case_sensitive}"
+            )
+
+
+def test_find_any_diagnostics_off_returns_the_same_output() -> None:
+    # collect_match_diagnostics decides how much is COMPUTED, never what is
+    # returned: only the ambiguity counts go away. Everything the caller gets
+    # back — values, row order, column order, dtypes, unmatched rows — must be
+    # identical with the diagnostics on and off.
+    cases = [
+        # leftmost wins / several matches per target / no match
+        (pd.DataFrame({"text": [
+            "cherry apple pie", "berry cherry jam", "apple only",
+            "no match here", "apple berry cherry mix",
+        ]}),
+         pd.DataFrame({"kw": ["apple", "berry", "cherry"],
+                       "label": ["A1", "B2", "C3"]}),
+         True),
+        # nested needles, same-start tie
+        (pd.DataFrame({"text": ["apple pie"]}),
+         pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]}),
+         True),
+        # duplicate needles, NULL/empty needles, NaN haystack
+        (pd.DataFrame({"text": ["apple pie", None, "", 123]}),
+         pd.DataFrame({"kw": ["apple", "apple", None, "", 123],
+                       "label": ["X", "Y", "N", "E", "NUM"]}),
+         True),
+        # NoCase
+        (pd.DataFrame({"text": ["Cherry APPLE pie", "nothing"]}),
+         pd.DataFrame({"kw": ["apple", "cherry"], "label": ["A1", "C3"]}),
+         False),
+    ]
+    for targets, lookup, case_sensitive in cases:
+        on = _run(targets, lookup, case_sensitive=case_sensitive)
+        off = _run(targets, lookup, case_sensitive=case_sensitive,
+                   collect_match_diagnostics=False)
+        pd.testing.assert_frame_equal(off, on)
+
+
+def test_find_any_diagnostics_off_still_applies_the_adoption_rule() -> None:
+    # Regression test for the diagnostics-off path on its own terms: the
+    # expected values are written out here, not taken from the other path.
+    targets = pd.DataFrame({"text": [
+        "cherry apple pie",        # apple & cherry match; cherry is leftmost
+        "berry cherry jam",        # berry & cherry match; berry is leftmost
+        "apple only",              # single match
+        "no match here",           # no match
+        "apple berry cherry mix",  # all three match; apple is leftmost
+    ]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "berry", "cherry"],
+        "label": ["A1", "B2", "C3"],
+    })
+    out = _run(targets, lookup, collect_match_diagnostics=False)
+    assert list(out["label"]) == ["C3", "B2", "A1", pd.NA, "A1"]
+    assert list(out.columns) == ["text", "label"]
+    assert len(out) == len(targets)
+
+
+def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
+    capsys,
+) -> None:
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    find_any.simulate_find_any_append(
+        targets, lookup,
+        find_field="text", search_field="kw", append_fields=["label"],
+        case_sensitive=True, verbose=True, collect_match_diagnostics=False,
+    )
+    printed = capsys.readouterr().out
+    # row and match counts survive — matched rows comes from the winner, not
+    # from the diagnostics
+    assert "rows          : 2" in printed
+    assert "matched rows  : 1" in printed
+    # the ambiguity table is gone, and says why rather than reading as zero
+    assert "collect_match_diagnostics=False" in printed
+    assert "== top 10 ==" not in printed
+
+
+def test_find_any_diagnostics_are_off_by_default(capsys) -> None:
+    # The ambiguity scan is opt-in: it costs a lookup-rows x targets pass and
+    # is a review aid, not something every run should pay for. Generated code
+    # asks for it explicitly.
+    assert inspect.signature(
+        find_any.simulate_find_any_append
+    ).parameters["collect_match_diagnostics"].default is False
+
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True, verbose=True,
+    )
+    printed = capsys.readouterr().out
+    assert "collect_match_diagnostics=False" in printed
+    assert "matched rows  : 1" in printed
+
+
+def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
+    monkeypatch,
+) -> None:
+    # The diagnostics feed the verbose summary and nothing else — they are
+    # not returned. Asking for them with verbose off would compute a
+    # lookup-rows x targets scan that no one can read, so it is skipped.
+    targets = pd.DataFrame({"text": ["cherry apple pie"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    calls = []
+    real_scan = find_any._scan_diagnostics
+    monkeypatch.setattr(
+        find_any,
+        "_scan_diagnostics",
+        lambda *args, **kwargs: (calls.append(1), real_scan(*args, **kwargs))[1],
+    )
+
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True,
+        verbose=False, collect_match_diagnostics=True,
+    )
+    assert calls == []
+
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True,
+        verbose=True, collect_match_diagnostics=True,
+    )
+    assert len(calls) == 1
 
 
 def test_find_any_has_no_replace_multiple_found_argument() -> None:

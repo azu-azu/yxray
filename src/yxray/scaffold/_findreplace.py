@@ -53,6 +53,12 @@ def _findreplace_any_append(
     # matters. The helper does not accept it either, for the same reason.
     # case_sensitive IS always emitted: the helper has no default for it, so
     # the generated call must state it (and a reviewer gets to see it).
+    # collect_match_diagnostics IS emitted, as True, even though the helper
+    # defaults it to False: the ambiguous-match table is what a reviewer needs
+    # to check this translation, and it costs a lookup-rows x targets scan
+    # (most of the runtime on a large lookup). Emitting it keeps the table on
+    # while the translation is reviewed and makes the line to flip obvious
+    # once it is trusted.
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
@@ -60,6 +66,10 @@ def _findreplace_any_append(
         "# NOTE: simulate_find_any_append() is not generated — copy"
         " it from\n"
         "# reference_impl/simulate_find_any_append.py\n"
+        "# collect_match_diagnostics=True logs the ambiguous matches (1 target"
+        " matching\n"
+        "# several Source rows) — it is the costly part, set it False once"
+        " reviewed\n"
     )
     return (
         header + f"{df_out} = simulate_find_any_append(\n"
@@ -69,6 +79,7 @@ def _findreplace_any_append(
         f"    search_field={py_str(field_search)},\n"
         f"    append_fields=[{fields}],\n"
         f"    case_sensitive={case_sensitive},\n"
+        f"    collect_match_diagnostics=True,\n"
         f"    log_label={py_str(f'ToolID {tool_id}')},\n"
         f")"
     )

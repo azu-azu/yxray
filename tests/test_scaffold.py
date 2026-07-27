@@ -1518,6 +1518,11 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     # setting matters
     assert "replace_multiple_found" not in code
     assert 'log_label="ToolID 3"' in code
+    # the helper defaults collect_match_diagnostics to False because the
+    # ambiguity scan is the expensive part; the generated call turns it on so
+    # the reviewer sees the ambiguous matches, and says where to switch it off
+    assert "collect_match_diagnostics=True" in code
+    assert "set it False once reviewed" in code
     # substring semantics live inside the helper — no equality join emitted
     assert "pd.merge" not in code
     assert "TODO: Find Replace" not in code
