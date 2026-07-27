@@ -93,6 +93,11 @@ def simulate_find_any_append(
     桁が違うコストになる。False にすると曖昧マッチの集計と表示だけが消え、
     戻り値は完全に同一。verbose にこの計算を暗黙に背負わせないため引数を分けた。
 
+    ただし診断を読むのは verbose サマリだけなので、実際に集めるのは
+    collect_match_diagnostics と verbose が**両方 True のとき**。verbose=False で
+    集めても誰も読めない（戻り値には出ない）ため、走査ごと省く。つまり verbose は
+    コストを増やす方向には効かず、減らす方向にだけ効く。
+
     複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
     同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
     NULL の扱いは、golden 実測済みの仕様としてモジュール docstring に
@@ -166,23 +171,25 @@ def simulate_find_any_append(
     haystack_cmp = haystack if case_sensitive else haystack.str.lower()
 
     # ── 勝者判定と診断（独立した2つの走査）───────────────────────
-    # 診断は verbose 表示専用の観測値。勝者判定はこれを一切読まない
-    # （逆向きの依存は無い）ので、状態も更新も別の入れ物に分けてある。
-    # 診断だけが lookup 行数 × target 行数の走査を必要とするので、
-    # 止められるようにしてある（止めても戻り値は変わらない）。
+    # 診断は verbose サマリの材料。勝者判定はこれを一切読まない（逆向きの依存は
+    # 無い）ので、状態も更新も別の入れ物に分けてある。診断だけが lookup 行数 ×
+    # target 行数の走査を必要とするので、止められるようにしてある
+    # （止めても戻り値は変わらない）。
     needles = _needles(lookup, case_sensitive=case_sensitive)
     winner = _find_winner(
         haystack_cmp=haystack_cmp,
         needles=needles,
         append_fields=append_fields,
     )
+    # 集めるのは「集めろと言われた」かつ「読み手が居る」ときだけ。verbose=False で
+    # 集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く。
     diagnostics: _Diagnostics | None = None
-    if collect_match_diagnostics:
+    if collect_match_diagnostics and verbose:
         diagnostics = _Diagnostics(
             match_count=pd.Series(0, index=targets.index, dtype="int64"),
-            # verbose 時だけ、各 target にマッチした検索値をすべて集める（確認表示用）。
-            # lookup 表の並び順に append する（診断用の一覧で、採用値の決定とは独立）。
-            needles_per_row=[[] for _ in range(len(targets))] if verbose else None,
+            # 各 target にマッチした検索値をすべて集める（確認表示用）。lookup 表の
+            # 並び順に append する（診断用の一覧で、採用値の決定とは独立）。
+            needles_per_row=[[] for _ in range(len(targets))],
         )
         _scan_diagnostics(diagnostics, haystack_cmp=haystack_cmp, needles=needles)
 
@@ -246,13 +253,14 @@ class _WinnerSelection:
 
 @dataclass
 class _Diagnostics:
-    """verbose 表示専用の観測値。本体結果（result）には一切流れない。
+    """verbose サマリ専用の観測値。本体結果（result）には一切流れない。
 
     勝者判定はこの中身を読まないので、診断を止めても採用結果は変わらない。
+    読み手が verbose サマリしか居ないので、そもそも表示しないときは作られない。
     """
 
-    match_count: pd.Series                  # 何行の lookup にマッチしたか
-    needles_per_row: list[list[str]] | None  # マッチした検索値すべて（verbose 時のみ）
+    match_count: pd.Series           # 何行の lookup にマッチしたか
+    needles_per_row: list[list[str]]  # マッチした検索値すべて（lookup 表の並び順）
 
 
 def _collect_diagnostics(
@@ -269,9 +277,8 @@ def _collect_diagnostics(
     """
     # 「何行の lookup にマッチしたか」なので、採用されなかったマッチも数える
     diagnostics.match_count += contains.astype("int64")
-    if diagnostics.needles_per_row is not None:
-        for i in contains.to_numpy().nonzero()[0]:
-            diagnostics.needles_per_row[i].append(needle)
+    for i in contains.to_numpy().nonzero()[0]:
+        diagnostics.needles_per_row[i].append(needle)
 
 
 @dataclass

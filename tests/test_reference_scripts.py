@@ -614,6 +614,37 @@ def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
     assert "== top 10 ==" not in printed
 
 
+def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
+    monkeypatch,
+) -> None:
+    # The diagnostics feed the verbose summary and nothing else — they are
+    # not returned. Asking for them with verbose off would compute a
+    # lookup-rows x targets scan that no one can read, so it is skipped.
+    targets = pd.DataFrame({"text": ["cherry apple pie"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    calls = []
+    real_scan = find_any._scan_diagnostics
+    monkeypatch.setattr(
+        find_any,
+        "_scan_diagnostics",
+        lambda *args, **kwargs: (calls.append(1), real_scan(*args, **kwargs))[1],
+    )
+
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True,
+        verbose=False, collect_match_diagnostics=True,
+    )
+    assert calls == []
+
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True,
+        verbose=True, collect_match_diagnostics=True,
+    )
+    assert len(calls) == 1
+
+
 def test_find_any_has_no_replace_multiple_found_argument() -> None:
     # ReplaceMultipleFound has no effect on FindAny + Append output (golden-
     # verified with both settings), so the helper does not accept it —
