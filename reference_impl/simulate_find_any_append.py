@@ -299,7 +299,7 @@ def _print_summary(
     elapsed = time.perf_counter() - start
     matched_rows = int((debug["matched_lookup_rows"] > 0).sum())
 
-    print(f" 🐒 simulate_find_any_append: {elapsed:.3f} 秒")
+    print(f"runtime == {elapsed:.3f} 秒 ==")
     print(f"rows          : {len(result):,}")
     print(f"matched rows  : {matched_rows:,}")
 
