@@ -169,6 +169,8 @@ def simulate_find_any_append(
 
     # lookup を並び順にループ。itertuples の 0 番目が search_field、以降が append_fields。
     # lookup_id は重複排除前の元の行番号（lookup.index に保持）。
+    # required_lookup_columns = [search_field, *append_fields] なので、
+    # append_positions の長さは必ず len(append_fields) と一致する（下の zip は strict）。
     append_positions = range(1, len(required_lookup_columns))
     for lookup_id, values in zip(
         lookup.index, lookup.itertuples(index=False, name=None), strict=True
@@ -208,7 +210,7 @@ def simulate_find_any_append(
             matched_needle[fill] = needle
             best_pos[fill] = pos[fill]
             for position, field in zip(
-                append_positions, append_fields, strict=False
+                append_positions, append_fields, strict=True
             ):
                 # append 値も needle/haystack と同様に _stringify する。lookup 列が
                 # NaN 混在で float64 昇格すると 123 が 123.0 になり、golden の "123"
