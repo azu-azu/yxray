@@ -51,7 +51,6 @@ def test_render_self_contained() -> None:
     assert "vis.Network" in html
 
 
-
 def test_single_graph_has_summary_panel_js() -> None:
     """Single graph includes summary panel open/close functions."""
     html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
@@ -66,9 +65,7 @@ def test_single_graph_embeds_topological_node_layers() -> None:
     doc = WorkflowDoc(
         filepath="fixture.yxmd",
         nodes=(
-            AlteryxNode(
-                tool_id=ToolID(1), tool_type="InputData", x=0.0, y=0.0
-            ),
+            AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0.0, y=0.0),
             AlteryxNode(tool_id=ToolID(2), tool_type="Select", x=100.0, y=0.0),
         ),
         connections=(

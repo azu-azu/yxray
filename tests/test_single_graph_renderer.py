@@ -29,13 +29,18 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": "[Age] > 18"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -51,13 +56,18 @@ def test_python_hint_copy_indents_for_def_body() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": "[Age] > 18"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -72,13 +82,18 @@ def test_select_python_hint_matches_scaffold_snippet() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={"SelectFields": {"SelectField": [{"@field": "Age"}]}},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -90,7 +105,10 @@ def test_select_python_hint_matches_scaffold_snippet() -> None:
 def test_input_python_hint_stays_generic() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
             config={"File": "a.csv"},
         ),
     )
@@ -143,8 +161,7 @@ def test_node_panel_has_int_and_labeled_tool_id_copy_buttons() -> None:
     assert "copyIdsBtn.textContent = 'Copy IDs'" in html
     assert "copyToolIdsBtn.textContent = 'Copy ToolIDs'" in html
     assert (
-        "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)"
-        not in html
+        "_renderClusterInfoBlock(_group.toolType, _group.memberIds, body)" not in html
     )
     assert "function _renderToolIdCopyBlock(toolId, body)" not in html
 
@@ -180,9 +197,7 @@ def test_config_map_includes_raw_node_xml() -> None:
     report can show it as a 'source' section at the bottom of the right pane."""
     raw = '<Node ToolID="1">\n  <GuiSettings Plugin="X"/>\n</Node>'
     doc = _doc(
-        AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0, raw_xml=raw
-        ),
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0, raw_xml=raw),
     )
     config_map = _config_map(doc)
     assert config_map["1"]["raw_xml"] == raw

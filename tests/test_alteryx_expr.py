@@ -19,7 +19,7 @@ def test_field_reference() -> None:
 
 
 def test_equals_becomes_double_equals() -> None:
-    assert t('[CAPEX/OPEX] = "CAPEX"') == 'df["CAPEX/OPEX"] == \'CAPEX\''
+    assert t('[CAPEX/OPEX] = "CAPEX"') == "df[\"CAPEX/OPEX\"] == 'CAPEX'"
 
 
 def test_not_equals_diamond() -> None:
@@ -87,16 +87,14 @@ def test_if_without_else_defaults_to_nan() -> None:
 def test_elseif_chain_becomes_select() -> None:
     expr = 'IF [x] > 10 THEN "big" ELSEIF [x] > 5 THEN "mid" ELSE "small" ENDIF'
     assert t(expr) == (
-        "np.select([df[\"x\"] > 10, df[\"x\"] > 5], ['big', 'mid'],"
-        " default='small')"
+        "np.select([df[\"x\"] > 10, df[\"x\"] > 5], ['big', 'mid'], default='small')"
     )
 
 
 def test_nested_if_in_then_branch() -> None:
     expr = 'IF [a] = 1 THEN IF [b] = 2 THEN "x" ELSE "y" ENDIF ELSE "z" ENDIF'
     assert t(expr) == (
-        "np.where(df[\"a\"] == 1,"
-        " np.where(df[\"b\"] == 2, 'x', 'y'), 'z')"
+        "np.where(df[\"a\"] == 1, np.where(df[\"b\"] == 2, 'x', 'y'), 'z')"
     )
 
 
@@ -182,10 +180,7 @@ def test_datetimeadd_months() -> None:
 
 
 def test_datetimeadd_days() -> None:
-    assert (
-        t('DateTimeAdd([dt], 7, "days")')
-        == 'df["dt"] + pd.DateOffset(days=7)'
-    )
+    assert t('DateTimeAdd([dt], 7, "days")') == 'df["dt"] + pd.DateOffset(days=7)'
 
 
 def test_todate() -> None:
@@ -195,7 +190,7 @@ def test_todate() -> None:
 def test_unknown_function_kept_verbatim() -> None:
     assert (
         t('DateTimeDiff([a], [b], "days")')
-        == "DateTimeDiff(df[\"a\"], df[\"b\"], 'days')"
+        == 'DateTimeDiff(df["a"], df["b"], \'days\')'
     )
 
 

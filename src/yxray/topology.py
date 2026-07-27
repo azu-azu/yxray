@@ -25,9 +25,7 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
     # 1. 対象ノードを集める。ToolContainer は見た目上のグループ化用で
     #    データフローを持たないノードなので除外する（残すと入次数0の
     #    「偽のソース」として順序に混ざってしまう）。
-    node_ids = [
-        int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type
-    ]
+    node_ids = [int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type]
 
     # 2. Connection を依存グラフとしてモデル化し、入次数と後続ノードを作る。
     #    除外済みノード（ToolContainer 等）や未知ノードに触れる接続は無視する。

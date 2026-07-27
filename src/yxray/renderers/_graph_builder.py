@@ -47,8 +47,14 @@ _GHOST_STYLE: dict[str, Any] = {"opacity": 0.45, "borderDashes": [4, 4]}
 
 # Ghost node colors — intentionally different from real added/removed colors so
 # "ghost of what's coming" vs "the real change" is visually distinct.
-_GHOST_ADDED_COLOR = {"background": "#ede9fe", "border": "#7c3aed"}   # lavender (not green)
-_GHOST_REMOVED_COLOR = {"background": "#ffedd5", "border": "#c2410c"}  # amber-orange (not red)
+_GHOST_ADDED_COLOR = {
+    "background": "#ede9fe",
+    "border": "#7c3aed",
+}  # lavender (not green)
+_GHOST_REMOVED_COLOR = {
+    "background": "#ffedd5",
+    "border": "#c2410c",
+}  # amber-orange (not red)
 
 # ToolContainer is a visual-only grouping in Alteryx Designer — it has no data
 # connections and adds noise to the diff graph.

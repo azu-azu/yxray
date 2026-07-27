@@ -41,11 +41,14 @@ find_any = _load_script("simulate_find_any_append")
 def test_apply_select_edits_unknown_deselected_keeps_only_selected() -> None:
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("a"),
-        edit("b", "b2"),
-        edit("*Unknown", selected=False),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("a"),
+            edit("b", "b2"),
+            edit("*Unknown", selected=False),
+        ],
+    )
     assert list(out.columns) == ["a", "b2"]
 
 
@@ -54,33 +57,42 @@ def test_apply_select_edits_ignores_absent_deselected_column() -> None:
     # that no longer exists must not raise KeyError.
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1], "unlisted": [2]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("a", "id"),
-        edit("gone", selected=False),
-        edit("*Unknown"),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("a", "id"),
+            edit("gone", selected=False),
+            edit("*Unknown"),
+        ],
+    )
     assert list(out.columns) == ["id", "unlisted"]
 
 
 def test_apply_select_edits_unknown_selected_keeps_unlisted_columns() -> None:
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1], "b": [2], "extra": [3]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("a"),
-        edit("b", selected=False),
-        edit("*Unknown"),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("a"),
+            edit("b", selected=False),
+            edit("*Unknown"),
+        ],
+    )
     assert list(out.columns) == ["a", "extra"]
 
 
 def test_apply_select_edits_unknown_deselected_skips_absent_selected() -> None:
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("a"),
-        edit("renamed_away", "x"),
-        edit("*Unknown", selected=False),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("a"),
+            edit("renamed_away", "x"),
+            edit("*Unknown", selected=False),
+        ],
+    )
     assert list(out.columns) == ["a"]
 
 
@@ -94,16 +106,21 @@ def test_apply_select_edits_type_string() -> None:
 
 def test_apply_select_edits_type_int_sizes_and_rounding() -> None:
     edit = select_helpers.SelectColumnEdit
-    df = pd.DataFrame({
-        "i16": ["1", "2"],
-        "i64": ["3", "bad"],
-        "dbl": [1.5, 2.4],
-    })
-    out = select_helpers.apply_select_edits(df, [
-        edit("i16", type="Int16"),
-        edit("i64", type="Int64"),
-        edit("dbl", type="Int32"),
-    ])
+    df = pd.DataFrame(
+        {
+            "i16": ["1", "2"],
+            "i64": ["3", "bad"],
+            "dbl": [1.5, 2.4],
+        }
+    )
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("i16", type="Int16"),
+            edit("i64", type="Int64"),
+            edit("dbl", type="Int32"),
+        ],
+    )
     assert out["i16"].dtype == "Int16"
     assert out["i64"].dtype == "Int64"
     # 変換失敗は Alteryx の Conversion Error と同じく null
@@ -115,16 +132,21 @@ def test_apply_select_edits_type_int_sizes_and_rounding() -> None:
 
 def test_apply_select_edits_type_float_and_date() -> None:
     edit = select_helpers.SelectColumnEdit
-    df = pd.DataFrame({
-        "f": ["1.5", ""],
-        "d": ["2024-01-02 15:30:00", "not a date"],
-        "dt": ["2024-01-02 15:30:00", None],
-    })
-    out = select_helpers.apply_select_edits(df, [
-        edit("f", type="Double"),
-        edit("d", type="Date"),
-        edit("dt", type="DateTime"),
-    ])
+    df = pd.DataFrame(
+        {
+            "f": ["1.5", ""],
+            "d": ["2024-01-02 15:30:00", "not a date"],
+            "dt": ["2024-01-02 15:30:00", None],
+        }
+    )
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("f", type="Double"),
+            edit("d", type="Date"),
+            edit("dt", type="DateTime"),
+        ],
+    )
     assert out["f"].dtype == "float64"
     assert out["f"].iloc[0] == 1.5
     # Date は時刻部分を持たない（normalize）、DateTime は保持
@@ -147,9 +169,12 @@ def test_apply_select_edits_type_applied_before_rename() -> None:
     # rename と併用しても変換が効くこと
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"old": ["1", "2"]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("old", new_name="new", type="Int64"),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("old", new_name="new", type="Int64"),
+        ],
+    )
     assert list(out.columns) == ["new"]
     assert out["new"].dtype == "Int64"
 
@@ -158,12 +183,15 @@ def test_apply_select_edits_type_unsupported_or_absent_is_skipped() -> None:
     # 未対応型（Blob 等）と存在しない列は警告のみで落ちない
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1], "b": ["x"]})
-    out = select_helpers.apply_select_edits(df, [
-        edit("a", type="Blob"),
-        edit("gone", type="Int64"),
-        edit("b"),
-        edit("*Unknown", selected=False),
-    ])
+    out = select_helpers.apply_select_edits(
+        df,
+        [
+            edit("a", type="Blob"),
+            edit("gone", type="Int64"),
+            edit("b"),
+            edit("*Unknown", selected=False),
+        ],
+    )
     assert list(out.columns) == ["a", "b"]
     assert out["a"].iloc[0] == 1
 
@@ -186,9 +214,7 @@ def _run(targets, lookup, **kwargs):
     kwargs.setdefault("append_fields", ["label"])
     # case_sensitive has no default in the helper — callers must state it
     kwargs.setdefault("case_sensitive", True)
-    return find_any.simulate_find_any_append(
-        targets, lookup, verbose=False, **kwargs
-    )
+    return find_any.simulate_find_any_append(targets, lookup, verbose=False, **kwargs)
 
 
 def test_find_any_substring_match_appends_and_keeps_row_count() -> None:
@@ -224,17 +250,23 @@ def test_find_any_golden_leftmost_match() -> None:
     # lookup row (row 0 would give A1 for "cherry apple pie") and not the
     # last (rows 1/4 would give C3) — and the golden output was identical
     # for RMF=True and RMF=False.
-    targets = pd.DataFrame({"text": [
-        "cherry apple pie",        # apple & cherry match; cherry is leftmost
-        "berry cherry jam",        # berry & cherry match; berry is leftmost
-        "apple only",              # single match — control
-        "no match here",           # no match — control
-        "apple berry cherry mix",  # all three match; apple is leftmost
-    ]})
-    lookup = pd.DataFrame({
-        "kw": ["apple", "berry", "cherry"],
-        "label": ["A1", "B2", "C3"],
-    })
+    targets = pd.DataFrame(
+        {
+            "text": [
+                "cherry apple pie",  # apple & cherry match; cherry is leftmost
+                "berry cherry jam",  # berry & cherry match; berry is leftmost
+                "apple only",  # single match — control
+                "no match here",  # no match — control
+                "apple berry cherry mix",  # all three match; apple is leftmost
+            ]
+        }
+    )
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "berry", "cherry"],
+            "label": ["A1", "B2", "C3"],
+        }
+    )
     expected = ["C3", "B2", "A1", pd.NA, "A1"]
     out = _run(targets, lookup)
     assert list(out["label"]) == expected
@@ -318,10 +350,12 @@ def test_find_any_appended_integer_float_drops_dot_zero() -> None:
     # into 123.0, and the appended value must still read "123" — otherwise a
     # string comparison against golden output shows a phantom diff
     targets = pd.DataFrame({"text": ["apple pie", "nothing here"]})
-    lookup = pd.DataFrame({
-        "kw": ["apple", "zzz"],
-        "code": [123, None],
-    })
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "zzz"],
+            "code": [123, None],
+        }
+    )
     out = _run(targets, lookup, append_fields=["code"])
     assert out["code"].iloc[0] == "123"
     # an unmatched target keeps NA (not the string "nan")
@@ -351,16 +385,22 @@ def test_find_any_case_insensitive_keeps_the_adoption_rules() -> None:
     # golden-verified on real Alteryx output (NoCase=True over the same
     # apple/berry/cherry lookup as the 5-row leftmost golden); the last row
     # applies the golden same-start tie rule under NoCase.
-    targets = pd.DataFrame({"text": [
-        "Cherry APPLE pie",   # both match case-insensitively; Cherry is leftmost
-        "BERRY cherry jam",   # BERRY is leftmost
-        "Apple only",         # single match — control
-        "APP APPLE",          # tie at position 0 → earlier lookup row (app)
-    ]})
-    lookup = pd.DataFrame({
-        "kw": ["apple", "berry", "cherry", "app"],
-        "label": ["A1", "B2", "C3", "SHORT"],
-    })
+    targets = pd.DataFrame(
+        {
+            "text": [
+                "Cherry APPLE pie",  # both match case-insensitively; Cherry is leftmost
+                "BERRY cherry jam",  # BERRY is leftmost
+                "Apple only",  # single match — control
+                "APP APPLE",  # tie at position 0 → earlier lookup row (app)
+            ]
+        }
+    )
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "berry", "cherry", "app"],
+            "label": ["A1", "B2", "C3", "SHORT"],
+        }
+    )
     out = _run(targets, lookup, case_sensitive=False)
     assert list(out["label"]) == ["C3", "B2", "A1", "SHORT"]
 
@@ -369,16 +409,20 @@ def test_find_any_output_is_target_columns_plus_append_fields() -> None:
     # The output carries every original Targets column (in order) plus the
     # append_fields — and nothing else: not the search key column, not the
     # lookup columns left out of append_fields, not the internal row ids.
-    targets = pd.DataFrame({
-        "text": ["apple pie", "no hit"],
-        "other": ["keep", "keep"],
-    })
-    lookup = pd.DataFrame({
-        "kw": ["apple"],
-        "label": ["L"],
-        "code": ["C"],
-        "unused": ["U"],
-    })
+    targets = pd.DataFrame(
+        {
+            "text": ["apple pie", "no hit"],
+            "other": ["keep", "keep"],
+        }
+    )
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple"],
+            "label": ["L"],
+            "code": ["C"],
+            "unused": ["U"],
+        }
+    )
     out = _run(targets, lookup, append_fields=["label", "code"])
     assert list(out.columns) == ["text", "other", "label", "code"]
     assert list(out["other"]) == ["keep", "keep"]
@@ -425,10 +469,12 @@ def test_find_any_needles_are_matched_literally_not_as_regex() -> None:
     # needle must be escaped: "1.5" must not match "125", "a+b" must not
     # match "aab", and "[xy]" must not match a bare "x".
     targets = pd.DataFrame({"text": ["125", "aab", "x", "1.5 exact", "[xy] exact"]})
-    lookup = pd.DataFrame({
-        "kw": ["1.5", "a+b", "[xy]"],
-        "label": ["DOT", "PLUS", "CLASS"],
-    })
+    lookup = pd.DataFrame(
+        {
+            "kw": ["1.5", "a+b", "[xy]"],
+            "label": ["DOT", "PLUS", "CLASS"],
+        }
+    )
     out = _run(targets, lookup)
     assert list(out["label"]) == [pd.NA, pd.NA, pd.NA, "DOT", "CLASS"]
 
@@ -440,11 +486,13 @@ def test_find_any_case_insensitive_duplicate_needle_keeps_earlier_row() -> None:
     # come back — the match must resolve to a lookup row, not merely to the
     # matched text.
     targets = pd.DataFrame({"text": ["APPLE pie"]})
-    lookup = pd.DataFrame({
-        "kw": ["Apple", "apple"],
-        "label": ["FIRST", "SECOND"],
-        "code": ["C1", "C2"],
-    })
+    lookup = pd.DataFrame(
+        {
+            "kw": ["Apple", "apple"],
+            "label": ["FIRST", "SECOND"],
+            "code": ["C1", "C2"],
+        }
+    )
     out = _run(targets, lookup, append_fields=["label", "code"], case_sensitive=False)
     assert list(out.iloc[0][["label", "code"]]) == ["FIRST", "C1"]
 
@@ -516,9 +564,12 @@ def test_find_any_matches_the_brute_force_rule_on_random_frames() -> None:
         for i in range(rng.randint(1, 7)):
             roll = rng.random()
             kws.append(
-                None if roll < 0.12
-                else "" if roll < 0.2
-                else rng.randint(1, 200) if roll < 0.26
+                None
+                if roll < 0.12
+                else ""
+                if roll < 0.2
+                else rng.randint(1, 200)
+                if roll < 0.26
                 else word()
             )
             labels.append(f"L{i}")
@@ -546,48 +597,78 @@ def test_find_any_diagnostics_off_returns_the_same_output() -> None:
     # identical with the diagnostics on and off.
     cases = [
         # leftmost wins / several matches per target / no match
-        (pd.DataFrame({"text": [
-            "cherry apple pie", "berry cherry jam", "apple only",
-            "no match here", "apple berry cherry mix",
-        ]}),
-         pd.DataFrame({"kw": ["apple", "berry", "cherry"],
-                       "label": ["A1", "B2", "C3"]}),
-         True),
+        (
+            pd.DataFrame(
+                {
+                    "text": [
+                        "cherry apple pie",
+                        "berry cherry jam",
+                        "apple only",
+                        "no match here",
+                        "apple berry cherry mix",
+                    ]
+                }
+            ),
+            pd.DataFrame(
+                {"kw": ["apple", "berry", "cherry"], "label": ["A1", "B2", "C3"]}
+            ),
+            True,
+        ),
         # nested needles, same-start tie
-        (pd.DataFrame({"text": ["apple pie"]}),
-         pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]}),
-         True),
+        (
+            pd.DataFrame({"text": ["apple pie"]}),
+            pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]}),
+            True,
+        ),
         # duplicate needles, NULL/empty needles, NaN haystack
-        (pd.DataFrame({"text": ["apple pie", None, "", 123]}),
-         pd.DataFrame({"kw": ["apple", "apple", None, "", 123],
-                       "label": ["X", "Y", "N", "E", "NUM"]}),
-         True),
+        (
+            pd.DataFrame({"text": ["apple pie", None, "", 123]}),
+            pd.DataFrame(
+                {
+                    "kw": ["apple", "apple", None, "", 123],
+                    "label": ["X", "Y", "N", "E", "NUM"],
+                }
+            ),
+            True,
+        ),
         # NoCase
-        (pd.DataFrame({"text": ["Cherry APPLE pie", "nothing"]}),
-         pd.DataFrame({"kw": ["apple", "cherry"], "label": ["A1", "C3"]}),
-         False),
+        (
+            pd.DataFrame({"text": ["Cherry APPLE pie", "nothing"]}),
+            pd.DataFrame({"kw": ["apple", "cherry"], "label": ["A1", "C3"]}),
+            False,
+        ),
     ]
     for targets, lookup, case_sensitive in cases:
         on = _run(targets, lookup, case_sensitive=case_sensitive)
-        off = _run(targets, lookup, case_sensitive=case_sensitive,
-                   collect_match_diagnostics=False)
+        off = _run(
+            targets,
+            lookup,
+            case_sensitive=case_sensitive,
+            collect_match_diagnostics=False,
+        )
         pd.testing.assert_frame_equal(off, on)
 
 
 def test_find_any_diagnostics_off_still_applies_the_adoption_rule() -> None:
     # Regression test for the diagnostics-off path on its own terms: the
     # expected values are written out here, not taken from the other path.
-    targets = pd.DataFrame({"text": [
-        "cherry apple pie",        # apple & cherry match; cherry is leftmost
-        "berry cherry jam",        # berry & cherry match; berry is leftmost
-        "apple only",              # single match
-        "no match here",           # no match
-        "apple berry cherry mix",  # all three match; apple is leftmost
-    ]})
-    lookup = pd.DataFrame({
-        "kw": ["apple", "berry", "cherry"],
-        "label": ["A1", "B2", "C3"],
-    })
+    targets = pd.DataFrame(
+        {
+            "text": [
+                "cherry apple pie",  # apple & cherry match; cherry is leftmost
+                "berry cherry jam",  # berry & cherry match; berry is leftmost
+                "apple only",  # single match
+                "no match here",  # no match
+                "apple berry cherry mix",  # all three match; apple is leftmost
+            ]
+        }
+    )
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "berry", "cherry"],
+            "label": ["A1", "B2", "C3"],
+        }
+    )
     out = _run(targets, lookup, collect_match_diagnostics=False)
     assert list(out["label"]) == ["C3", "B2", "A1", pd.NA, "A1"]
     assert list(out.columns) == ["text", "label"]
@@ -600,9 +681,14 @@ def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     find_any.simulate_find_any_append(
-        targets, lookup,
-        find_field="text", search_field="kw", append_fields=["label"],
-        case_sensitive=True, verbose=True, collect_match_diagnostics=False,
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=True,
+        collect_match_diagnostics=False,
     )
     printed = capsys.readouterr().out
     # row and match counts survive — matched rows comes from the winner, not
@@ -618,15 +704,23 @@ def test_find_any_diagnostics_are_off_by_default(capsys) -> None:
     # The ambiguity scan is opt-in: it costs a lookup-rows x targets pass and
     # is a review aid, not something every run should pay for. Generated code
     # asks for it explicitly.
-    assert inspect.signature(
-        find_any.simulate_find_any_append
-    ).parameters["collect_match_diagnostics"].default is False
+    assert (
+        inspect.signature(find_any.simulate_find_any_append)
+        .parameters["collect_match_diagnostics"]
+        .default
+        is False
+    )
 
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     find_any.simulate_find_any_append(
-        targets, lookup, find_field="text", search_field="kw",
-        append_fields=["label"], case_sensitive=True, verbose=True,
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=True,
     )
     printed = capsys.readouterr().out
     assert "collect_match_diagnostics=False" in printed
@@ -650,16 +744,26 @@ def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
     )
 
     find_any.simulate_find_any_append(
-        targets, lookup, find_field="text", search_field="kw",
-        append_fields=["label"], case_sensitive=True,
-        verbose=False, collect_match_diagnostics=True,
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=False,
+        collect_match_diagnostics=True,
     )
     assert calls == []
 
     find_any.simulate_find_any_append(
-        targets, lookup, find_field="text", search_field="kw",
-        append_fields=["label"], case_sensitive=True,
-        verbose=True, collect_match_diagnostics=True,
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=True,
+        collect_match_diagnostics=True,
     )
     assert len(calls) == 1
 
@@ -668,9 +772,10 @@ def test_find_any_has_no_replace_multiple_found_argument() -> None:
     # ReplaceMultipleFound has no effect on FindAny + Append output (golden-
     # verified with both settings), so the helper does not accept it —
     # keeping a no-op argument would suggest it changes something.
-    assert "replace_multiple_found" not in inspect.signature(
-        find_any.simulate_find_any_append
-    ).parameters
+    assert (
+        "replace_multiple_found"
+        not in inspect.signature(find_any.simulate_find_any_append).parameters
+    )
 
 
 def test_find_any_rejects_column_overlap_with_targets() -> None:

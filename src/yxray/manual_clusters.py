@@ -34,9 +34,7 @@ def workflow_fingerprint(doc: WorkflowDoc) -> str:
     return _fnv1a_32("|".join(parts))
 
 
-def load_manual_cluster_config(
-    path: pathlib.Path, doc: WorkflowDoc
-) -> dict[str, Any]:
+def load_manual_cluster_config(path: pathlib.Path, doc: WorkflowDoc) -> dict[str, Any]:
     """Load a manual cluster JSON file and validate it against a workflow."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))

@@ -1,4 +1,3 @@
-
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import (
@@ -48,7 +47,10 @@ def test_scaffold_includes_main() -> None:
 def test_scaffold_input_excel() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
             config={"File": "master.xlsx"},
         )
     )
@@ -60,7 +62,10 @@ def test_scaffold_input_excel() -> None:
 def test_scaffold_input_csv() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": "data.csv"},
         )
     )
@@ -72,14 +77,17 @@ def test_scaffold_input_csv() -> None:
 def test_scaffold_input_paths_env_block() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
             config={"File": "data.csv"},
         )
     )
     code = scaffold(doc)
     assert 'ENV = os.getenv("APP_ENV", "test")' in code
     assert "BASE_DIR" in code
-    assert 'parents[2]' in code
+    assert "parents[2]" in code
     assert '"input_1"' in code
 
 
@@ -101,8 +109,10 @@ def test_scaffold_output_csv() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -114,7 +124,10 @@ def test_scaffold_output_csv() -> None:
 def test_scaffold_input_shp_uses_gpd_read_file() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         )
     )
@@ -131,7 +144,10 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
     # normalize right after loading.
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         )
     )
@@ -145,7 +161,10 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
 def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.gpkg"},
         )
     )
@@ -162,7 +181,10 @@ def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
 def test_scaffold_csv_read_has_no_crs_normalization() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\plain.csv"},
         )
     )
@@ -172,11 +194,17 @@ def test_scaffold_csv_read_has_no_crs_normalization() -> None:
 def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         ),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="DbFileInput", x=0, y=100,
+            tool_id=ToolID(2),
+            tool_type="DbFileInput",
+            x=0,
+            y=100,
             config={"FileName": r"C:\data\roads.shp"},
         ),
     )
@@ -190,7 +218,10 @@ def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
 def test_scaffold_non_shp_has_no_shx_restore() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.gpkg"},
         )
     )
@@ -200,7 +231,10 @@ def test_scaffold_non_shp_has_no_shx_restore() -> None:
 def test_scaffold_simple_shp_notes_shx_restore() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         )
     )
@@ -215,7 +249,10 @@ def test_scaffold_simple_shp_notes_shx_restore() -> None:
 def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.gpkg"},
         )
     )
@@ -233,7 +270,10 @@ def test_scaffold_shp_read_guards_missing_dbf() -> None:
     # sets from Windows must pass the guard.
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         )
     )
@@ -247,7 +287,10 @@ def test_scaffold_shp_read_guards_missing_dbf() -> None:
 def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.shp"},
         )
     )
@@ -262,7 +305,10 @@ def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
     # formats read whole, so no guard and no pathlib import.
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\mesh.gpkg"},
         )
     )
@@ -274,7 +320,10 @@ def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
 def test_scaffold_windows_path_extracts_filename_in_test_block() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="DbFileInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
             config={"FileName": r"C:\data\subdir\indoor4.csv"},
         )
     )
@@ -292,13 +341,18 @@ def test_scaffold_filter_translates_field_notation() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": "[Age] > 18"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -311,13 +365,18 @@ def test_scaffold_filter_date_comparison_warning() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": '[日付列] >= ToDate("2024-01-01")'},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -330,13 +389,18 @@ def test_scaffold_filter_no_date_warning_without_date_functions() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": "[Age] > 18"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -369,9 +433,7 @@ def test_fields_in_fragment_collects_all_columns() -> None:
     assert _fields_in_fragment(fragment) == {"A", "B"}
 
 
-def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() -> (
-    None
-):
+def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() -> None:
     # cond_1 is a bare IsEmpty on 日付列A, cond_2 date-compares 日付列A
     # against ToDate(...) and also against 日付列B (column-vs-column, so
     # 日付列B is only reachable via the residual fallback).
@@ -382,36 +444,46 @@ def test_scaffold_filter_isempty_plus_date_gets_precise_and_residual_warnings() 
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": expr},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
     code = scaffold(doc)
     assert 'column "日付列A" is compared as a date in cond_2' in code
-    assert "IsEmpty's == \"\" check on \"日付列A\"" in code
+    assert 'IsEmpty\'s == "" check on "日付列A"' in code
     assert 'verify the type of column "日付列B" too' in code
-    assert "IsEmpty == \"\" check becomes always False afterward" in code
+    assert 'IsEmpty == "" check becomes always False afterward' in code
 
 
 def test_scaffold_filter_isnull_with_date_has_no_dead_code_note() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={
                 "Expression": 'IsNull([DateCol]) OR [DateCol] >= ToDate("2024-01-01")'
             },
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -428,13 +500,18 @@ def test_scaffold_filter_date_residual_warning_flags_unrelated_column() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": expr},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -447,13 +524,18 @@ def _simple_filter_doc(simple_config: dict) -> WorkflowDoc:
     return _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Mode": "Simple", "Simple": simple_config},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -505,8 +587,7 @@ def test_scaffold_filter_simple_mode_contains_is_literal() -> None:
     )
     code = scaffold(doc)
     assert (
-        'df_2 = df_1[df_1["Name"].str.contains("ta.ro", regex=False, na=False)]'
-        in code
+        'df_2 = df_1[df_1["Name"].str.contains("ta.ro", regex=False, na=False)]' in code
     )
 
 
@@ -535,13 +616,18 @@ def _expr_filter_doc(expr: str) -> WorkflowDoc:
     return _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": expr},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -581,17 +667,15 @@ def test_scaffold_filter_two_long_operands_split_into_masks() -> None:
 
 def test_scaffold_filter_two_short_operands_stay_one_line() -> None:
     code = scaffold_simple(_expr_filter_doc('[Age] > 18 AND [Status] = "Active"'))
-    assert "df_2 = df_1[(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')]" in code
+    assert 'df_2 = df_1[(df_1["Age"] > 18) & (df_1["Status"] == \'Active\')]' in code
     assert "cond_1" not in code
 
 
 def test_scaffold_filter_line_length_boundary_88_stays_one_line() -> None:
     # One-line form is exactly 88 columns — at the limit, not over it.
     field = "x" * 29
-    code = scaffold_simple(
-        _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
-    )
-    line = f"df_2 = df_1[(df_1[\"{field}\"] > 18) & (df_1[\"Status\"] == 'Active')]"
+    code = scaffold_simple(_expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"'))
+    line = f'df_2 = df_1[(df_1["{field}"] > 18) & (df_1["Status"] == \'Active\')]'
     assert len(line) == 88
     assert line in code
     assert "cond_1" not in code
@@ -600,9 +684,7 @@ def test_scaffold_filter_line_length_boundary_88_stays_one_line() -> None:
 def test_scaffold_filter_line_length_boundary_89_splits() -> None:
     # One character longer than the previous test: 89 columns — splits.
     field = "x" * 30
-    code = scaffold_simple(
-        _expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"')
-    )
+    code = scaffold_simple(_expr_filter_doc(f'[{field}] > 18 AND [Status] = "Active"'))
     assert f'cond_1 = df_1["{field}"] > 18' in code
     assert "cond_2 = df_1[\"Status\"] == 'Active'" in code
     assert "df_2 = df_1[cond_1 & cond_2]" in code
@@ -658,9 +740,7 @@ def test_scaffold_filter_date_warning_survives_translation_fallback() -> None:
     # this filter still compares a date. _ALTERYX_DATE_FN_RE catches it from
     # the untranslated ToDate(...) call instead.
     code = scaffold_simple(
-        _expr_filter_doc(
-            '[EventDate] >= ToDate("2024-01-01") AND [Other] ?? weird'
-        )
+        _expr_filter_doc('[EventDate] >= ToDate("2024-01-01") AND [Other] ?? weird')
     )
     assert "# TODO: could not translate expression" in code
     assert "# WARNING: date comparison" in code
@@ -682,7 +762,10 @@ def test_scaffold_formula_translates_if_expression() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": {
@@ -698,15 +781,17 @@ def test_scaffold_formula_translates_if_expression() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
     code = scaffold(doc)
     assert "import numpy as np" in code
     assert (
-        "np.select([df_2[\"Score\"] >= 80, df_2[\"Score\"] >= 60],"
+        'np.select([df_2["Score"] >= 80, df_2["Score"] >= 60],'
         " ['A', 'B'], default='C')" in code
     )
     assert "THEN" not in code
@@ -716,18 +801,23 @@ def test_scaffold_filter_boolean_expression_parenthesized() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": '[Age] > 18 AND [Status] = "Active"'},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
     code = scaffold(doc)
-    assert "(df_1[\"Age\"] > 18) & (df_1[\"Status\"] == 'Active')" in code
+    assert '(df_1["Age"] > 18) & (df_1["Status"] == \'Active\')' in code
     assert "import numpy as np" not in code
 
 
@@ -735,7 +825,10 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": {
@@ -747,8 +840,10 @@ def test_scaffold_formula_untranslatable_expression_falls_back() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -771,7 +866,10 @@ def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": {
@@ -783,8 +881,10 @@ def test_scaffold_formula_field_name_with_space_is_valid_python() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -801,17 +901,20 @@ def test_scaffold_field_name_with_quote_stays_valid_python() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Sort",
+            x=10,
+            y=0,
             config={
-                "SortInfo": {
-                    "Field": {"@field": 'weird"name', "@order": "Ascending"}
-                }
+                "SortInfo": {"Field": {"@field": 'weird"name', "@order": "Ascending"}}
             },
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -825,7 +928,10 @@ def test_scaffold_text_input_data_value_with_quote_stays_valid_python() -> None:
     # not just theoretical, and must not break the generated DataFrame.
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="TextInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="TextInput",
+            x=0,
+            y=0,
             config={
                 "Fields": {"Field": {"@name": "Note"}},
                 "Data": {"r": {"c": 'say "hi"'}},
@@ -842,7 +948,10 @@ def test_scaffold_formula_later_field_references_earlier() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": [
@@ -854,8 +963,10 @@ def test_scaffold_formula_later_field_references_earlier() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -874,7 +985,10 @@ def test_scaffold_select_columns() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [
@@ -887,8 +1001,10 @@ def test_scaffold_select_columns() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -903,7 +1019,10 @@ def test_scaffold_select_with_rename() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [
@@ -918,8 +1037,10 @@ def test_scaffold_select_with_rename() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -934,7 +1055,10 @@ def test_scaffold_select_with_type_change() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [
@@ -961,16 +1085,16 @@ def test_scaffold_select_with_type_change() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
     code = scaffold(doc)
     assert 'SelectColumnEdit("amount", type="Double")' in code
-    assert (
-        'SelectColumnEdit("old_col", new_name="new_col", type="V_WString")' in code
-    )
+    assert 'SelectColumnEdit("old_col", new_name="new_col", type="V_WString")' in code
     assert 'SelectColumnEdit("junk", selected=False)' in code
     assert 'SelectColumnEdit("plain")' in code
 
@@ -981,7 +1105,10 @@ def test_scaffold_select_does_not_emit_helper_definitions() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [{"@field": "Col", "@selected": "True"}]
@@ -990,8 +1117,10 @@ def test_scaffold_select_does_not_emit_helper_definitions() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -999,10 +1128,7 @@ def test_scaffold_select_does_not_emit_helper_definitions() -> None:
     assert "from dataclasses import dataclass" not in code
     assert "class SelectColumnEdit:" not in code
     assert "def apply_select_edits(" not in code
-    assert (
-        "# NOTE: SelectColumnEdit / apply_select_edits are not generated"
-        in code
-    )
+    assert "# NOTE: SelectColumnEdit / apply_select_edits are not generated" in code
     assert "apply_select_edits(df_1, _COLS_2)" in code
 
 
@@ -1013,7 +1139,10 @@ def test_scaffold_select_always_warns_about_stale_xml() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [{"@field": "Name", "@selected": "True"}]
@@ -1022,8 +1151,10 @@ def test_scaffold_select_always_warns_about_stale_xml() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1039,12 +1170,18 @@ def test_scaffold_select_stale_warning_even_without_columns() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0, config={},
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
+            config={},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1057,7 +1194,10 @@ def test_scaffold_select_unknown_deselected_warning() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={
                 "SelectFields": {
                     "SelectField": [
@@ -1069,8 +1209,10 @@ def test_scaffold_select_unknown_deselected_warning() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1087,8 +1229,10 @@ def _browse_doc() -> WorkflowDoc:
         AlteryxNode(tool_id=ToolID(2), tool_type="BrowseV2", x=10, y=0),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1121,17 +1265,24 @@ def test_scaffold_join_same_key() -> None:
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
         AlteryxNode(
-            tool_id=ToolID(3), tool_type="Join", x=100, y=50,
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
             config={"JoinExpression": "[L:CustomerID] = [R:CustomerID]"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Left"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Right"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
             ),
         ),
     )
@@ -1146,17 +1297,24 @@ def test_scaffold_join_different_keys() -> None:
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
         AlteryxNode(
-            tool_id=ToolID(3), tool_type="Join", x=100, y=50,
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
             config={"JoinExpression": "[L:OrdID] = [R:OrderID]"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Left"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Right"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
             ),
         ),
     )
@@ -1175,17 +1333,24 @@ def test_scaffold_join_unparseable_expr_with_newline_stays_in_comment() -> None:
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
         AlteryxNode(
-            tool_id=ToolID(3), tool_type="Join", x=100, y=50,
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
             config={"JoinExpression": "messy\nmulti-line cond"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Left"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Right"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
             ),
         ),
     )
@@ -1201,7 +1366,10 @@ def test_scaffold_summarize_groupby() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Summarize", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Summarize",
+            x=10,
+            y=0,
             config={
                 "SummarizeFields": {
                     "SummarizeField": [
@@ -1213,8 +1381,10 @@ def test_scaffold_summarize_groupby() -> None:
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1234,12 +1404,16 @@ def test_scaffold_union_concat() -> None:
         AlteryxNode(tool_id=ToolID(3), tool_type="Union", x=100, y=50),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Input1"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input1"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Input2"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input2"),
             ),
         ),
     )
@@ -1257,8 +1431,10 @@ def _chain_doc(second: AlteryxNode) -> WorkflowDoc:
         second,
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1267,7 +1443,10 @@ def _chain_doc(second: AlteryxNode) -> WorkflowDoc:
 def test_scaffold_sort_reads_nested_field_rows() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Sort",
+            x=10,
+            y=0,
             config={
                 "SortInfo": {
                     "@locale": "2631851",
@@ -1283,7 +1462,10 @@ def test_scaffold_sort_reads_nested_field_rows() -> None:
 def test_scaffold_sort_multiple_fields() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Sort", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Sort",
+            x=10,
+            y=0,
             config={
                 "SortInfo": {
                     "Field": [
@@ -1301,7 +1483,10 @@ def test_scaffold_sort_multiple_fields() -> None:
 def test_scaffold_unique_uses_subset() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Unique", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Unique",
+            x=10,
+            y=0,
             config={"UniqueFields": {"Field": {"@field": "EL_ID"}}},
         )
     )
@@ -1310,9 +1495,7 @@ def test_scaffold_unique_uses_subset() -> None:
 
 
 def test_scaffold_unique_without_fields_keeps_default() -> None:
-    doc = _chain_doc(
-        AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0)
-    )
+    doc = _chain_doc(AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0))
     code = scaffold(doc)
     assert "df_2 = df_1.drop_duplicates()" in code
 
@@ -1323,7 +1506,10 @@ def test_scaffold_unique_without_fields_keeps_default() -> None:
 def test_scaffold_recordid_uses_configured_field_and_start() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="RecordID", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="RecordID",
+            x=10,
+            y=0,
             config={
                 "FieldName": {"#text": "RowNum"},
                 "StartValue": {"#text": "0"},
@@ -1359,7 +1545,10 @@ def test_scaffold_countrecords_has_no_config() -> None:
 def test_scaffold_text_input_builds_dataframe() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="TextInput", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="TextInput",
+            x=0,
+            y=0,
             config={
                 "NumRows": {"@value": "3"},
                 "Fields": {"Field": {"@name": "進捗"}},
@@ -1375,9 +1564,7 @@ def test_scaffold_text_input_builds_dataframe() -> None:
     )
     code = scaffold(doc)
     assert "df_1 = pd.DataFrame({" in code
-    assert (
-        '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
-    )
+    assert '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
 
 
 # ── Find Replace ───────────────────────────────────────────────────────────
@@ -1392,17 +1579,19 @@ def _two_input_doc(
     return _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=10),
-        AlteryxNode(
-            tool_id=ToolID(3), tool_type=tool_type, x=10, y=0, config=config
-        ),
+        AlteryxNode(tool_id=ToolID(3), tool_type=tool_type, x=10, y=0, config=config),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName(anchor_a),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName(anchor_a),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName(anchor_b),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName(anchor_b),
             ),
         ),
     )
@@ -1641,7 +1830,7 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
             "ReplaceAppendFields": {"Field": [{"@field": "val"}]},
         },
         "Targets",  # tool 1 → main stream
-        "Source",   # tool 2 → lookup table
+        "Source",  # tool 2 → lookup table
     )
     code = scaffold(doc)
     # tool 1 (Targets / main) first, tool 2 (Source / lookup) second
@@ -1674,7 +1863,10 @@ def test_scaffold_appendfields_cross_join() -> None:
 def test_scaffold_createpoints_geopandas() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="CreatePoints", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="CreatePoints",
+            x=10,
+            y=0,
             config={
                 "Fields": {"@fieldX": "Longitude", "@fieldY": "Latitude"},
                 "Mode": "Double",
@@ -1753,12 +1945,16 @@ def test_scaffold_spatialmatch_embedded_select_deviation_warns() -> None:
             {"@field": "Target_ID", "@selected": "True", "@input": "Target_"},
             {"@field": "Universe_Area", "@selected": "False", "@input": "Universe_"},
             {
-                "@field": "Target_Name", "@selected": "True",
-                "@rename": "名称", "@input": "Target_",
+                "@field": "Target_Name",
+                "@selected": "True",
+                "@rename": "名称",
+                "@input": "Target_",
             },
             {
-                "@field": "Universe_Code", "@selected": "True",
-                "@type": "Int32", "@input": "Universe_",
+                "@field": "Universe_Code",
+                "@selected": "True",
+                "@type": "Int32",
+                "@input": "Universe_",
             },
         ]
     )
@@ -1810,14 +2006,22 @@ def test_scaffold_unsupported_tool_todo() -> None:
 
 def test_scaffold_topo_order() -> None:
     doc = _doc(
-        AlteryxNode(tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
-                    config={"Expression": "[x] > 0"}),
-        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
-                    config={"File": "a.csv"}),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
+            config={"Expression": "[x] > 0"},
+        ),
+        AlteryxNode(
+            tool_id=ToolID(1), tool_type="InputData", x=0, y=0, config={"File": "a.csv"}
+        ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1832,13 +2036,18 @@ def test_node_code_snippets_includes_filter() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Filter", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Filter",
+            x=10,
+            y=0,
             config={"Expression": "[Age] > 18"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1851,13 +2060,18 @@ def test_node_code_snippets_includes_select() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Select", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
             config={"SelectFields": {"SelectField": [{"@field": "Age"}]}},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1868,17 +2082,25 @@ def test_node_code_snippets_includes_select() -> None:
 def test_node_code_snippets_excludes_input_output() -> None:
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
             config={"File": "a.csv"},
         ),
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="OutputData", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="OutputData",
+            x=10,
+            y=0,
             config={"File": "out.csv"},
         ),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -1896,7 +2118,11 @@ def test_scaffold_createpoints_todo_fallback_skips_geopandas_import() -> None:
     # imports geopandas (previously the segment scan imported it anyway).
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="CreatePoints", x=10, y=0, config={},
+            tool_id=ToolID(2),
+            tool_type="CreatePoints",
+            x=10,
+            y=0,
+            config={},
         )
     )
     assert "import geopandas as gpd" not in scaffold(doc)
@@ -1909,7 +2135,10 @@ def test_scaffold_simple_spatial_input_imports_geopandas() -> None:
     # GEOPANDAS itself — no spatial tool in the workflow.
     doc = _doc(
         AlteryxNode(
-            tool_id=ToolID(1), tool_type="InputData", x=0, y=0,
+            tool_id=ToolID(1),
+            tool_type="InputData",
+            x=0,
+            y=0,
             config={"File": r"C:\data\areas.geojson"},
         ),
     )
@@ -1921,7 +2150,10 @@ def test_scaffold_simple_spatial_input_imports_geopandas() -> None:
 def test_scaffold_simple_formula_numpy_import_follows_translation() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": {
@@ -1939,7 +2171,10 @@ def test_scaffold_simple_formula_numpy_import_follows_translation() -> None:
 def test_scaffold_simple_no_numpy_import_without_numpy_emission() -> None:
     doc = _chain_doc(
         AlteryxNode(
-            tool_id=ToolID(2), tool_type="Formula", x=10, y=0,
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
             config={
                 "FormulaFields": {
                     "FormulaField": {

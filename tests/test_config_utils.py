@@ -35,8 +35,7 @@ def test_comment_safe_single_line_unchanged() -> None:
 def test_comment_safe_collapses_newlines() -> None:
     # A newline would otherwise end the comment and expose the rest as code.
     assert (
-        comment_safe('[Status] = "A"\nOR [Flag] = 1')
-        == '[Status] = "A" OR [Flag] = 1'
+        comment_safe('[Status] = "A"\nOR [Flag] = 1') == '[Status] = "A" OR [Flag] = 1'
     )
     assert comment_safe("a\r\nb") == "a b"
     assert comment_safe("a\n\n\nb") == "a b"
