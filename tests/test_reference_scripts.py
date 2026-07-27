@@ -235,7 +235,12 @@ def test_find_any_golden_leftmost_match() -> None:
         "label": ["A1", "B2", "C3"],
     })
     expected = ["C3", "B2", "A1", pd.NA, "A1"]
-    assert list(_run(targets, lookup)["label"]) == expected
+    out = _run(targets, lookup)
+    assert list(out["label"]) == expected
+    # rows 0/1/4 match 2-3 lookup rows each and the count still does not
+    # move: 1 target = 1 output row. The helper's summary log leaves this
+    # invariant to the tests instead of printing before/after counts.
+    assert len(out) == len(targets)
 
 
 def test_find_any_same_start_earlier_lookup_row_wins() -> None:

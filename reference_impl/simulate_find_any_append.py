@@ -286,15 +286,18 @@ def _print_summary(
 
     debug は出力（result）には含めない観測列（行 ID・採用 lookup 行・採用/全
     マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
-    debug は target 1 行につき 1 行なので、処理前の行数はここから読む。
+
+    行数は before/after に分けず 1 行だけ出す。result は targets_df のコピーに
+    列を足したものなので行数が変わる経路が構造的に無く、before/after を並べても
+    常に同じ値になる（＝情報量ゼロ。行数不変はログではなくテストで守る:
+    tests/test_reference_scripts.py）。
     """
 
     elapsed = time.perf_counter() - start
     matched_rows = int((debug["matched_lookup_rows"] > 0).sum())
 
     print(f" 🐒 simulate_find_any_append: {elapsed:.3f} 秒")
-    print(f"rows before   : {len(debug):,}")
-    print(f"rows after    : {len(result):,}")
+    print(f"rows          : {len(result):,}")
     print(f"matched rows  : {matched_rows:,}")
 
     # 1 target が複数 lookup 行にマッチした（＝採用値が lookup 表の並び順に依存する）
