@@ -72,6 +72,7 @@ def simulate_find_any_append(
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID 7"）。空なら見出しだけ出す
     verbose: bool = True,
+    collect_match_diagnostics: bool = True,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
 
@@ -85,6 +86,12 @@ def simulate_find_any_append(
       戻り値には残さない
     - append_fields と同名の列が targets_df に既にあると ValueError。
       必要な列が無いときは KeyError
+
+    collect_match_diagnostics は verbose とは別の軸で、**表示量ではなく計算量**を
+    決める。「その target が何行の lookup にマッチしたか」を出すには全 needle を
+    全 target に当てる必要があり、勝者を決める処理（target ごとに1回の検索）とは
+    桁が違うコストになる。False にすると曖昧マッチの集計と表示だけが消え、
+    戻り値は完全に同一。verbose にこの計算を暗黙に背負わせないため引数を分けた。
 
     複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
     同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
@@ -161,20 +168,23 @@ def simulate_find_any_append(
     # ── 勝者判定と診断（独立した2つの走査）───────────────────────
     # 診断は verbose 表示専用の観測値。勝者判定はこれを一切読まない
     # （逆向きの依存は無い）ので、状態も更新も別の入れ物に分けてある。
-    # match_count は verbose に依らず常に数える（従来どおり）。
+    # 診断だけが lookup 行数 × target 行数の走査を必要とするので、
+    # 止められるようにしてある（止めても戻り値は変わらない）。
     needles = _needles(lookup, case_sensitive=case_sensitive)
     winner = _find_winner(
         haystack_cmp=haystack_cmp,
         needles=needles,
         append_fields=append_fields,
     )
-    diagnostics = _Diagnostics(
-        match_count=pd.Series(0, index=targets.index, dtype="int64"),
-        # verbose 時だけ、各 target にマッチした検索値をすべて集める（確認表示用）。
-        # lookup 表の並び順に append する（診断用の一覧で、採用値の決定とは独立）。
-        needles_per_row=[[] for _ in range(len(targets))] if verbose else None,
-    )
-    _scan_diagnostics(diagnostics, haystack_cmp=haystack_cmp, needles=needles)
+    diagnostics: _Diagnostics | None = None
+    if collect_match_diagnostics:
+        diagnostics = _Diagnostics(
+            match_count=pd.Series(0, index=targets.index, dtype="int64"),
+            # verbose 時だけ、各 target にマッチした検索値をすべて集める（確認表示用）。
+            # lookup 表の並び順に append する（診断用の一覧で、採用値の決定とは独立）。
+            needles_per_row=[[] for _ in range(len(targets))] if verbose else None,
+        )
+        _scan_diagnostics(diagnostics, haystack_cmp=haystack_cmp, needles=needles)
 
     # ── 結果の組み立て（入力順のまま。matched/unmatched に分割しない）──
     # 実 Alteryx の Append 出力に合わせる: 元の Targets 列 + append_fields のみ。
@@ -192,18 +202,20 @@ def simulate_find_any_append(
         # matched_needle / _lookup_row_id はデバッグにかなり有用なので、計算は
         # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
         # （戻り値の result には混ぜない）。
-        debug = pd.DataFrame(
-            {
-                TARGET_ROW_ID: range(len(targets_df)),
-                find_field: targets[find_field].to_numpy(),
-                "matched_lookup_rows": diagnostics.match_count.to_numpy(),
-                _all_col(search_field): [
-                    " | ".join(lst) for lst in diagnostics.needles_per_row
-                ],
-                LOOKUP_ROW_ID: winner.lookup_id.astype("Int64").to_numpy(),
-                _needle_col(search_field): winner.needle.to_numpy(),
-            }
-        )
+        # 診断を集めていないときは診断由来の列を持たない debug 表になる
+        # （_print_summary はその2列の有無で曖昧マッチ節を出し分ける）。
+        columns: dict[str, object] = {
+            TARGET_ROW_ID: range(len(targets_df)),
+            find_field: targets[find_field].to_numpy(),
+        }
+        if diagnostics is not None:
+            columns["matched_lookup_rows"] = diagnostics.match_count.to_numpy()
+            columns[_all_col(search_field)] = [
+                " | ".join(lst) for lst in diagnostics.needles_per_row
+            ]
+        columns[LOOKUP_ROW_ID] = winner.lookup_id.astype("Int64").to_numpy()
+        columns[_needle_col(search_field)] = winner.needle.to_numpy()
+        debug = pd.DataFrame(columns)
         for field in append_fields:
             debug[field] = winner.appended[field].to_numpy()
         _print_summary(
@@ -435,6 +447,8 @@ def _print_summary(
 
     debug は出力（result）には含めない観測列（行 ID・採用 lookup 行・採用/全
     マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
+    診断（matched_lookup_rows / all_matched_*）を集めていないときは、debug が
+    その2列を持たない。曖昧マッチ節を出せるかはこの列の有無で決まる。
 
     行数は before/after に分けず 1 行だけ出す。result は targets_df のコピーに
     列を足したものなので行数が変わる経路が構造的に無く、before/after を並べても
@@ -443,11 +457,18 @@ def _print_summary(
     """
 
     elapsed = time.perf_counter() - start
-    matched_rows = int((debug["matched_lookup_rows"] > 0).sum())
+    # マッチ行数は診断ではなく採用結果から数える（採用 lookup 行があること＝
+    # 1行以上にマッチしたこと）。診断 OFF でも同じ値が出せる。
+    matched_rows = int(debug[LOOKUP_ROW_ID].notna().sum())
 
     print(f"runtime == {elapsed:.3f} 秒 ==")
     print(f"rows          : {len(result):,}")
     print(f"matched rows  : {matched_rows:,}")
+
+    if "matched_lookup_rows" not in debug.columns:
+        print("ambiguous rows: 未集計（collect_match_diagnostics=False）")
+        print()
+        return
 
     # 1 target が複数 lookup 行にマッチした（＝採用値が lookup 表の並び順に依存する）
     # 行を可視化。target 側（find_field の本文）と lookup 側（採用された検索値・

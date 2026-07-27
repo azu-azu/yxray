@@ -539,6 +539,81 @@ def test_find_any_matches_the_brute_force_rule_on_random_frames() -> None:
             )
 
 
+def test_find_any_diagnostics_off_returns_the_same_output() -> None:
+    # collect_match_diagnostics decides how much is COMPUTED, never what is
+    # returned: only the ambiguity counts go away. Everything the caller gets
+    # back — values, row order, column order, dtypes, unmatched rows — must be
+    # identical with the diagnostics on and off.
+    cases = [
+        # leftmost wins / several matches per target / no match
+        (pd.DataFrame({"text": [
+            "cherry apple pie", "berry cherry jam", "apple only",
+            "no match here", "apple berry cherry mix",
+        ]}),
+         pd.DataFrame({"kw": ["apple", "berry", "cherry"],
+                       "label": ["A1", "B2", "C3"]}),
+         True),
+        # nested needles, same-start tie
+        (pd.DataFrame({"text": ["apple pie"]}),
+         pd.DataFrame({"kw": ["app", "apple"], "label": ["SHORT", "LONG"]}),
+         True),
+        # duplicate needles, NULL/empty needles, NaN haystack
+        (pd.DataFrame({"text": ["apple pie", None, "", 123]}),
+         pd.DataFrame({"kw": ["apple", "apple", None, "", 123],
+                       "label": ["X", "Y", "N", "E", "NUM"]}),
+         True),
+        # NoCase
+        (pd.DataFrame({"text": ["Cherry APPLE pie", "nothing"]}),
+         pd.DataFrame({"kw": ["apple", "cherry"], "label": ["A1", "C3"]}),
+         False),
+    ]
+    for targets, lookup, case_sensitive in cases:
+        on = _run(targets, lookup, case_sensitive=case_sensitive)
+        off = _run(targets, lookup, case_sensitive=case_sensitive,
+                   collect_match_diagnostics=False)
+        pd.testing.assert_frame_equal(off, on)
+
+
+def test_find_any_diagnostics_off_still_applies_the_adoption_rule() -> None:
+    # Regression test for the diagnostics-off path on its own terms: the
+    # expected values are written out here, not taken from the other path.
+    targets = pd.DataFrame({"text": [
+        "cherry apple pie",        # apple & cherry match; cherry is leftmost
+        "berry cherry jam",        # berry & cherry match; berry is leftmost
+        "apple only",              # single match
+        "no match here",           # no match
+        "apple berry cherry mix",  # all three match; apple is leftmost
+    ]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "berry", "cherry"],
+        "label": ["A1", "B2", "C3"],
+    })
+    out = _run(targets, lookup, collect_match_diagnostics=False)
+    assert list(out["label"]) == ["C3", "B2", "A1", pd.NA, "A1"]
+    assert list(out.columns) == ["text", "label"]
+    assert len(out) == len(targets)
+
+
+def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
+    capsys,
+) -> None:
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    find_any.simulate_find_any_append(
+        targets, lookup,
+        find_field="text", search_field="kw", append_fields=["label"],
+        case_sensitive=True, verbose=True, collect_match_diagnostics=False,
+    )
+    printed = capsys.readouterr().out
+    # row and match counts survive — matched rows comes from the winner, not
+    # from the diagnostics
+    assert "rows          : 2" in printed
+    assert "matched rows  : 1" in printed
+    # the ambiguity table is gone, and says why rather than reading as zero
+    assert "collect_match_diagnostics=False" in printed
+    assert "== top 10 ==" not in printed
+
+
 def test_find_any_has_no_replace_multiple_found_argument() -> None:
     # ReplaceMultipleFound has no effect on FindAny + Append output (golden-
     # verified with both settings), so the helper does not accept it —
