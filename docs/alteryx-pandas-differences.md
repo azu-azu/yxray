@@ -365,7 +365,7 @@ lookup（この並び順）を `ReplaceMultipleFound=False` と `True` の**両�
 3行を同時に説明できるのは「text 内の出現位置が最も左」の規則だけ。さらに
 **RMF=True でも出力が完全に同一**だったことから、この位置ベースの規則は
 RMF 設定に依らないことも確定した（lookup 順 last なら3行とも C3 になる
-はず）。この5行は `test_find_any_golden_leftmost_match_for_both_rmf_settings`
+はず）。この5行は `test_find_any_golden_leftmost_match`
 として両設定分を固定している。
 
 **同位置タイ・重複・NoCase・空文字の実測**（いずれも RMF=True / False の
@@ -373,7 +373,7 @@ RMF 設定に依らないことも確定した（lookup 順 last なら3行と�
 
 - **重複する検索値**（lookup: apple→X, apple→Y、target "apple pie"）:
   **Y（後の行）** — 辞書的上書き。RMF=False でも先の行には戻らない
-  （`test_find_any_duplicate_needle_last_row_wins_regardless_of_rmf` で固定）
+  （`test_find_any_duplicate_needle_last_row_wins` で固定）
 - **入れ子の検索値**（lookup: app→SHORT, apple→LONG、target "apple pie"）:
   **SHORT**。並び順を逆（apple→LONG, app→SHORT）にすると **LONG** — つまり
   勝敗を決めているのは検索値の長さではなく **lookup 順で先の行**
@@ -443,8 +443,12 @@ df3 = simulate_find_any_append(
 
 `ReplaceMultipleFound` は生成コードに**出力しない**: Append モードでは
 出力に影響しないことが golden で実測済みで、引数として出すと意味がある
-ように見えてしまうため。helper 側の `replace_multiple_found` 引数は互換の
-ため念のため残してあるが、判定には使われない。
+ように見えてしまうため。helper 側にも対応する引数は無い（無影響と確定した
+引数を残すと「効く」と誤解されるため削除した）。
+
+`case_sensitive` は helper 側に既定値が無く、呼び出し側が必ず明示する。
+大小を区別するかは翻訳結果を左右する判断なので、ライブラリ側で先取りせず
+人間がレビューできる形で生成コードに出す（scaffold は常に出力する）。
 
 **関数定義そのものは生成 .py に埋め込まない**（Select の
 `apply_select_edits` / `SelectColumnEdit` も同方針で、参照実装は

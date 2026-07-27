@@ -24,7 +24,11 @@ Alteryx XML のアンカー名との対応（XML では lookup 表を "Source" �
   （app/apple の入れ子を両方の並び順で実測 — 長さは無関係）
 - 同じ検索値が複数の lookup 行にあるときは後の行が有効（辞書的上書き）
 - ReplaceMultipleFound は FindAny + Append では出力に影響しない
-  （複数の golden × True/False 両設定で同一出力）
+  （複数の golden × True/False 両設定で同一出力）。無影響が確定した引数を
+  残すと「効く」と誤解されるため、対応する引数は置かず削除した
+- case_sensitive に既定値は置かない。大小を区別するかは翻訳結果を左右する
+  判断なので、ライブラリ側で先取りせず呼び出し側に必ず明示させる
+  （scaffold の生成コードも常に明示する）
 - NoCase=True は大小無視でマッチ（採用規則は維持）
 - 空文字・NULL の検索値は無視される
 - 出力列は「元の Targets 列 + append_fields」のみ（検索値の列は含まない）
@@ -63,8 +67,7 @@ def simulate_find_any_append(
     find_field: str,
     search_field: str,
     append_fields: list[str],
-    case_sensitive: bool = True,  # Alteryx の NoCase=False（大小を区別）に対応
-    replace_multiple_found: bool = True,  # Alteryx の ReplaceMultipleFound。Append では出力に影響しない（golden 実測）ため判定には未使用。互換のため念のため残している引数（生成コードには出力されない）
+    case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しの先頭に付ける識別ラベル（例: "ToolID 7"）
     verbose: bool = True,
 ) -> pd.DataFrame:
@@ -202,8 +205,8 @@ def simulate_find_any_append(
         # 終了位置で決まるなら先に終わる ppl のはずだった）。開始位置が
         # 同点のときは lookup 順で先の行を維持する（golden 実測: app/apple の
         # 入れ子は並び順を入れ替えても常に先の行が勝つ — 長さは無関係）。
-        # ReplaceMultipleFound は FindAny + Append では出力に影響しないことが
-        # 実測されているため判定に使わない。
+        # ReplaceMultipleFound は判定に入らない（両設定で同一出力と実測済み。
+        # モジュール docstring 参照）。
         fill = contains & ((best_pos < 0) | (pos < best_pos))
         if fill.any():
             winning_lookup_id[fill] = lookup_id
