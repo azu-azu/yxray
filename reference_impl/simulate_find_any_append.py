@@ -68,7 +68,7 @@ def simulate_find_any_append(
     search_field: str,
     append_fields: list[str],
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
-    log_label: str = "",  # ログ見出しの先頭に付ける識別ラベル（例: "ToolID 7"）
+    log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID 7"）。空なら見出しだけ出す
     verbose: bool = True,
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
@@ -93,10 +93,13 @@ def simulate_find_any_append(
     start = time.perf_counter()
 
     if verbose:
-        print(f"\n{log_label}⛳️ simulate find any append")
-        print(f"  haystack: '{find_field}' ← この中を")
-        print(f"  needle  : '{search_field}' ← これで探す")
-        print("  部分文字列として含まれるか 判定中 ...\n")
+        # log_label は省略可なので、空のときは飾りごと落とす（"- 🍒  -" を出さない）
+        label = f" - 🍒 {log_label} -" if log_label else ""
+        print(f"\n🐷 [Find Replace] simulate find any append{label}")
+        print(f"    haystack: '{find_field}' ← この中を 🌲")
+        print(f"    needle  : '{search_field}' ← これで探す 🪡")
+        print(f"    append  : {append_fields}")
+        print("    部分文字列として含まれるか 判定中 ...\n")
 
     # ── 入力チェック ──────────────────────────────────────────────
     if find_field not in targets_df.columns:
