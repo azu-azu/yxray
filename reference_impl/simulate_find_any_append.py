@@ -1,5 +1,10 @@
 """Alteryx FindReplace（FindAny + Append）を pandas で再現する参照実装。
 
+引数名の対応（一番迷うところなので最初に）:
+
+    find_field   = haystack（探される本文 / targets 側）
+    search_field = needle  （探すキーワード / lookup 側）
+
 yxray の scaffold が生成する simulate_find_any_append(...) 呼び出しの定義。
 生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
 
@@ -65,27 +70,30 @@ def simulate_find_any_append(
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
 
-    出力は実 Alteryx の Append 出力に合わせ「元の Targets 列 + append_fields」のみ。
-    検索キー列（search_field の値）と行追跡 ID は内部で使うだけで出力には残さない
-    （Append モードでは検索値の列は出力に現れない — 実 Alteryx の golden 出力
-    との突合で検証済み）。
+    使い方:
+    - targets_df[find_field] が haystack（探される本文）、
+      lookup_df[search_field] が needle（探すキーワード）
+    - 戻り値は「元の Targets 列 + append_fields」だけを持つ新しい DataFrame。
+      行数・行順は targets_df のまま（Find Replace は join ではないので、
+      複数マッチしても 1 target = 1 行）。入力の DataFrame は変更しない
+    - 検索キー列（search_field の値）と行追跡 ID は内部・verbose 表示専用で、
+      戻り値には残さない
+    - append_fields と同名の列が targets_df に既にあると ValueError。
+      必要な列が無いときは KeyError
 
-    Find Replace は join ではないので、複数マッチしても出力は 1 target = 1 行。
-    複数の lookup 行にマッチしたとき採用されるのは「開始位置が target 文字列中で
-    最も左」のマッチの検索値の行（golden 突合で検証済み — lookup 順でも
-    終了位置でもない点に注意）。開始位置が同点のときは lookup 順で先の行が
-    勝つ（golden 突合で検証済み — 検索値の長さは無関係）。同じ検索値が複数の
-    lookup 行にあるときは後の行が有効（辞書的上書き — golden 突合で検証済み）。
-    replace_multiple_found（Alteryx の ReplaceMultipleFound）は FindAny +
-    Append では True/False どちらでも出力が変わらないことが golden で実測
-    されているため、判定には使わない。
+    複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
+    同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
+    NULL の扱いは、golden 実測済みの仕様としてモジュール docstring に
+    まとめてある。ここでは繰り返さない。
     """
 
     start = time.perf_counter()
 
     if verbose:
         print(f"\n{log_label}⛳️ simulate find any append")
-        print("target の文字列の中に、lookup 表の検索値が「部分文字列として」含まれるか で判定中 ...\n")
+        print(f"  haystack: '{find_field}' ← この中を")
+        print(f"  needle  : '{search_field}' ← これで探す")
+        print("  部分文字列として含まれるか 判定中 ...\n")
 
     # ── 入力チェック ──────────────────────────────────────────────
     if find_field not in targets_df.columns:
@@ -224,56 +232,63 @@ def simulate_find_any_append(
         # matched_needle / _lookup_row_id はデバッグにかなり有用なので、計算は
         # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
         # （戻り値の result には混ぜない）。
-        needle_col = f"matched_{search_field}"
-        all_col = f"all_matched_{search_field}"
         debug = pd.DataFrame(
             {
                 TARGET_ROW_ID: range(len(targets_df)),
                 find_field: targets[find_field].to_numpy(),
                 "matched_lookup_rows": match_count.to_numpy(),
-                all_col: [" | ".join(lst) for lst in matched_needles_lists],
+                _all_col(search_field): [
+                    " | ".join(lst) for lst in matched_needles_lists
+                ],
                 LOOKUP_ROW_ID: winning_lookup_id.astype("Int64").to_numpy(),
-                needle_col: matched_needle.to_numpy(),
+                _needle_col(search_field): matched_needle.to_numpy(),
             }
         )
         for field in append_fields:
             debug[field] = appended[field].to_numpy()
         _print_summary(
             start=start,
-            targets_df=targets_df,
             result=result,
             debug=debug,
             find_field=find_field,
+            search_field=search_field,
             append_fields=append_fields,
-            needle_col=needle_col,
-            all_col=all_col,
         )
 
     return result
 
 
+def _needle_col(search_field: str) -> str:
+    """debug 表での「採用された検索値」列名。呼び出し側と表示側で同じ名前を使う。"""
+    return f"matched_{search_field}"
+
+
+def _all_col(search_field: str) -> str:
+    """debug 表での「マッチした検索値すべて」列名。"""
+    return f"all_matched_{search_field}"
+
+
 def _print_summary(
     *,
     start: float,
-    targets_df: pd.DataFrame,
     result: pd.DataFrame,
     debug: pd.DataFrame,
     find_field: str,
+    search_field: str,
     append_fields: list[str],
-    needle_col: str,
-    all_col: str,
 ) -> None:
     """処理時間・行数・複数マッチ（曖昧マッチ）の確認用サマリを出す。
 
     debug は出力（result）には含めない観測列（行 ID・採用 lookup 行・採用/全
     マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
+    debug は target 1 行につき 1 行なので、処理前の行数はここから読む。
     """
 
     elapsed = time.perf_counter() - start
     matched_rows = int((debug["matched_lookup_rows"] > 0).sum())
 
     print(f" 🐒 simulate_find_any_append: {elapsed:.3f} 秒")
-    print(f"rows before   : {len(targets_df):,}")
+    print(f"rows before   : {len(debug):,}")
     print(f"rows after    : {len(result):,}")
     print(f"matched rows  : {matched_rows:,}")
 
@@ -289,9 +304,9 @@ def _print_summary(
         TARGET_ROW_ID,        # target: 行 ID
         find_field,           # target: マッチ対象の本文
         "matched_lookup_rows",  # 何行の lookup にマッチしたか
-        all_col,              # lookup: マッチした検索値すべて（lookup 表の並び順）
+        _all_col(search_field),     # lookup: マッチした検索値すべて（lookup 表の並び順）
         LOOKUP_ROW_ID,        # lookup: 採用された lookup 行
-        needle_col,           # lookup: 採用された検索値
+        _needle_col(search_field),  # lookup: 採用された検索値
         *append_fields,       # lookup: 付与された値
     ]
     print(f"ambiguous rows: {len(ambiguous):,}（複数 lookup にマッチ）")
