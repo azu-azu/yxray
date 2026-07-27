@@ -50,7 +50,9 @@ def _findreplace_any_append(
     # handling: the key column is never duplicated.
     # ReplaceMultipleFound is NOT emitted: it has no effect on Append output
     # (golden-verified with both settings) and showing it would suggest it
-    # matters. The helper still accepts the kwarg for callers that pass it.
+    # matters. The helper does not accept it either, for the same reason.
+    # case_sensitive IS always emitted: the helper has no default for it, so
+    # the generated call must state it (and a reviewer gets to see it).
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
