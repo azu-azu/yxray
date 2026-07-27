@@ -430,14 +430,17 @@ FindAny は等価結合では意味論を再現できない（`pd.merge` は完�
 # is matched inside the Targets find field
 # NOTE: simulate_find_any_append() is not generated — copy it from
 # reference_impl/simulate_find_any_append.py
+# collect_match_diagnostics=True logs the ambiguous matches (1 target matching
+# several Source rows) — it is the costly part, set it False once reviewed
 df3 = simulate_find_any_append(
     df1,
     df2,
     find_field="key_a",
     search_field="key_b",
     append_fields=["col_a", "col_b"],
-    case_sensitive=True,   # Alteryx の NoCase=False に対応
-    log_label="ToolID 3",  # 実行ログにどのツールか表示される
+    case_sensitive=True,             # Alteryx の NoCase=False に対応
+    collect_match_diagnostics=True,  # 曖昧マッチ表を出す（重い）
+    log_label="ToolID 3",            # 実行ログにどのツールか表示される
 )
 ```
 
@@ -449,6 +452,17 @@ df3 = simulate_find_any_append(
 `case_sensitive` は helper 側に既定値が無く、呼び出し側が必ず明示する。
 大小を区別するかは翻訳結果を左右する判断なので、ライブラリ側で先取りせず
 人間がレビューできる形で生成コードに出す（scaffold は常に出力する）。
+
+`collect_match_diagnostics` は「1 target が複数の Source 行にマッチした行」の
+一覧を実行ログに出すかどうかで、**表示量ではなく計算量**を決める。採用値を
+決めるだけなら target ごとに1回の検索で済むが、この一覧は全検索値を全 target に
+当てないと出せず、大きい lookup では処理時間の大半を占める（4500 targets ×
+2000 検索値で 5.4 秒 → 0.9 秒）。そのため helper 側の既定は `False` で、
+**生成コードは `True` を明示的に出す**: 翻訳が正しいかを人間が確かめる段階では
+一覧が要り、信用できたらその行を `False` にすれば消せる。診断を止めても
+戻り値は完全に同一で、消えるのは曖昧マッチの集計と表示だけ。なお診断の読み手は
+実行ログだけなので、`verbose=False` のときは `collect_match_diagnostics=True`
+でも走査しない（誰も読めない集計に時間を使わない）。
 
 **関数定義そのものは生成 .py に埋め込まない**（Select の
 `apply_select_edits` / `SelectColumnEdit` も同方針で、参照実装は
@@ -515,6 +529,7 @@ df3 = simulate_find_any_append(
     search_field="key",
     append_fields=["col_a", "col_b"],
     case_sensitive=True,
+    collect_match_diagnostics=True,
     log_label="ToolID 3",
 )
 ```

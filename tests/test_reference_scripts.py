@@ -614,6 +614,25 @@ def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
     assert "== top 10 ==" not in printed
 
 
+def test_find_any_diagnostics_are_off_by_default(capsys) -> None:
+    # The ambiguity scan is opt-in: it costs a lookup-rows x targets pass and
+    # is a review aid, not something every run should pay for. Generated code
+    # asks for it explicitly.
+    assert inspect.signature(
+        find_any.simulate_find_any_append
+    ).parameters["collect_match_diagnostics"].default is False
+
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    find_any.simulate_find_any_append(
+        targets, lookup, find_field="text", search_field="kw",
+        append_fields=["label"], case_sensitive=True, verbose=True,
+    )
+    printed = capsys.readouterr().out
+    assert "collect_match_diagnostics=False" in printed
+    assert "matched rows  : 1" in printed
+
+
 def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
     monkeypatch,
 ) -> None:

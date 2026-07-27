@@ -72,7 +72,7 @@ def simulate_find_any_append(
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID 7"）。空なら見出しだけ出す
     verbose: bool = True,
-    collect_match_diagnostics: bool = True,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
+    collect_match_diagnostics: bool = False,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:
     """find_field に search_field 値を部分一致で探し、マッチした append_fields を付与する。
 
@@ -97,6 +97,11 @@ def simulate_find_any_append(
     collect_match_diagnostics と verbose が**両方 True のとき**。verbose=False で
     集めても誰も読めない（戻り値には出ない）ため、走査ごと省く。つまり verbose は
     コストを増やす方向には効かず、減らす方向にだけ効く。
+
+    既定は False。曖昧マッチ表は「翻訳が正しいか人間が確かめる」段階で価値が
+    あるもので、毎回払うには重すぎる（データ次第で全体の8割以上）。scaffold の
+    生成コードは True を明示的に出すので、レビュー中は表が出て、定常運用に
+    移すときにその行を False にすれば消せる。
 
     複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
     同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
@@ -534,6 +539,7 @@ def main() -> None:
         search_field="kw",
         append_fields=["label", "code"],
         case_sensitive=True,  # Alteryx の NoCase=False
+        collect_match_diagnostics=True,  # 生成コードと同じく曖昧マッチ表を出す
     )
 
     print("\n-- result --")
