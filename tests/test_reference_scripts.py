@@ -7,6 +7,7 @@ relies on.
 
 import importlib.util
 import inspect
+import random
 import sys
 from pathlib import Path
 
@@ -417,6 +418,125 @@ def test_find_any_requires_an_explicit_case_sensitive() -> None:
             append_fields=["label"],
             verbose=False,
         )
+
+
+def test_find_any_needles_are_matched_literally_not_as_regex() -> None:
+    # The winner search compiles the needles into one alternation, so every
+    # needle must be escaped: "1.5" must not match "125", "a+b" must not
+    # match "aab", and "[xy]" must not match a bare "x".
+    targets = pd.DataFrame({"text": ["125", "aab", "x", "1.5 exact", "[xy] exact"]})
+    lookup = pd.DataFrame({
+        "kw": ["1.5", "a+b", "[xy]"],
+        "label": ["DOT", "PLUS", "CLASS"],
+    })
+    out = _run(targets, lookup)
+    assert list(out["label"]) == [pd.NA, pd.NA, pd.NA, "DOT", "CLASS"]
+
+
+def test_find_any_case_insensitive_duplicate_needle_keeps_earlier_row() -> None:
+    # "Apple" and "apple" are different lookup values (both survive the
+    # duplicate drop) that compare equal under NoCase. They match at the same
+    # position, so the earlier lookup row wins and its own append values must
+    # come back — the match must resolve to a lookup row, not merely to the
+    # matched text.
+    targets = pd.DataFrame({"text": ["APPLE pie"]})
+    lookup = pd.DataFrame({
+        "kw": ["Apple", "apple"],
+        "label": ["FIRST", "SECOND"],
+        "code": ["C1", "C2"],
+    })
+    out = _run(targets, lookup, append_fields=["label", "code"], case_sensitive=False)
+    assert list(out.iloc[0][["label", "code"]]) == ["FIRST", "C1"]
+
+
+def _brute_force_labels(targets, lookup, *, case_sensitive):
+    """愚直な参照実装: 全 needle を試し「最も左、同点なら lookup 順で先の行」。
+
+    実装とは独立に採用規則だけを書き下したオラクル。同じ検索値が複数行に
+    あるときは後の行が有効（辞書的上書き）なので、先に最後の行だけ残す。
+    """
+    stringify = find_any._stringify
+    last_row_of = {}
+    for row, value in enumerate(lookup["kw"]):
+        if pd.isna(value):
+            continue
+        last_row_of[value] = row
+    kept = sorted(last_row_of.values())
+
+    labels = []
+    for raw_text in targets["text"]:
+        if pd.isna(raw_text):
+            labels.append(pd.NA)
+            continue
+        haystack = stringify(raw_text)
+        if not case_sensitive:
+            haystack = haystack.lower()
+        best_pos, best_row = None, None
+        for row in kept:
+            needle = stringify(lookup["kw"].iloc[row])
+            if not needle:
+                continue
+            if not case_sensitive:
+                needle = needle.lower()
+            pos = haystack.find(needle)
+            if pos >= 0 and (best_pos is None or pos < best_pos):
+                best_pos, best_row = pos, row
+        if best_row is None:
+            labels.append(pd.NA)
+        else:
+            value = lookup["label"].iloc[best_row]
+            labels.append(stringify(value) if pd.notna(value) else pd.NA)
+    return labels
+
+
+def test_find_any_matches_the_brute_force_rule_on_random_frames() -> None:
+    # Property test with a fixed seed: whatever the winner search does
+    # internally, it must agree with the plainly written adoption rule on
+    # nested and duplicate needles, ties, several match positions, regex
+    # metacharacters, NaN/None/int/empty values, NoCase, and unmatched rows.
+    rng = random.Random(20260727)
+    alphabet = "abABC.*[]+?あ1"
+
+    def word():
+        return "".join(rng.choices(alphabet, k=rng.randint(1, 5)))
+
+    for _ in range(150):
+        texts = []
+        for _ in range(rng.randint(1, 10)):
+            roll = rng.random()
+            if roll < 0.1:
+                texts.append(None)
+            elif roll < 0.16:
+                texts.append(rng.randint(1, 200))
+            elif roll < 0.2:
+                texts.append("")
+            else:
+                texts.append(" ".join(word() for _ in range(rng.randint(1, 3))))
+        kws, labels = [], []
+        for i in range(rng.randint(1, 7)):
+            roll = rng.random()
+            kws.append(
+                None if roll < 0.12
+                else "" if roll < 0.2
+                else rng.randint(1, 200) if roll < 0.26
+                else word()
+            )
+            labels.append(f"L{i}")
+        seed_text = next((t for t in texts if isinstance(t, str) and len(t) > 2), None)
+        if seed_text is not None:
+            # guarantee nested needles, an exact duplicate and a same-start tie
+            kws += [seed_text[:1], seed_text[:2], seed_text[1:3], seed_text[:2]]
+            labels += ["N1", "N2", "MID", "DUP"]
+        targets = pd.DataFrame({"text": texts})
+        lookup = pd.DataFrame({"kw": kws, "label": labels})
+        for case_sensitive in (True, False):
+            out = _run(targets, lookup, case_sensitive=case_sensitive)
+            expected = _brute_force_labels(
+                targets, lookup, case_sensitive=case_sensitive
+            )
+            assert list(out["label"]) == expected, (
+                f"targets={texts} lookup={kws} case_sensitive={case_sensitive}"
+            )
 
 
 def test_find_any_has_no_replace_multiple_found_argument() -> None:

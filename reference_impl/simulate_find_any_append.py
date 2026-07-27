@@ -38,6 +38,7 @@ FindAny + Append の意味論は上記すべて golden 実測済みで、推定�
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 
@@ -157,23 +158,23 @@ def simulate_find_any_append(
     haystack = raw_find.map(lambda v: _stringify(v) if pd.notna(v) else pd.NA)
     haystack_cmp = haystack if case_sensitive else haystack.str.lower()
 
-    # ── 走査（勝者判定＋診断収集）─────────────────────────────────
+    # ── 勝者判定と診断（独立した2つの走査）───────────────────────
     # 診断は verbose 表示専用の観測値。勝者判定はこれを一切読まない
     # （逆向きの依存は無い）ので、状態も更新も別の入れ物に分けてある。
     # match_count は verbose に依らず常に数える（従来どおり）。
+    needles = _needles(lookup, case_sensitive=case_sensitive)
+    winner = _find_winner(
+        haystack_cmp=haystack_cmp,
+        needles=needles,
+        append_fields=append_fields,
+    )
     diagnostics = _Diagnostics(
         match_count=pd.Series(0, index=targets.index, dtype="int64"),
         # verbose 時だけ、各 target にマッチした検索値をすべて集める（確認表示用）。
         # lookup 表の並び順に append する（診断用の一覧で、採用値の決定とは独立）。
         needles_per_row=[[] for _ in range(len(targets))] if verbose else None,
     )
-    winner = _find_winner(
-        haystack_cmp=haystack_cmp,
-        lookup=lookup,
-        append_fields=append_fields,
-        case_sensitive=case_sensitive,
-        diagnostics=diagnostics,
-    )
+    _scan_diagnostics(diagnostics, haystack_cmp=haystack_cmp, needles=needles)
 
     # ── 結果の組み立て（入力順のまま。matched/unmatched に分割しない）──
     # 実 Alteryx の Append 出力に合わせる: 元の Targets 列 + append_fields のみ。
@@ -261,38 +262,26 @@ def _collect_diagnostics(
             diagnostics.needles_per_row[i].append(needle)
 
 
-def _find_winner(
-    *,
-    haystack_cmp: pd.Series,
-    lookup: pd.DataFrame,
-    append_fields: list[str],
-    case_sensitive: bool,
-    diagnostics: _Diagnostics,
-) -> _WinnerSelection:
-    """lookup を1周して、各 target にどの lookup 行が採用されるかを決める。
+@dataclass
+class _Needle:
+    """検索に使う lookup 1行分。lookup 表の並び順に並べて使う。"""
+
+    lookup_id: object          # 重複排除前の元の行番号（_lookup_row_id）
+    text: str                  # _stringify 済みの検索値（表示・診断用）
+    cmp: str                   # 比較用（NoCase なら小文字化済み）
+    appends: tuple[object, ...]  # append_fields に対応する lookup 側の生の値
+
+
+def _needles(lookup: pd.DataFrame, *, case_sensitive: bool) -> list[_Needle]:
+    """lookup を検索対象の needle 列に変換する（NULL・空文字はここで捨てる）。
 
     lookup は [search_field, *append_fields] の列を持ち、重複検索値を排除済みで、
-    index に排除前の元の行番号を保っていること。
-
-    走査は1回だけで、その結果（contains）を診断にも渡す。診断は
-    _collect_diagnostics の中だけで完結し、ここでの採用判定には影響しない。
+    index に排除前の元の行番号を保っていること。戻り値は lookup の並び順。
     """
-    index = haystack_cmp.index
-    winner = _WinnerSelection(
-        lookup_id=pd.Series(pd.NA, index=index, dtype="object"),
-        needle=pd.Series(pd.NA, index=index, dtype="object"),
-        best_pos=pd.Series(-1, index=index, dtype="int64"),
-        appended={
-            field: pd.Series(pd.NA, index=index, dtype="object")
-            for field in append_fields
-        },
-    )
-
-    # lookup を並び順にループ。itertuples の 0 番目が search_field、以降が append_fields。
-    # lookup_id は重複排除前の元の行番号（lookup.index に保持）。
-    # lookup の列は [search_field, *append_fields] なので、append_positions の
-    # 長さは必ず len(append_fields) と一致する（下の zip は strict）。
-    append_positions = range(1, len(lookup.columns))
+    # itertuples の 0 番目が search_field、以降が append_fields。
+    # lookup の列は [search_field, *append_fields] なので、appends の長さは
+    # 必ず len(append_fields) と一致する。
+    needles: list[_Needle] = []
     for lookup_id, values in zip(
         lookup.index, lookup.itertuples(index=False, name=None), strict=True
     ):
@@ -302,42 +291,125 @@ def _find_winner(
         needle = _stringify(needle)
         if not needle:
             continue
+        needles.append(
+            _Needle(
+                lookup_id=lookup_id,
+                text=needle,
+                cmp=needle if case_sensitive else needle.lower(),
+                appends=values[1:],
+            )
+        )
+    return needles
 
-        needle_cmp = needle if case_sensitive else needle.lower()
-        # str.find 1回で「マッチしたか」(pos >= 0) と「開始位置」を同時に得る。
-        # str.contains + str.find の2回に分けると文字列走査が needle ごとに
-        # 倍になり、データが多いとき目に見えて遅くなる。
-        pos = haystack_cmp.str.find(needle_cmp).fillna(-1).astype("int64")
+
+def _find_winner(
+    *,
+    haystack_cmp: pd.Series,
+    needles: list[_Needle],
+    append_fields: list[str],
+) -> _WinnerSelection:
+    """各 target にどの lookup 行が採用されるかを決める。
+
+    採用されるのは「開始位置が target 文字列中で最も左」のマッチの行
+    （golden 実測: apple(位置0) と ppl(位置1) では apple が勝つ — 終了位置で
+    決まるなら先に終わる ppl のはずだった）。開始位置が同点なら lookup 順で
+    先の行が勝つ（golden 実測: app/apple の入れ子は並び順を入れ替えても常に
+    先の行 — 長さは無関係）。ReplaceMultipleFound は判定に入らない
+    （両設定で同一出力と実測済み。モジュール docstring 参照）。
+
+    この2つの規則は Python の正規表現の交替（`a|b|c`）の挙動そのもの:
+    エンジンは左端から位置を進めながら、各位置で選択肢を「書いた順」に試し、
+    最初に成立したものを返す。そこで needle を lookup 順に並べて1本の
+    パターンに連結し、target ごとに1回 search する。needle ごとに全 target を
+    走査する必要がなくなり、計算量が lookup 行数に比例しなくなる。
+    """
+    index = haystack_cmp.index
+    row_count = len(haystack_cmp)
+    # target 行ごとの「採用された needle の並び順位置」（-1 = 未マッチ）
+    winner_of_row: list[int] = [-1] * row_count
+    best_pos: list[int] = [-1] * row_count
+
+    if needles:
+        # needle は正規表現ではなくリテラルなので必ずエスケープする
+        # （"1.5" の "." が任意の1文字になってしまう）。
+        pattern = re.compile("|".join(re.escape(needle.cmp) for needle in needles))
+        # マッチ文字列から needle へ戻すための索引。同じ比較文字列を持つ needle が
+        # 複数あるとき（NoCase で "Apple" と "apple" など）に拾うのは「先の行」:
+        # 同位置マッチは lookup 順で先の行が勝つという採用規則そのもので、
+        # かつ交替も先に書いた選択肢を採るため、エンジンが実際に使った選択肢と
+        # 一致する。後の行で上書きしてはいけない。
+        first_needle_of: dict[str, int] = {}
+        for order, needle in enumerate(needles):
+            first_needle_of.setdefault(needle.cmp, order)
+
+        for row, text in enumerate(haystack_cmp.to_numpy()):
+            # NULL の haystack はマッチ対象外（pd.NA / None / NaN が来る）
+            if not isinstance(text, str):
+                continue
+            match = pattern.search(text)
+            if match is None:
+                continue
+            winner_of_row[row] = first_needle_of[match.group(0)]
+            best_pos[row] = match.start()
+
+    # ── 採用された needle から出力用の列を組み立てる ──────────────
+    lookup_ids: list[object] = [pd.NA] * row_count
+    needle_texts: list[object] = [pd.NA] * row_count
+    appended: dict[str, list[object]] = {
+        field: [pd.NA] * row_count for field in append_fields
+    }
+    # append 値の _stringify は「採用された needle の分だけ」行う（従来と同じ）。
+    # 同じ needle が複数 target に勝つことがあるので結果は使い回す。
+    stringified: dict[int, tuple[object, ...]] = {}
+    for row, order in enumerate(winner_of_row):
+        if order < 0:
+            continue
+        needle = needles[order]
+        lookup_ids[row] = needle.lookup_id
+        needle_texts[row] = needle.text
+        values = stringified.get(order)
+        if values is None:
+            # append 値も needle/haystack と同様に _stringify する。lookup 列が
+            # NaN 混在で float64 昇格すると 123 が 123.0 になり、golden の "123"
+            # と文字列比較で偽差分になるため（NaN は NA のまま残す）。
+            values = tuple(
+                _stringify(value) if pd.notna(value) else pd.NA
+                for value in needle.appends
+            )
+            stringified[order] = values
+        for field, value in zip(append_fields, values, strict=True):
+            appended[field][row] = value
+
+    return _WinnerSelection(
+        lookup_id=pd.Series(lookup_ids, index=index, dtype="object"),
+        needle=pd.Series(needle_texts, index=index, dtype="object"),
+        best_pos=pd.Series(best_pos, index=index, dtype="int64"),
+        appended={
+            field: pd.Series(values, index=index, dtype="object")
+            for field, values in appended.items()
+        },
+    )
+
+
+def _scan_diagnostics(
+    diagnostics: _Diagnostics,
+    *,
+    haystack_cmp: pd.Series,
+    needles: list[_Needle],
+) -> None:
+    """needle ごとに全 target を走査して診断を集める（勝者判定とは独立）。
+
+    勝者判定が needle ごとの走査を必要としなくなったので、その走査はここが
+    引き取る。「何行の lookup にマッチしたか」は全 needle を見ないと出せない
+    ため、この関数の計算量は lookup 行数 × target 行数のままである。
+    """
+    for needle in needles:
+        # str.find 1回で「マッチしたか」(pos >= 0) を得る（従来と同じ計算）。
+        pos = haystack_cmp.str.find(needle.cmp).fillna(-1).astype("int64")
         contains = pos >= 0
         if not contains.any():
             continue
-
-        _collect_diagnostics(diagnostics, needle=needle, contains=contains)
-
-        # 採用されるのは「開始位置が target 文字列中で最も左」のマッチの行
-        # （golden 実測: apple(位置0) と ppl(位置1) では apple が勝つ —
-        # 終了位置で決まるなら先に終わる ppl のはずだった）。開始位置が
-        # 同点のときは lookup 順で先の行を維持する（golden 実測: app/apple の
-        # 入れ子は並び順を入れ替えても常に先の行が勝つ — 長さは無関係）。
-        # ReplaceMultipleFound は判定に入らない（両設定で同一出力と実測済み。
-        # モジュール docstring 参照）。
-        fill = contains & ((winner.best_pos < 0) | (pos < winner.best_pos))
-        if fill.any():
-            winner.lookup_id[fill] = lookup_id
-            winner.needle[fill] = needle
-            winner.best_pos[fill] = pos[fill]
-            for position, field in zip(
-                append_positions, append_fields, strict=True
-            ):
-                # append 値も needle/haystack と同様に _stringify する。lookup 列が
-                # NaN 混在で float64 昇格すると 123 が 123.0 になり、golden の "123"
-                # と文字列比較で偽差分になるため（NaN は NA のまま残す）。
-                value = values[position]
-                winner.appended[field][fill] = (
-                    _stringify(value) if pd.notna(value) else pd.NA
-                )
-
-    return winner
+        _collect_diagnostics(diagnostics, needle=needle.text, contains=contains)
 
 
 def _needle_col(search_field: str) -> str:
