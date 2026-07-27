@@ -311,6 +311,28 @@ def test_find_any_integer_float_promotion_still_matches() -> None:
     assert out["label"].iloc[0] == "L"
 
 
+def test_find_any_appended_integer_float_drops_dot_zero() -> None:
+    # same float64 promotion on an APPEND column: a NaN in "code" turns 123
+    # into 123.0, and the appended value must still read "123" — otherwise a
+    # string comparison against golden output shows a phantom diff
+    targets = pd.DataFrame({"text": ["apple pie", "nothing here"]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "zzz"],
+        "code": [123, None],
+    })
+    out = _run(targets, lookup, append_fields=["code"])
+    assert out["code"].iloc[0] == "123"
+    # an unmatched target keeps NA (not the string "nan")
+    assert pd.isna(out["code"].iloc[1])
+
+
+def test_stringify_drops_dot_zero_only_for_integral_floats() -> None:
+    assert find_any._stringify(123.0) == "123"
+    assert find_any._stringify(123) == "123"
+    assert find_any._stringify(1.5) == "1.5"
+    assert find_any._stringify("apple") == "apple"
+
+
 def test_find_any_case_insensitive_matches_when_requested() -> None:
     targets = pd.DataFrame({"text": ["Apple Pie"]})
     lookup = pd.DataFrame({"kw": ["apple"], "label": ["L"]})
@@ -318,6 +340,64 @@ def test_find_any_case_insensitive_matches_when_requested() -> None:
     insensitive = _run(targets, lookup, case_sensitive=False)
     assert pd.isna(sensitive["label"].iloc[0])
     assert insensitive["label"].iloc[0] == "L"
+
+
+def test_find_any_case_insensitive_keeps_the_adoption_rules() -> None:
+    # NoCase=True (case_sensitive=False) only widens what MATCHES; which
+    # match wins is unchanged — still the needle appearing leftmost in the
+    # target text, then lookup order for a tie. The first three rows are
+    # golden-verified on real Alteryx output (NoCase=True over the same
+    # apple/berry/cherry lookup as the 5-row leftmost golden); the last row
+    # applies the golden same-start tie rule under NoCase.
+    targets = pd.DataFrame({"text": [
+        "Cherry APPLE pie",   # both match case-insensitively; Cherry is leftmost
+        "BERRY cherry jam",   # BERRY is leftmost
+        "Apple only",         # single match — control
+        "APP APPLE",          # tie at position 0 → earlier lookup row (app)
+    ]})
+    lookup = pd.DataFrame({
+        "kw": ["apple", "berry", "cherry", "app"],
+        "label": ["A1", "B2", "C3", "SHORT"],
+    })
+    out = _run(targets, lookup, case_sensitive=False)
+    assert list(out["label"]) == ["C3", "B2", "A1", "SHORT"]
+
+
+def test_find_any_output_is_target_columns_plus_append_fields() -> None:
+    # The output carries every original Targets column (in order) plus the
+    # append_fields — and nothing else: not the search key column, not the
+    # lookup columns left out of append_fields, not the internal row ids.
+    targets = pd.DataFrame({
+        "text": ["apple pie", "no hit"],
+        "other": ["keep", "keep"],
+    })
+    lookup = pd.DataFrame({
+        "kw": ["apple"],
+        "label": ["L"],
+        "code": ["C"],
+        "unused": ["U"],
+    })
+    out = _run(targets, lookup, append_fields=["label", "code"])
+    assert list(out.columns) == ["text", "other", "label", "code"]
+    assert list(out["other"]) == ["keep", "keep"]
+
+
+def test_find_any_verbose_summary_prints_and_keeps_result_identical() -> None:
+    # The verbose branch builds a separate debug frame and prints a summary;
+    # it must not leak debug columns into the result or blow up on the
+    # ambiguous-rows table (2 lookup rows match row 0).
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    quiet = _run(targets, lookup)
+    loud = find_any.simulate_find_any_append(
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        verbose=True,
+    )
+    pd.testing.assert_frame_equal(loud, quiet)
 
 
 def test_find_any_rejects_column_overlap_with_targets() -> None:
