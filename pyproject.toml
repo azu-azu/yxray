@@ -64,6 +64,10 @@ ignore = []
 
 [tool.ruff.format]
 quote-style = "double"
+# Kept as written, not reflowed: reference_impl/ stays close to its
+# golden-verified originals and tools/ are standalone analysis scripts
+# (both already carry E501 exemptions above).
+exclude = ["reference_impl/*", "tools/*"]
 
 [tool.mypy]
 strict = true
