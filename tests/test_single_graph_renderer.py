@@ -46,7 +46,7 @@ def test_filter_python_hint_matches_scaffold_snippet() -> None:
     )
     config_map = _config_map(doc)
     hint = config_map["2"]["python_hint"]
-    assert hint.startswith("# ToolID 2\n")
+    assert hint.startswith("# ToolID_2\n")
     assert "# Alteryx expression — review translation" in hint
     assert "NOTE" not in hint
     assert 'df_1["Age"] > 18' in hint
@@ -114,7 +114,7 @@ def test_input_python_hint_stays_generic() -> None:
     )
     config_map = _config_map(doc)
     assert config_map["1"]["python_hint"] == (
-        "# ToolID 1\npd.read_csv(...) / pd.read_excel(...)"
+        "# ToolID_1\npd.read_csv(...) / pd.read_excel(...)"
     )
 
 

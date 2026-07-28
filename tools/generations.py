@@ -143,13 +143,13 @@ def report_junctions(graph: nx.DiGraph, node_by_id: dict[int, AlteryxNode]) -> N
     for tid in merges:
         node = node_by_id[tid]
         short_type = node.tool_type.rsplit(".", 1)[-1]
-        print(f"  ToolID {tid} ({short_type}) in={graph.in_degree(tid)}  {summarize_config(node)}")
+        print(f"  ToolID_{tid} ({short_type}) in={graph.in_degree(tid)}  {summarize_config(node)}")
 
     print(f"\n=== 分岐点（out_degree>=2、{len(splits)}件） ===")
     for tid in splits:
         node = node_by_id[tid]
         short_type = node.tool_type.rsplit(".", 1)[-1]
-        print(f"  ToolID {tid} ({short_type}) out={graph.out_degree(tid)}  {summarize_config(node)}")
+        print(f"  ToolID_{tid} ({short_type}) out={graph.out_degree(tid)}  {summarize_config(node)}")
 
 
 def report_entrypoint_scopes(
@@ -251,7 +251,7 @@ def main(
             node = node_by_id[tid]
             short_type = node.tool_type.rsplit(".", 1)[-1]
             summary = summarize_config(node)
-            print(f"  ToolID {tid} ({short_type}) container={node.container_id}  {summary}")
+            print(f"  ToolID_{tid} ({short_type}) container={node.container_id}  {summary}")
 
     print(f"\n=== Interface系エッジ（Action/ControlParam 関係、{len(ui_edges)}件） ===")
     for c in ui_edges:

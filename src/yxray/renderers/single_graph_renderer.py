@@ -103,8 +103,8 @@ class SingleGraphRenderer:
 
     @staticmethod
     def _format_hint(tool_id: int, hint: str) -> str:
-        """Panel-only hint format: prepend a '# ToolID <id>' header."""
-        return "\n".join([f"# ToolID {tool_id}", hint])
+        """Panel-only hint format: prepend a '# ToolID_<id>' header."""
+        return "\n".join([f"# ToolID_{tool_id}", hint])
 
     def _workflow_steps_to_dicts(
         self, workflow_steps: list[Any] | None

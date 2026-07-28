@@ -42,7 +42,7 @@ def gen_text_input(ctx: ToolContext) -> GeneratedCode:
     builder = f"build_text_input_df_{ctx.tool_id}"
     lines = [
         f"def {builder}() -> pd.DataFrame:",
-        f'    """Data embedded in Text Input ToolID {ctx.tool_id}."""',
+        f'    """Data embedded in Text Input ToolID_{ctx.tool_id}."""',
         "    # Text Input values are strings — cast dtypes if needed",
         "    df = pd.DataFrame({",
     ]
@@ -55,6 +55,6 @@ def gen_text_input(ctx: ToolContext) -> GeneratedCode:
 
 def gen_browse(ctx: ToolContext) -> GeneratedCode:
     return GeneratedCode(
-        f'logger.info("ToolID {ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))',
+        f'logger.info("ToolID_{ctx.tool_id} (Browse): rows=%d", len({ctx.df_in}))',
         requirements=frozenset({Requirement.LOGGING}),
     )
