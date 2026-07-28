@@ -88,10 +88,18 @@ class GeneratedCode:
     unions them into header/preamble imports. This replaces re-deriving
     imports by scanning the emitted strings, which silently broke
     whenever a generator's output vocabulary changed.
+
+    `helpers` holds whole `def ...` sources that belong beside the flow
+    rather than in it (Text Input's data builder): in the .py output
+    assembly lifts them to module level so main() keeps one line per tool,
+    and in the flat .md output — which is one function body — they are
+    emitted just above the call. Each entry must define a name unique
+    across the workflow, so generators suffix it with the ToolID.
     """
 
     code: str
     requirements: frozenset[Requirement] = frozenset()
+    helpers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

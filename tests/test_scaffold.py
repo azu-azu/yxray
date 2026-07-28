@@ -1,9 +1,12 @@
+from typing import Any
+
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
 from yxray.scaffold import (
     node_code_snippets,
     scaffold,
     scaffold_simple,
+    scaffold_simple_blocks,
 )
 from yxray.scaffold._filter import (
     _date_columns_in_fragment,
@@ -1563,8 +1566,92 @@ def test_scaffold_text_input_builds_dataframe() -> None:
         )
     )
     code = scaffold(doc)
-    assert "df_1 = pd.DataFrame({" in code
-    assert '"進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],' in code
+    # The rows live in a module-level builder; main() just calls it.
+    assert "def build_text_input_df_1() -> pd.DataFrame:" in code
+    assert "    df = pd.DataFrame({" in code
+    assert (
+        '        "進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],'
+        in code
+    )
+    assert "    return df" in code
+    assert "    df_1 = build_text_input_df_1()" in code
+    compile(code, "<scaffold>", "exec")
+
+
+def test_scaffold_text_input_builder_defined_above_main() -> None:
+    # The builder is a module-level def, not nested in main(): main() must
+    # stay a one-line-per-tool flow, and the call must resolve at runtime.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="TextInput",
+            x=0,
+            y=0,
+            config={
+                "Fields": {"Field": {"@name": "Note"}},
+                "Data": {"r": {"c": "hello"}},
+            },
+        )
+    )
+    code = scaffold(doc)
+    assert code.index("def build_text_input_df_1()") < code.index("def main()")
+    namespace: dict[str, Any] = {}
+    exec(code, namespace)  # noqa: S102 — generated scaffold must actually run
+    namespace["main"]()
+
+
+def test_scaffold_two_text_inputs_get_distinct_builders() -> None:
+    # Two Text Input tools in one workflow must not define the same builder.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="TextInput",
+            x=0,
+            y=0,
+            config={
+                "Fields": {"Field": {"@name": "A"}},
+                "Data": {"r": {"c": "left"}},
+            },
+        ),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="TextInput",
+            x=0,
+            y=10,
+            config={
+                "Fields": {"Field": {"@name": "B"}},
+                "Data": {"r": {"c": "right"}},
+            },
+        ),
+    )
+    code = scaffold(doc)
+    assert "df_1 = build_text_input_df_1()" in code
+    assert "df_2 = build_text_input_df_2()" in code
+    compile(code, "<scaffold>", "exec")
+
+
+def test_scaffold_simple_text_input_keeps_builder_in_its_own_block() -> None:
+    # The .md output is read block by block beside each <Node> XML, so the
+    # data must stay in the Text Input block — and be defined before its call.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="TextInput",
+            x=0,
+            y=0,
+            config={
+                "Fields": {"Field": {"@name": "Note"}},
+                "Data": {"r": {"c": "hello"}},
+            },
+        )
+    )
+    _header, blocks = scaffold_simple_blocks(doc)
+    block = "\n".join(blocks[0].lines)
+    assert blocks[0].helpers == ()
+    assert block.index("def build_text_input_df_1()") < block.index(
+        "df_1 = build_text_input_df_1()"
+    )
+    assert '"hello"' in block
 
 
 # ── Find Replace ───────────────────────────────────────────────────────────

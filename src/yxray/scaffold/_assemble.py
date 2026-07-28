@@ -5,9 +5,10 @@ in topological order (preamble, ENV/paths block, main()); scaffold_simple
 / scaffold_simple_blocks return the flat .md variant without the
 project-level boilerplate. Both share a single per-tool loop (_tool_blocks):
 each tool becomes a ToolContext dispatched through _registry.GENERATORS by
-segment alone — Input/Output included — so the only difference between the
-two outputs is the PathStyle passed in (PROJECT_PATHS vs INLINE_PATHS) and
-the surrounding boilerplate.
+segment alone — Input/Output included — so the two outputs differ only in
+the PathStyle passed in (PROJECT_PATHS vs INLINE_PATHS), where a
+generator's helper defs land (module level vs inline; see _tool_blocks),
+and the surrounding boilerplate.
 
 Variable naming: each tool's output is named df_<tool_id> (e.g. df_34, df_108),
 matching the ToolID comment above each block so the mapping is unambiguous.
@@ -279,6 +280,7 @@ def _tool_blocks(
     plan: ScaffoldPlan,
     paths: PathStyle,
     warnings_by_tool: dict[int, list[str]] | None,
+    inline_helpers: bool = False,
 ) -> list[ScaffoldBlock]:
     """One ScaffoldBlock per tool, in topological order.
 
@@ -286,6 +288,11 @@ def _tool_blocks(
     how Input/Output render file paths (PROJECT_PATHS for .py, INLINE_PATHS
     for .md), and every segment — Input/Output included — dispatches through
     GENERATORS, so there is no per-tool branching here.
+
+    `inline_helpers` decides where a generator's helper defs land: inside
+    the block, above the call (the .md output, whose blocks are read one by
+    one next to their <Node> XML), or carried on the block for the caller to
+    lift to module level (the .py output).
     """
     blocks: list[ScaffoldBlock] = []
     for tool_id in plan.order:
@@ -296,20 +303,41 @@ def _tool_blocks(
         lines = _header_comment_lines(ctx.tool_id, ctx.segment, warnings_by_tool)
         gen = GENERATORS.get(ctx.segment)
         requirements: frozenset[Requirement] = frozenset()
+        helpers: tuple[str, ...] = ()
         if gen is None:
             lines.append("# TODO: unsupported tool type — review manually")
             lines.append(f"# {ctx.df_out} = ...")
         else:
             generated = gen(ctx)
-            lines.append(generated.code)
             requirements = generated.requirements
-        blocks.append(ScaffoldBlock(ctx.tool_id, ctx.segment, lines, requirements))
+            if generated.helpers and inline_helpers:
+                for helper in generated.helpers:
+                    lines += [helper, ""]
+            else:
+                helpers = generated.helpers
+            lines.append(generated.code)
+        blocks.append(
+            ScaffoldBlock(ctx.tool_id, ctx.segment, lines, requirements, helpers)
+        )
     return blocks
 
 
 def _block_requirements(blocks: list[ScaffoldBlock]) -> frozenset[Requirement]:
     """Union of every block's declared imports."""
     return frozenset().union(*(block.requirements for block in blocks))
+
+
+def _emit_helper_defs(blocks: list[ScaffoldBlock]) -> list[str]:
+    """Module-level def sources the blocks deferred, in topological order.
+
+    They sit above main(), separated PEP 8 style, so main() shows one call
+    per tool instead of the data the call builds.
+    """
+    lines: list[str] = []
+    for block in blocks:
+        for helper in block.helpers:
+            lines += ["", "", *helper.split("\n")]
+    return lines
 
 
 def _flatten_blocks(blocks: list[ScaffoldBlock]) -> list[str]:
@@ -335,12 +363,15 @@ class ScaffoldBlock:
 
     requirements carries the imports the block's generator declared
     (see GeneratedCode); assembly unions them into the header/preamble.
+    helpers carries def sources destined for module level, and is empty
+    whenever _tool_blocks already inlined them into `lines`.
     """
 
     tool_id: int
     segment: str
     lines: list[str]
     requirements: frozenset[Requirement] = frozenset()
+    helpers: tuple[str, ...] = ()
 
 
 def scaffold_simple_blocks(
@@ -354,7 +385,7 @@ def scaffold_simple_blocks(
     <Node> XML — between tool blocks.
     """
     plan = build_plan(doc)
-    blocks = _tool_blocks(plan, INLINE_PATHS, warnings_by_tool)
+    blocks = _tool_blocks(plan, INLINE_PATHS, warnings_by_tool, inline_helpers=True)
     requirements = _block_requirements(blocks)
 
     header: list[str] = [
@@ -419,6 +450,7 @@ def scaffold(
         has_shp=has_shp,
     )
     lines += _emit_paths_block(input_paths, output_paths)
+    lines += _emit_helper_defs(blocks)
     lines += ["", "", "def main() -> None:"]
     lines += body
     lines += [
