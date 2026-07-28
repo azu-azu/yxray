@@ -262,8 +262,14 @@ def _diff_impl(  # noqa: B008
         typer.echo(_cli_json_output(result, metadata))  # stdout — pipe-friendly
     else:
         _write_diff_html(
-            result, response, workflow_a, workflow_b, metadata, output,
-            canvas_layout=canvas_layout, quiet=quiet,
+            result,
+            response,
+            workflow_a,
+            workflow_b,
+            metadata,
+            output,
+            canvas_layout=canvas_layout,
+            quiet=quiet,
         )
 
     raise typer.Exit(code=1)
@@ -439,8 +445,6 @@ def _build_pyproject(workflow: pathlib.Path, code: str) -> str:
     )
 
 
-
-
 def _write_explain_outputs(
     workflow: pathlib.Path,
     py_code: str,
@@ -528,8 +532,7 @@ def _explain_impl(  # noqa: B008
         "--output",
         "-o",
         help=(
-            "Output directory for the .md/.py/pyproject.toml files"
-            " (default: output/)"
+            "Output directory for the .md/.py/pyproject.toml files (default: output/)"
         ),
     ),
 ) -> None:

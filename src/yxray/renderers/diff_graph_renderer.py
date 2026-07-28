@@ -149,9 +149,7 @@ class DiffGraphRenderer:
                 )
         return nodes_json
 
-    def _overlay_edges(
-        self, result: DiffResult, graph: Any
-    ) -> list[dict[str, Any]]:
+    def _overlay_edges(self, result: DiffResult, graph: Any) -> list[dict[str, Any]]:
         edge_removed_set = {
             (int(e.src_tool), int(e.dst_tool))
             for e in result.edge_diffs
@@ -166,11 +164,19 @@ class DiffGraphRenderer:
         for src, dst in graph.edges():
             edge: dict[str, Any] = {"id": f"{src}-{dst}", "from": src, "to": dst}
             if (src, dst) in edge_removed_set:
-                edge["color"] = {"color": "#fca5a5", "highlight": "#dc2626", "hover": "#dc2626"}
+                edge["color"] = {
+                    "color": "#fca5a5",
+                    "highlight": "#dc2626",
+                    "hover": "#dc2626",
+                }
                 edge["width"] = 2.5
                 edge["status"] = "removed"
             elif (src, dst) in edge_added_set:
-                edge["color"] = {"color": "#6ee7b7", "highlight": "#059669", "hover": "#059669"}
+                edge["color"] = {
+                    "color": "#6ee7b7",
+                    "highlight": "#059669",
+                    "hover": "#059669",
+                }
                 edge["width"] = 2.5
                 edge["status"] = "added"
             else:

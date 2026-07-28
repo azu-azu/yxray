@@ -33,10 +33,10 @@ class RenameRecord:
 
 @dataclass(frozen=True)
 class StaleFieldWarning:
-    tool_id: int        # Select tool that references the stale field
-    field_name: str     # the stale field name as written in XML
-    renamed_to: str     # what the field is currently called (1-hop)
-    renamed_at: int     # tool_id that performed that rename
+    tool_id: int  # Select tool that references the stale field
+    field_name: str  # the stale field name as written in XML
+    renamed_to: str  # what the field is currently called (1-hop)
+    renamed_at: int  # tool_id that performed that rename
     message: str
 
 

@@ -9,7 +9,7 @@ segment alone — Input/Output included — so the only difference between the
 two outputs is the PathStyle passed in (PROJECT_PATHS vs INLINE_PATHS) and
 the surrounding boilerplate.
 
-Variable naming: each tool's output is named df<tool_id> (e.g. df34, df108),
+Variable naming: each tool's output is named df_<tool_id> (e.g. df_34, df_108),
 matching the ToolID comment above each block so the mapping is unambiguous.
 """
 
@@ -64,12 +64,14 @@ def _assign_frame_names(
     order: list[int],
     node_map: dict[int, Any],
 ) -> dict[int, str]:
-    """Name each tool's output frame df<tool_id> (e.g. df34, df108).
+    """Name each tool's output frame df_<tool_id> (e.g. df_34, df_108).
 
     One-to-one with ToolIDs so variable names are stable, unambiguous,
     and never collide between inputs and outputs of the same operation.
+    The underscore keeps the ToolID readable as a number (df_108, not
+    df108) and matches the other id-suffixed names (_COLS_108, input_108).
     """
-    return {tool_id: f"df{tool_id}" for tool_id in order if tool_id in node_map}
+    return {tool_id: f"df_{tool_id}" for tool_id in order if tool_id in node_map}
 
 
 @dataclass(frozen=True)

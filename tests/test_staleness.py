@@ -248,8 +248,8 @@ def test_stale_rename_does_not_propagate_further() -> None:
     )
     warnings = detect_stale_select_fields(doc)
     tool_ids = [w.tool_id for w in warnings]
-    assert 2 in tool_ids          # stale at Select(2)
-    assert 3 not in tool_ids      # NOT cascaded to Select(3)
+    assert 2 in tool_ids  # stale at Select(2)
+    assert 3 not in tool_ids  # NOT cascaded to Select(3)
 
 
 # ---------------------------------------------------------------------------

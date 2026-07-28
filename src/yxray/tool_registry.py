@@ -98,10 +98,10 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "Join", "transform", "pd.merge(left, right, on=..., how='inner')", "yes"
     ),
     "AlteryxUnion": ToolInfo(
-        "Union", "transform", "pd.concat([df1, df2], ignore_index=True)", "yes"
+        "Union", "transform", "pd.concat([df_1, df_2], ignore_index=True)", "yes"
     ),
     "Union": ToolInfo(
-        "Union", "transform", "pd.concat([df1, df2], ignore_index=True)", "yes"
+        "Union", "transform", "pd.concat([df_1, df_2], ignore_index=True)", "yes"
     ),
     "AlteryxAppend": ToolInfo(
         "Append", "transform", "pd.concat([left, right], ignore_index=True)", "yes"

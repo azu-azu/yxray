@@ -130,7 +130,7 @@ universe 側の属性列(MESHCODE 等)が結果に乗らない
 _shp = Path(INPUTS["input_1"])
 if not any(_shp.with_suffix(s).exists() for s in (".dbf", ".DBF")):
     raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")
-df1 = gpd.read_file(_shp)
+df_1 = gpd.read_file(_shp)
 ```
 
 - 属性列が黙って消える経路(検証 B, C)を read の前で塞ぐ
@@ -143,12 +143,12 @@ df1 = gpd.read_file(_shp)
 **2. CRS 欠落時の EPSG:4326 仮定に warning を添える**(`_io.py: _crs_normalize_stmt`)
 
 ```python
-if df1.crs is None:
+if df_1.crs is None:
     logger.warning(
         "no CRS metadata (missing .prj?) — assuming EPSG:4326: %s",
         _shp,
     )
-    df1 = df1.set_crs("EPSG:4326")
+    df_1 = df_1.set_crs("EPSG:4326")
 ```
 
 4326 仮定そのものは Alteryx と同じ挙動なので変えない

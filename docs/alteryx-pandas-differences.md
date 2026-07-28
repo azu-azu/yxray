@@ -432,9 +432,9 @@ FindAny は等価結合では意味論を再現できない（`pd.merge` は完�
 # reference_impl/simulate_find_any_append.py
 # collect_match_diagnostics=True logs the ambiguous matches (1 target matching
 # several Source rows) — it is the costly part, set it False once reviewed
-df3 = simulate_find_any_append(
-    df1,
-    df2,
+df_3 = simulate_find_any_append(
+    df_1,
+    df_2,
     find_field="key_a",
     search_field="key_b",
     append_fields=["col_a", "col_b"],
@@ -494,7 +494,7 @@ silent skip ではなく、**未対応の組み合わせ（FindMode / ReplaceMod
 ```python
 # TODO: Find Replace — FindMode='FindAny', ReplaceMode='Replace'
 # is not translated; input passed through unchanged
-df3 = df1
+df_3 = df_1
 ```
 
 「翻訳できません」と「翻訳し忘れました」をレビューする人間が区別できるように
@@ -522,9 +522,9 @@ FindWhole は逆に検索キー列が自動で出力に残る（前述「FindWho
 # is matched inside the Targets find field
 # NOTE: simulate_find_any_append() is not generated — copy it from
 # reference_impl/simulate_find_any_append.py
-df3 = simulate_find_any_append(
-    df1,
-    df2,
+df_3 = simulate_find_any_append(
+    df_1,
+    df_2,
     find_field="key",
     search_field="key",
     append_fields=["col_a", "col_b"],
@@ -587,11 +587,11 @@ Expression モードの Filter でトップレベルが AND/OR 連鎖の場合�
 
 ```python
 # !Contains([Status], "drop")
-cond_1 = ~df1["Status"].str.contains('drop', case=False, regex=False, na=False)
+cond_1 = ~df_1["Status"].str.contains('drop', case=False, regex=False, na=False)
 # !IsEmpty([Status])
-cond_2 = ~(df1["Status"].isna() | (df1["Status"] == ""))
+cond_2 = ~(df_1["Status"].isna() | (df_1["Status"] == ""))
 
-df2 = df1[cond_1 & cond_2]
+df_2 = df_1[cond_1 & cond_2]
 ```
 
 これは同じ式の「見せ方」の変更であり、変換そのものは変えていない。
@@ -601,11 +601,11 @@ df2 = df1[cond_1 & cond_2]
 文字列列だと分かっているなら、レビューで次のように書き換えると読みやすくなる。
 
 ```python
-status = df1["Status"].fillna("")
+status = df_1["Status"].fillna("")
 is_drop = status.str.contains("drop", case=False, regex=False)
 is_empty = status.eq("")
 
-df2 = df1[~is_drop & ~is_empty]
+df_2 = df_1[~is_drop & ~is_empty]
 ```
 
 **scaffold はこの形を生成しない。** 理由:

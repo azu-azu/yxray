@@ -130,7 +130,7 @@ class ToolContext:
 
     @property
     def df_out(self) -> str:
-        """This tool's output frame variable (df<tool_id>)."""
+        """This tool's output frame variable (df_<tool_id>)."""
         return self.names[self.tool_id]
 
     @property

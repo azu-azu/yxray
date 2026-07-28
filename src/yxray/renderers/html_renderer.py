@@ -727,11 +727,23 @@ class HTMLRenderer:
         def _role(ki: Any) -> str:
             return str(ki.role) if hasattr(ki, "role") else str(ki.get("role", ""))
 
-        input_count = sum(1 for ki in key_insights if _role(ki) == "input") if key_insights else 0
-        output_count = sum(1 for ki in key_insights if _role(ki) == "output") if key_insights else 0
-        join_count = sum(1 for ki in key_insights if _role(ki) == "join") if key_insights else 0
+        input_count = (
+            sum(1 for ki in key_insights if _role(ki) == "input") if key_insights else 0
+        )
+        output_count = (
+            sum(1 for ki in key_insights if _role(ki) == "output")
+            if key_insights
+            else 0
+        )
+        join_count = (
+            sum(1 for ki in key_insights if _role(ki) == "join") if key_insights else 0
+        )
         insights_list = (
-            [ki.to_dict() if hasattr(ki, "to_dict") else ki for ki in key_insights if _role(ki) != "summary"]
+            [
+                ki.to_dict() if hasattr(ki, "to_dict") else ki
+                for ki in key_insights
+                if _role(ki) != "summary"
+            ]
             if key_insights
             else None
         )

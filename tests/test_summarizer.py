@@ -139,12 +139,16 @@ def test_compute_node_layer_orders_dependencies_and_canvas_peers() -> None:
         nodes=(node(1, "InputData"), node(2, "Select"), node(3, "Select")),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -158,12 +162,16 @@ def test_compute_node_layer_orders_a_linear_chain() -> None:
         nodes=(node(1, "Select"), node(2, "Select"), node(3, "Select")),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )
@@ -177,16 +185,22 @@ def test_compute_node_layer_places_cycle_remnants_in_fallback_layer() -> None:
         nodes=(node(1, "Select"), node(2, "Select"), node(3, "OutputData")),
         connections=(
             AlteryxConnection(
-                src_tool=ToolID(1), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(2), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(1), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(1),
+                dst_anchor=AnchorName("Input"),
             ),
             AlteryxConnection(
-                src_tool=ToolID(2), src_anchor=AnchorName("Output"),
-                dst_tool=ToolID(3), dst_anchor=AnchorName("Input"),
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
             ),
         ),
     )

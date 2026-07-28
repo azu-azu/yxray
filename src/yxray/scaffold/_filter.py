@@ -233,8 +233,7 @@ def _expression_diagnostic_lines(
     )
     if is_date_expr:
         lines += [
-            "# WARNING: date comparison — columns read from CSV are"
-            " strings; convert",
+            "# WARNING: date comparison — columns read from CSV are strings; convert",
             '# first: df[col] = pd.to_datetime(df[col], errors="coerce")',
         ]
     return lines

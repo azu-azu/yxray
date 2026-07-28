@@ -207,9 +207,12 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         segment = tool_segment(node.tool_type)
         dc = downstream.get(tid, 0)
         role = _insight_role(
-            segment, category, node.config,
+            segment,
+            category,
+            node.config,
             successors.get(tid, []),
-            dc, trunk_threshold,
+            dc,
+            trunk_threshold,
         )
         if role is None:
             continue
@@ -220,17 +223,19 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         elif role == "output":
             output_count += 1
         if role in ("input", "output"):
-            description = first_text(
-                node.config, "File", "FileName"
-            ) or _describe(node.tool_type, node.config)
+            description = first_text(node.config, "File", "FileName") or _describe(
+                node.tool_type, node.config
+            )
         else:
             description = _describe(node.tool_type, node.config)
-        insights.append(KeyInsight(
-            tool_id=int(tid),
-            short_type=short_type,
-            role=role,
-            description=description,
-        ))
+        insights.append(
+            KeyInsight(
+                tool_id=int(tid),
+                short_type=short_type,
+                role=role,
+                description=description,
+            )
+        )
 
     # Summary count row at the top
     parts = []
@@ -241,12 +246,15 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
     if output_count:
         parts.append(f"Output × {output_count}")
     if parts:
-        insights.insert(0, KeyInsight(
-            tool_id=-1,
-            short_type="",
-            role="summary",
-            description="  ·  ".join(parts),
-        ))
+        insights.insert(
+            0,
+            KeyInsight(
+                tool_id=-1,
+                short_type="",
+                role="summary",
+                description="  ·  ".join(parts),
+            ),
+        )
 
     return insights
 
@@ -450,16 +458,17 @@ def _insight_role(
     if segment in SELECT_SEGMENTS:
         rows = select_field_rows(config)
         renamed = sum(
-            1 for r in rows
+            1
+            for r in rows
             if isinstance(r, dict)
             and field_name(r)
             and (rename := _get_rename(r))
             and rename != field_name(r)
         )
         dropped = sum(
-            1 for r in rows
-            if isinstance(r, dict)
-            and r.get("@selected", "True") in ("False", "false")
+            1
+            for r in rows
+            if isinstance(r, dict) and r.get("@selected", "True") in ("False", "false")
         )
         return "reshape" if (renamed >= 2 or dropped >= 3) else None
     return None
