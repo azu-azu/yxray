@@ -85,19 +85,19 @@ def load_manual_cluster_config(path: pathlib.Path, doc: WorkflowDoc) -> dict[str
             node = nodes_by_id.get(raw_id)
             if node is None:
                 raise ValueError(
-                    f"manual_clusters[{index}] contains unknown ToolID {raw_id}"
+                    f"manual_clusters[{index}] contains unknown ToolID_{raw_id}"
                 )
             if node.container_id is not None:
                 raise ValueError(
-                    f"manual_clusters[{index}] contains ToolID {raw_id} "
+                    f"manual_clusters[{index}] contains ToolID_{raw_id} "
                     "inside a ToolContainer"
                 )
             if raw_id in local_ids:
                 raise ValueError(
-                    f"manual_clusters[{index}] contains duplicate ToolID {raw_id}"
+                    f"manual_clusters[{index}] contains duplicate ToolID_{raw_id}"
                 )
             if raw_id in used_ids:
-                raise ValueError(f"ToolID {raw_id} appears in multiple manual clusters")
+                raise ValueError(f"ToolID_{raw_id} appears in multiple manual clusters")
             local_ids.add(raw_id)
             tool_ids.append(raw_id)
 

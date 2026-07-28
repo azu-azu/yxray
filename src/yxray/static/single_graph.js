@@ -1155,10 +1155,10 @@ function validateManualClusterCandidate(ids, label, membership, existingKey) {
     seen[id] = true;
     if (!CONFIG_MAP[String(id)]) errors.push('Unknown ToolID: ' + id);
     if (membership && membership[id] !== undefined) {
-      errors.push('ToolID ' + id + ' is inside a ToolContainer; manual clusters do not support container members yet.');
+      errors.push('ToolID_' + id + ' is inside a ToolContainer; manual clusters do not support container members yet.');
     }
     if (AppState.expandedGroups[id]) {
-      errors.push('ToolID ' + id + ' belongs to an automatic cluster and cannot join a manual cluster yet.');
+      errors.push('ToolID_' + id + ' belongs to an automatic cluster and cannot join a manual cluster yet.');
     }
   });
 
@@ -1168,7 +1168,7 @@ function validateManualClusterCandidate(ids, label, membership, existingKey) {
     var key = manualClusterKey(cluster);
     if (existingKey && key === existingKey) return;
     (cluster.tool_ids || []).forEach(function(id) {
-      if (seen[Number(id)]) errors.push('ToolID ' + id + ' is already in manual cluster "' + cluster.label + '".');
+      if (seen[Number(id)]) errors.push('ToolID_' + id + ' is already in manual cluster "' + cluster.label + '".');
     });
     if (key === candidateKey) errors.push('This manual cluster already exists.');
   });
@@ -2041,7 +2041,7 @@ window.addEventListener('resize', function() {
 });
 
 // ── Config panel ──────────────────────────────────────────────────────────
-// Builds "ToolID 1 → ToolID 3 → ToolID 6" from member IDs, which are already
+// Builds "ToolID_1 → ToolID_3 → ToolID_6" from member IDs, which are already
 // stored in flow order (see sortedMemberIds: DFS over real connections,
 // falling back to layer/position order at branch points). A single "→" chain
 // can't show a member with more than one in-cluster predecessor (a branch
@@ -2051,9 +2051,9 @@ function _flowOrderIdsText(memberIds) {
   var predecessors = _inducedMemberGraph(memberIds).predecessors;
   return memberIds.map(function(mid) {
     var preds = predecessors[mid] || [];
-    var text = 'ToolID ' + mid;
+    var text = 'ToolID_' + mid;
     if (preds.length > 1) {
-      text += ' (merge: ' + preds.map(function(p) { return 'ToolID ' + p; }).join(', ') + ')';
+      text += ' (merge: ' + preds.map(function(p) { return 'ToolID_' + p; }).join(', ') + ')';
     }
     return text;
   }).join(' → ') + ' (' + memberIds.length + 'nodes)';
@@ -2925,7 +2925,7 @@ function copyPanelId() {
 
 function copyPanelToolId() {
   if (_panelNodeId === null) return;
-  _clipboardWrite('ToolID ' + String(_panelNodeId), document.getElementById('panel-copy-tool-id-btn'), 'Copy ToolID');
+  _clipboardWrite('ToolID_' + String(_panelNodeId), document.getElementById('panel-copy-tool-id-btn'), 'Copy ToolID');
 }
 
 function copyPanelJSON() {

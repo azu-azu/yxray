@@ -1243,7 +1243,7 @@ def _browse_doc() -> WorkflowDoc:
 
 def test_scaffold_browse_logs_row_count() -> None:
     code = scaffold(_browse_doc())
-    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df_1))' in code
+    assert 'logger.info("ToolID_2 (Browse): rows=%d", len(df_1))' in code
     assert "unsupported tool type" not in code
 
 
@@ -1251,7 +1251,7 @@ def test_scaffold_simple_browse_defines_logger() -> None:
     code = scaffold_simple(_browse_doc())
     assert "import logging" in code
     assert "logger = logging.getLogger(__name__)" in code
-    assert 'logger.info("ToolID 2 (Browse): rows=%d", len(df_1))' in code
+    assert 'logger.info("ToolID_2 (Browse): rows=%d", len(df_1))' in code
 
 
 def test_scaffold_simple_without_browse_has_no_logger() -> None:
@@ -1793,7 +1793,7 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     # so the generated call must not emit it — showing it would suggest the
     # setting matters
     assert "replace_multiple_found" not in code
-    assert 'log_label="ToolID 3"' in code
+    assert 'log_label="ToolID_3"' in code
     # the helper defaults collect_match_diagnostics to False because the
     # ambiguity scan is the expensive part; the generated call turns it on so
     # the reviewer sees the ambiguous matches, and says where to switch it off
@@ -2113,7 +2113,7 @@ def test_scaffold_topo_order() -> None:
         ),
     )
     code = scaffold(doc)
-    assert code.index("ToolID 1") < code.index("ToolID 2")
+    assert code.index("ToolID_1") < code.index("ToolID_2")
 
 
 # ── node_code_snippets (inspect panel "python hint") ────────────────────────

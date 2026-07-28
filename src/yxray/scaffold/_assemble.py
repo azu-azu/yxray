@@ -269,8 +269,8 @@ def _header_comment_lines(
     segment: str,
     warnings_by_tool: dict[int, list[str]] | None,
 ) -> list[str]:
-    """The "# ─── / # ToolID N: segment / # WARNING: ..." block above a tool."""
-    lines = [f"# {'─' * 68}", f"# ToolID {tool_id}: {segment}"]
+    """The "# ─── / # ToolID_N: segment / # WARNING: ..." block above a tool."""
+    lines = [f"# {'─' * 68}", f"# ToolID_{tool_id}: {segment}"]
     for msg in (warnings_by_tool or {}).get(tool_id, []):
         lines.append(f"# WARNING: {comment_safe(msg)}")
     return lines

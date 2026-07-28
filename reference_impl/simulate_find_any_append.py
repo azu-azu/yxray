@@ -70,7 +70,7 @@ def simulate_find_any_append(
     search_field: str,
     append_fields: list[str],
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
-    log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID 7"）。空なら見出しだけ出す
+    log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID_7"）。空なら見出しだけ出す
     verbose: bool = True,
     collect_match_diagnostics: bool = False,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:

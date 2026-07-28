@@ -80,7 +80,7 @@ def _findreplace_any_append(
         f"    append_fields=[{fields}],\n"
         f"    case_sensitive={case_sensitive},\n"
         f"    collect_match_diagnostics=True,\n"
-        f"    log_label={py_str(f'ToolID {tool_id}')},\n"
+        f"    log_label={py_str(f'ToolID_{tool_id}')},\n"
         f")"
     )
 

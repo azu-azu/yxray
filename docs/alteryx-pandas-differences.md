@@ -440,7 +440,7 @@ df_3 = simulate_find_any_append(
     append_fields=["col_a", "col_b"],
     case_sensitive=True,             # Alteryx の NoCase=False に対応
     collect_match_diagnostics=True,  # 曖昧マッチ表を出す（重い）
-    log_label="ToolID 3",            # 実行ログにどのツールか表示される
+    log_label="ToolID_3",            # 実行ログにどのツールか表示される
 )
 ```
 
@@ -530,7 +530,7 @@ df_3 = simulate_find_any_append(
     append_fields=["col_a", "col_b"],
     case_sensitive=True,
     collect_match_diagnostics=True,
-    log_label="ToolID 3",
+    log_label="ToolID_3",
 )
 ```
 

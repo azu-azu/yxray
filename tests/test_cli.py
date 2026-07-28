@@ -557,7 +557,7 @@ def test_explain_md_interleaves_node_xml_after_each_tool(
     assert '\n    <Node ToolID="1">' in md
     assert '\n    <Node ToolID="2">' in md
     # The Filter tool's XML block comes right after its python block
-    tool2_pos = md.index("# ToolID 2: Filter")
+    tool2_pos = md.index("# ToolID_2: Filter")
     xml2_pos = md.index('<Node ToolID="2">')
     assert xml2_pos > tool2_pos
     between = md[tool2_pos:xml2_pos]

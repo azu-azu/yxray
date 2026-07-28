@@ -127,7 +127,7 @@ Pyproject  → output/pyproject.toml
 
 ```python
 # ────────────────────────────────────────────────────────────────────
-# ToolID 108: AlteryxSelect
+# ToolID_108: AlteryxSelect
 # WARNING: "abc" was renamed to "def" at Tool 166. This setting in Tool 108 has no effect on the current schema.
 _COLS_108 = [
     SelectColumnEdit("abc", selected=False),
