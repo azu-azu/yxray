@@ -124,6 +124,14 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
   ディスパッチする単一の `_tool_blocks` に統合。`scaffold()` はそれをインデント
   して `main()` で包み、`scaffold_simple()` は平坦化するだけ。
   **ツール追加は1箇所の変更で済む。**
+- **`GeneratedCode.helpers` で `def` を本流の外に出せる。** TextInput の
+  行データがこれ(`build_text_input_df_<ToolID>()`)。`.py` では
+  `_emit_helper_defs` が `main()` の上のモジュール階層に持ち上げるので
+  `main()` は `df_1 = build_text_input_df_1()` の1行だけになり、
+  `.md` では `_tool_blocks(inline_helpers=True)` が呼び出しの直前に
+  そのまま置く(md はブロック単位で `<Node>` XML と並べて読むため、
+  データがブロック内に残る必要がある)。関数名は他ツール同様 ToolID 接尾辞で
+  衝突を防ぐ。
 
 ---
 

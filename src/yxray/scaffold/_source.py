@@ -1,7 +1,9 @@
 """Non-file endpoints of the flow (Text Input, Browse).
 
-Text Input materializes data embedded in the workflow XML; Browse is a
-sink that only logs. File-backed Input/Output live in _io.
+Text Input materializes data embedded in the workflow XML — emitted as a
+build_text_input_df_<id>() helper so the row data sits beside the flow
+instead of in it; Browse is a sink that only logs. File-backed
+Input/Output live in _io.
 """
 
 from __future__ import annotations
@@ -37,15 +39,18 @@ def gen_text_input(ctx: ToolContext) -> GeneratedCode:
             cells.append("" if c is None else str(c))
         rows.append(cells)
 
+    builder = f"build_text_input_df_{ctx.tool_id}"
     lines = [
-        "# Text Input values are strings — cast dtypes if needed",
-        f"{df_out} = pd.DataFrame({{",
+        f"def {builder}() -> pd.DataFrame:",
+        f'    """Data embedded in Text Input ToolID {ctx.tool_id}."""',
+        "    # Text Input values are strings — cast dtypes if needed",
+        "    df = pd.DataFrame({",
     ]
     for i, name in enumerate(field_names):
         values = ", ".join(py_str(row[i]) if i < len(row) else '""' for row in rows)
-        lines.append(f"    {py_str(name)}: [{values}],")
-    lines.append("})")
-    return GeneratedCode("\n".join(lines))
+        lines.append(f"        {py_str(name)}: [{values}],")
+    lines += ["    })", "    return df"]
+    return GeneratedCode(f"{df_out} = {builder}()", helpers=("\n".join(lines),))
 
 
 def gen_browse(ctx: ToolContext) -> GeneratedCode:
