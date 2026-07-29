@@ -10,6 +10,7 @@ import importlib.util
 import inspect
 import random
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -57,31 +58,85 @@ def test_to_display_string_keeps_missing_as_na_for_fill_empty() -> None:
     assert list(fill.fill_empty(out, "-")) == ["1", "-"]
 
 
+def test_to_display_string_converts_real_floats_inside_an_object_column() -> None:
+    # The columns generated code produces are routinely object (np.where
+    # output, a column carrying a placeholder), and the numbers inside them
+    # are still real floats. Gating on the column's dtype made this a
+    # no-op — the case the helper exists for.
+    out = display.to_display_string(
+        pd.Series([1.0, 1.5, "001", "1.0", None], dtype="object")
+    )
+    assert list(out)[:4] == ["1", "1.5", "001", "1.0"]
+    assert out.isna().iloc[4]
+
+
 def test_to_display_string_leaves_zero_padded_codes_alone() -> None:
-    # "001" -> "1" would silently corrupt an ID column. A text column is
-    # never run through the numeric formatting, so this is structural
-    # rather than a rule the caller has to remember.
+    # "001" -> "1" would silently corrupt an ID column. Text cells are
+    # never run through the numeric conversion, so this holds whether the
+    # column is object or string dtype — and even when real numbers sit
+    # in the same object column.
     assert list(display.to_display_string(pd.Series(["001", "1.0"]))) == ["001", "1.0"]
     assert list(display.to_display_string(pd.Series(["001"], dtype="string"))) == [
         "001"
     ]
+    assert list(display.to_display_string(pd.Series(["001", 1.0], dtype="object"))) == [
+        "001",
+        "1",
+    ]
 
 
 def test_to_display_string_leaves_booleans_as_words() -> None:
-    # bool passes is_numeric_dtype, so without the explicit exclusion
-    # True/False would come out as "1"/"0".
+    # bool is a subclass of int, so without the explicit exclusion
+    # True/False would come out as "1"/"0" — in a bool column and in an
+    # object column alike.
     assert list(display.to_display_string(pd.Series([True, False]))) == [
         "True",
         "False",
     ]
+    assert list(display.to_display_string(pd.Series([True, 1.0], dtype="object"))) == [
+        "True",
+        "1",
+    ]
+
+
+def test_to_display_string_handles_decimal_cells() -> None:
+    # Decimal is not registered as numbers.Real, so it needs naming
+    # explicitly — apply_select_edits points at Decimal for FixedDecimal
+    # columns that need the precision.
+    out = display.to_display_string(
+        pd.Series([Decimal("1.0"), Decimal("1.5")], dtype="object")
+    )
+    assert list(out) == ["1", "1.5"]
 
 
 def test_to_display_string_leaves_dates_alone() -> None:
     # The worst silent failure: a datetime column formatted as a number
-    # becomes an epoch integer, and NaT becomes int64 min.
+    # becomes an epoch integer, and NaT becomes int64 min. Masking with
+    # .where() on the original dtype reintroduces this — the non-matching
+    # cells come back as NaT, which pd.to_numeric reads as int64 min and
+    # whose .abs() overflows past the range guard.
     out = display.to_display_string(pd.Series(pd.to_datetime(["2024-01-01", None])))
     assert list(out)[0].startswith("2024-01-01")
     assert out.isna().iloc[1]
+    # Same for a Timestamp sitting in an object column next to a number.
+    mixed = display.to_display_string(
+        pd.Series([pd.Timestamp("2024-01-01"), 1.0], dtype="object")
+    )
+    assert list(mixed)[0].startswith("2024-01-01")
+    assert list(mixed)[1] == "1"
+
+
+def test_to_display_string_survives_a_duplicate_index() -> None:
+    # Filters and concat leave duplicate labels behind; assigning an
+    # index-aligned Series into the result raises "cannot reindex on an
+    # axis with duplicate labels" there.
+    out = display.to_display_string(pd.Series([1.0, 2.0, "x"], index=[0, 0, 1]))
+    assert list(out) == ["1", "2", "x"]
+
+
+def test_to_display_string_survives_a_non_default_index() -> None:
+    out = display.to_display_string(pd.Series([1.0, 2.5], index=[5, 9]))
+    assert list(out) == ["1", "2.5"]
 
 
 def test_to_display_string_does_not_overflow_on_huge_floats() -> None:
@@ -112,10 +167,23 @@ def test_to_display_string_then_fill_empty_is_the_documented_order() -> None:
         "-",
         "21000",
     ]
-    # Reversed, the placeholder lands in a numeric column first, which
-    # leaves the numbers as numbers — 1.0 never becomes "1".
-    reversed_order = display.to_display_string(fill.fill_empty(floor, "-"))
-    assert list(reversed_order) == ["1.0", "-", "21000.0"]
+    # Either order produces the same values, now that the numbers inside
+    # the object column the fill leaves behind are still recognised.
+    assert list(display.to_display_string(fill.fill_empty(floor, "-"))) == [
+        "1",
+        "-",
+        "21000",
+    ]
+
+
+def test_filling_before_formatting_can_raise_on_a_nullable_column() -> None:
+    # Why the documented order is still stringify-then-fill: fill_empty
+    # preserves dtype, so a text placeholder in an Int64 column raises.
+    # After to_display_string the column is text and the fill always fits.
+    nullable = pd.Series([1, None], dtype="Int64")
+    with pytest.raises(TypeError):
+        fill.fill_empty(nullable, "-")
+    assert list(fill.fill_empty(display.to_display_string(nullable), "-")) == ["1", "-"]
 
 
 # ── fill_empty ──────────────────────────────────────────────────────────────
