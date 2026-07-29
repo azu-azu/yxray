@@ -95,8 +95,16 @@ def to_display_string(series: pd.Series) -> pd.Series:
     - 日付が `"1704067200000000"`（epoch 整数）に、`NaT` が int64 の最小値に
       なる — `Timestamp` は実数ではないので対象外
 
-    ただし CSV を `dtype=str` で読んだ数値列はセルが文字列なので変換されない。
-    その場合は先に `pd.to_numeric()` を通すこと。
+    裏返しの制約として、**セルがすでに文字列なら数値扱いしない**。これは
+    `"001"` を守るための仕様そのものなので、関数側では直せない:
+
+        1.0     # float → "1"
+        "1.0"   # str   → "1.0" のまま
+
+    列が値としては数値なのに `"1.0"` が並んでいる場合（CSV を `dtype=str` で
+    読んだ、前段で文字列化された等）は、**呼び出し側で数値へ戻す**。
+    ただし `errors="coerce"` は数値でないテキストを黙って NaN にするので、
+    取りこぼしの検査とセットで使うこと（20章に手順あり）。
     """
     result = series.astype("string")
     if is_numeric_dtype(series) and not (

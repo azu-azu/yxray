@@ -1011,8 +1011,57 @@ Alteryx XML だけでは決まらず実データの型に依存するため、�
 
 なお `Decimal` は `numbers.Real` に登録されていないので明示的に足している
 （`apply_select_edits` が FixedDecimal の精度対策として挙げている型）。
-CSV を `dtype=str` で読んだ数値列はセルが文字列なので変換されない — その場合は
-先に `pd.to_numeric()` を通すこと。
+
+### 効かないときの切り分け — セルがすでに `"1.0"` になっていないか
+
+`to_display_string()` を通したのに `1.0` が `"1"` にならない場合、**セルの中身が
+float ではなく文字列 `"1.0"` になっている**。これは仕様どおりの動作で、
+`"001"` を守るガードと表裏一体なので関数側では直せない:
+
+```python
+1.0      # float → "1"
+"1.0"    # str   → "1.0" のまま
+```
+
+まず型を見て確定させる:
+
+```python
+print(df["Floor"].map(type).value_counts())   # <class 'str'> が出れば当たり
+print(df["Floor"].head(20).map(repr))
+```
+
+`str` だった場合は**呼び出し側で数値へ戻す**。列が数値列だと分かっているときだけ:
+
+```python
+df["Floor"] = fill_empty(
+    to_display_string(pd.to_numeric(df["Floor"], errors="coerce")),
+    "-",
+)
+```
+
+> **`errors="coerce"` は数値でないテキストを黙って NaN にする。** その NaN は
+> 直後の `fill_empty()` がプレースホルダで塗り潰すので、**消えたことが出力から
+> 分からない**。Floor 列の `"B1"`（地下1階）や `"PH"`（最上階）が `"-"` に
+> 化けるのは実際に起こる。ゼロ埋めコードも `"001"` → `"1"` になる。
+
+そのため、変換で null が増えていないかを併せて見る。`apply_select_edits` が
+Alteryx の Conversion Error に対して使っているのと同じ手当て:
+
+```python
+source = df["Floor"]
+numeric = pd.to_numeric(source, errors="coerce")
+lost = numeric.isna() & source.notna() & source.ne("")
+if lost.any():
+    logger.warning(
+        "Floor: %d 件が数値に変換できず null になった — %r",
+        int(lost.sum()),
+        sorted(source[lost].unique())[:10],
+    )
+df["Floor"] = fill_empty(to_display_string(numeric), "-")
+```
+
+ここまでやって初めて「数値列だと分かっている列」だと言える。分からないなら
+`pd.to_numeric()` を通してはいけない。
 
 ---
 

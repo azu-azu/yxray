@@ -176,6 +176,46 @@ def test_to_display_string_then_fill_empty_is_the_documented_order() -> None:
     ]
 
 
+def test_to_display_string_leaves_numeric_looking_text_alone() -> None:
+    # The flip side of protecting "001": a cell that is already the string
+    # "1.0" is text, and text is not reformatted. This is the spec, not a
+    # gap — a column whose values arrive pre-stringified has to be turned
+    # back into numbers by the caller.
+    text = pd.Series(["1.0", "1.5", "21000.0"], dtype="object")
+    assert list(display.to_display_string(text)) == ["1.0", "1.5", "21000.0"]
+
+
+def test_parsing_text_back_to_numbers_is_what_makes_it_apply() -> None:
+    # The documented recipe for a numeric column that arrived as text.
+    text = pd.Series(["1.0", "1.5", "", None, "21000.0"], dtype="object")
+    numeric = pd.to_numeric(text, errors="coerce")
+    assert list(fill.fill_empty(display.to_display_string(numeric), "-")) == [
+        "1",
+        "1.5",
+        "-",
+        "-",
+        "21000",
+    ]
+
+
+def test_coercing_text_silently_drops_non_numeric_values() -> None:
+    # Why the recipe carries a null-count check: coercion turns "B1" and
+    # "PH" into NaN, and the fill then paints them with the placeholder,
+    # so the loss is invisible in the output. Same shape of problem as the
+    # Conversion Error warning in apply_select_edits.
+    source = pd.Series(["1.0", "B1", "PH", "", "3.0"], dtype="object")
+    numeric = pd.to_numeric(source, errors="coerce")
+    assert list(fill.fill_empty(display.to_display_string(numeric), "-")) == [
+        "1",
+        "-",
+        "-",
+        "-",
+        "3",
+    ]
+    lost = numeric.isna() & source.notna() & source.ne("")
+    assert sorted(source[lost]) == ["B1", "PH"]
+
+
 def test_filling_before_formatting_can_raise_on_a_nullable_column() -> None:
     # Why the documented order is still stringify-then-fill: fill_empty
     # preserves dtype, so a text placeholder in an Int64 column raises.
