@@ -160,6 +160,33 @@ def _emit_isempty(args: list[_Emitted]) -> str:
     return f'({_series(args[0])}.isna() | ({args[0][0]} == ""))'
 
 
+# The IsNull/IsEmpty emitters above, run backwards: given an IF's condition
+# and its ELSE branch, recognise "the condition tests the ELSE branch itself
+# for missing" so the whole IF collapses to a fill. Reconstructing the
+# emitter output and comparing strings keeps the two definitions honest — if
+# an emitter changes, this stops matching, which costs the peephole and not
+# correctness (the np.where path is still a valid translation).
+def _missing_fill(
+    condition: str, then_code: str, other: _Emitted
+) -> tuple[str, bool] | None:
+    """`IF IsNull/IsEmpty([col]) THEN v ELSE [col] ENDIF` → fill code.
+
+    Returns (code, needs_fill_empty), or None when the IF is not that
+    shape. np.where would be a correct translation too, but it returns an
+    ndarray and so drops the column's dtype (Int64 → float64,
+    string/category → object) — exactly on the columns a missing-value
+    fill targets. .fillna()/fill_empty() keep it.
+    """
+    series = _series(other)
+    if condition == f"{series}.isna()":
+        return f"{series}.fillna({then_code})", False
+    if condition == f'({series}.isna() | ({other[0]} == ""))':
+        # No pandas built-in covers NULL-or-empty, so this one needs the
+        # reference_impl helper; the generator emits a NOTE pointing at it.
+        return f"fill_empty({series}, {then_code})", True
+    return None
+
+
 def _emit_substring(args: list[_Emitted]) -> str:
     # Alteryx Substring is 0-indexed: Substring("DENVER", 2, 3) == "NVE"
     _check_args("Substring", args, 2)
@@ -275,6 +302,10 @@ class _Parser:
         # Whether any emission so far contains np.* (IF/IIF → np.where /
         # np.select / np.nan, Null() → np.nan).
         self.uses_numpy = False
+        # Whether any emission so far calls fill_empty() — the one emitted
+        # name that is not pandas/numpy, so callers must point at
+        # reference_impl/fill_empty.py.
+        self.uses_fill_empty = False
 
     def peek(self) -> _Token:
         return self.tokens[self.pos]
@@ -339,8 +370,6 @@ class _Parser:
         return operands, "|"
 
     def if_expr(self) -> _Emitted:
-        # Always emits np.where or np.select (and possibly np.nan).
-        self.uses_numpy = True
         self.expect_keyword("if")
         conditions = [self.expr()[0]]
         self.expect_keyword("then")
@@ -350,11 +379,25 @@ class _Parser:
             conditions.append(self.expr()[0])
             self.expect_keyword("then")
             values.append(self.expr()[0])
-        default = "np.nan"
+        else_emitted: _Emitted | None = None
         if self.keyword() == "else":
             self.advance()
-            default = self.expr()[0]
+            else_emitted = self.expr()
         self.expect_keyword("endif")
+        # A single test whose ELSE hands back the tested column is a
+        # missing-value fill, not a branch — dtype-preserving pandas exists
+        # for it, so no np.* is emitted on that path.
+        if (
+            len(conditions) == 1
+            and else_emitted is not None
+            and (fill := _missing_fill(conditions[0], values[0], else_emitted))
+        ):
+            code, needs_fill_empty = fill
+            self.uses_fill_empty = self.uses_fill_empty or needs_fill_empty
+            return code, _ATOM
+        # np.where / np.select from here (np.nan as default when no ELSE).
+        self.uses_numpy = True
+        default = "np.nan" if else_emitted is None else else_emitted[0]
         if len(conditions) == 1:
             return f"np.where({conditions[0]}, {values[0]}, {default})", _ATOM
         conds = ", ".join(conditions)
@@ -479,6 +522,17 @@ class _Parser:
                 args.append(self.expr())
         self.expect_kind("rparen")
         if emitter := _FUNCTIONS.get(name.lower()):
+            # IIF(IsNull([c]), v, [c]) is the IF form written as a call, so
+            # the same fill peephole applies — checked before _emit_iif so
+            # the np.where emitter (and its numpy flag) is never reached.
+            if (
+                name.lower() == "iif"
+                and len(args) >= 3
+                and (fill := _missing_fill(args[0][0], args[1][0], args[2]))
+            ):
+                code, needs_fill_empty = fill
+                self.uses_fill_empty = self.uses_fill_empty or needs_fill_empty
+                return code, _ATOM
             if name.lower() in _NUMPY_FUNCTIONS:
                 self.uses_numpy = True
             return emitter(args), _ATOM
@@ -493,11 +547,14 @@ class ExprTranslation:
 
     uses_numpy is True when the emitted code contains np.* — tracked at
     the emission sites, not re-derived from the string — so callers can
-    emit `import numpy as np` exactly when needed.
+    emit `import numpy as np` exactly when needed. uses_fill_empty is the
+    same idea for the one emitted name that is neither pandas nor numpy:
+    callers point the reader at reference_impl/fill_empty.py.
     """
 
     code: str
     uses_numpy: bool
+    uses_fill_empty: bool = False
 
 
 def translate_expr(expr: str, df_var: str) -> ExprTranslation:
@@ -510,7 +567,11 @@ def translate_expr(expr: str, df_var: str) -> ExprTranslation:
     if tokens[0].kind == "end":
         raise ExprTranslationError("empty expression")
     parser = _Parser(tokens, df_var)
-    return ExprTranslation(code=parser.parse(), uses_numpy=parser.uses_numpy)
+    return ExprTranslation(
+        code=parser.parse(),
+        uses_numpy=parser.uses_numpy,
+        uses_fill_empty=parser.uses_fill_empty,
+    )
 
 
 # ── Filter mask splitting ──────────────────────────────────────────────────
@@ -536,14 +597,16 @@ class FilterTranslation:
     combined is the whole expression as one pandas expression — identical
     to translate_expr() output. masks/joiner carry the same expression
     split at the top-level AND/OR chain (one level only); a single mask
-    means the expression has no top-level chain to split. uses_numpy is
-    True when the translation emitted np.* (see ExprTranslation).
+    means the expression has no top-level chain to split. uses_numpy /
+    uses_fill_empty carry what the translation emitted (see
+    ExprTranslation).
     """
 
     combined: str
     masks: tuple[FilterMask, ...]
     joiner: str  # "&" or "|" ("&" when there is only one mask)
     uses_numpy: bool
+    uses_fill_empty: bool = False
 
 
 def _fragment(tokens: list[_Token], start: int, stop: int) -> str:
@@ -588,4 +651,5 @@ def translate_filter_masks(expr: str, df_var: str) -> FilterTranslation:
         masks=masks,
         joiner=joiner,
         uses_numpy=parser.uses_numpy,
+        uses_fill_empty=parser.uses_fill_empty,
     )

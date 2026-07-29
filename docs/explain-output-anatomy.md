@@ -21,7 +21,13 @@
   `scaffold/_registry.py` の `GENERATORS` が決める。
 
 scaffold側を変えたら `tests/test_scaffold.py` の該当 assert
-(生成コードの文字列一致)も更新すること。
+(生成コードの文字列一致)も更新すること。**hint側と scaffold側が同じツールで
+食い違っていないかも確認する** — 実際に Formula で `.assign()`(hint)と
+添字代入(scaffold)がズレていた(2026-07-29 修正)。
+
+どのツールをどう翻訳するかのルール本体は
+`docs/alteryx-pandas-differences.md` にある(例: Formula の欠損値補充を
+`np.where` ではなく `fillna` / `fill_empty` に落とす条件は同19章)。
 
 依頼の短縮記法(この形で来たら上記2系統の特定から始める):
 

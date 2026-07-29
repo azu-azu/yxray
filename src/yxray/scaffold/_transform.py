@@ -21,6 +21,7 @@ from yxray.config_utils import (
     sort_field_rows,
 )
 from yxray.scaffold._common import (
+    FILL_EMPTY_NOTE_LINES,
     GeneratedCode,
     Requirement,
     ToolContext,
@@ -66,20 +67,26 @@ def gen_formula(ctx: ToolContext) -> GeneratedCode:
     # KeyError); and subscript assignment keys are strings, so field names
     # that aren't valid Python identifiers (e.g. "Sales Amount", "2020")
     # work — as .assign() keyword arguments they'd be a SyntaxError.
-    lines = [
-        "# Alteryx Formula — applied top to bottom; review translation",
-        f"{df_out} = {df_in}.copy()",
-    ]
+    body: list[str] = []
     uses_numpy = False
+    uses_fill_empty = False
     for fname, expr in formulas:
         translation, ok = _translate_expr(expr, df_out)
         uses_numpy = uses_numpy or translation.uses_numpy
+        uses_fill_empty = uses_fill_empty or translation.uses_fill_empty
         if not ok:
-            lines.append(
+            body.append(
                 f'# TODO: could not translate expression for "{comment_safe(fname)}"'
                 f" — port manually: {comment_safe(expr)}"
             )
-        lines.append(f"{df_out}[{py_str(fname)}] = {translation.code}")
+        body.append(f"{df_out}[{py_str(fname)}] = {translation.code}")
+    # The helper NOTE goes above the block, so it is read before the call —
+    # which is why the body is built first and the header assembled after.
+    lines = ["# Alteryx Formula — applied top to bottom; review translation"]
+    if uses_fill_empty:
+        lines += FILL_EMPTY_NOTE_LINES
+    lines.append(f"{df_out} = {df_in}.copy()")
+    lines += body
     return GeneratedCode(
         "\n".join(lines),
         requirements=frozenset({Requirement.NUMPY}) if uses_numpy else frozenset(),

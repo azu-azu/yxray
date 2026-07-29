@@ -800,6 +800,71 @@ def test_scaffold_formula_translates_if_expression() -> None:
     assert "THEN" not in code
 
 
+def _formula_doc(field: str, expression: str) -> WorkflowDoc:
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Formula",
+            x=10,
+            y=0,
+            config={
+                "FormulaFields": {
+                    "FormulaField": {"@field": field, "@expression": expression}
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+def test_scaffold_formula_isnull_fill_uses_fillna_without_numpy() -> None:
+    code = scaffold(
+        _formula_doc("Amount", "IF IsNull([Amount]) THEN 0 ELSE [Amount] ENDIF")
+    )
+    assert 'df_2["Amount"] = df_2["Amount"].fillna(0)' in code
+    # np.where here would return an ndarray and drop the column's dtype;
+    # nothing on this path emits np.*, so the import must not appear.
+    assert "np.where" not in code
+    assert "import numpy as np" not in code
+    assert "fill_empty" not in code
+
+
+def test_scaffold_formula_isempty_fill_notes_the_helper_source() -> None:
+    code = scaffold(
+        _formula_doc("Status", 'IF IsEmpty([Status]) THEN "N/A" ELSE [Status] ENDIF')
+    )
+    assert 'df_2["Status"] = fill_empty(df_2["Status"], \'N/A\')' in code
+    # The definition is not generated — the block has to say where it lives.
+    assert "# NOTE: fill_empty() is not generated — copy it from" in code
+    assert "# reference_impl/fill_empty.py" in code
+    # The NOTE belongs above the call, not after it.
+    assert code.index("reference_impl/fill_empty.py") < code.index("= fill_empty(")
+
+
+def test_scaffold_formula_without_fill_omits_the_helper_note() -> None:
+    code = scaffold(_formula_doc("Net", "[Gross] - [Tax]"))
+    assert "fill_empty" not in code
+
+
+def test_scaffold_formula_new_field_from_fill_is_valid_python() -> None:
+    # Alteryx Formula can create a field, so the fill has to be an
+    # expression assigned to the new column — an in-place
+    # df.loc[mask, col] = value would need "Clean" to already exist.
+    code = scaffold(
+        _formula_doc("Clean", 'IF IsEmpty([Raw]) THEN "-" ELSE [Raw] ENDIF')
+    )
+    assert 'df_2["Clean"] = fill_empty(df_2["Raw"], \'-\')' in code
+    compile(code, "<scaffold>", "exec")
+
+
 def test_scaffold_filter_boolean_expression_parenthesized() -> None:
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),

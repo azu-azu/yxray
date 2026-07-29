@@ -16,6 +16,18 @@ _FILTER_HINT = (
     '# df[col].isna() | (df[col] == "")'
 )
 
+# Subscript assignment, not .assign(): Alteryx applies formula rows top to
+# bottom (a later row may read a column an earlier one just made) and field
+# names are not always valid Python identifiers. Matches what
+# scaffold/_transform.py generates — see docs/explain-output-anatomy.md for
+# why the two sides have to agree.
+_FORMULA_HINT = (
+    'df["<field>"] = <expr>  # one row per formula, top to bottom\n'
+    '# IF IsNull([c]) THEN v ELSE [c] ENDIF  → df["c"].fillna(v)\n'
+    '# IF IsEmpty([c]) THEN v ELSE [c] ENDIF → fill_empty(df["c"], v)\n'
+    "# other IF/IIF → np.where(...) / np.select([...], [...])"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ToolInfo:
@@ -72,12 +84,8 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "df = df[[...]].rename(columns={...})",
         "yes",
     ),
-    "AlteryxFormula": ToolInfo(
-        "Formula", "transform", "df = df.assign(<field>=<expr>)", "yes"
-    ),
-    "Formula": ToolInfo(
-        "Formula", "transform", "df = df.assign(<field>=<expr>)", "yes"
-    ),
+    "AlteryxFormula": ToolInfo("Formula", "transform", _FORMULA_HINT, "yes"),
+    "Formula": ToolInfo("Formula", "transform", _FORMULA_HINT, "yes"),
     "MultiFieldFormula": ToolInfo(
         "Multi-Field Formula",
         "transform",
