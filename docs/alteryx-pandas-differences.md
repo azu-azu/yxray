@@ -466,7 +466,7 @@ df_3 = find_any_append(
 
 **関数定義そのものは生成 .py に埋め込まない**（Select の
 `apply_select_edits` / `SelectColumnEdit` も同方針で、参照実装は
-`reference_impl/apply_select_edits.py`）。`reference_impl/` の参照実装をプロジェクトへ
+`reference_impl/select_edits.py`）。`reference_impl/` の参照実装をプロジェクトへ
 コピーして使う。挙動は `tests/test_reference_scripts.py` で固定されている。
 参照実装は以下を処理済み:
 
@@ -1140,7 +1140,7 @@ df["Floor"] = fill_empty(to_display_string(numeric), "-")
 ## 関連実装
 
 - `reference_impl/find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
-- `reference_impl/apply_select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）
+- `reference_impl/select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）。設定型 `SelectColumnEdit` と適用関数 `apply_select_edits` の2つを公開するため、他の参照実装と違いファイル名は関数名と一致しない
 - `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
 - `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`

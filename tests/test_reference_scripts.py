@@ -33,7 +33,7 @@ def _load_script(name: str):
     return module
 
 
-select_helpers = _load_script("apply_select_edits")
+select_helpers = _load_script("select_edits")
 find_any = _load_script("find_any_append")
 fill = _load_script("fill_empty")
 display = _load_script("to_display_string")
