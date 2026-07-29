@@ -1,8 +1,9 @@
 """Behavior tests for the reference helpers in reference_impl/.
 
-Generated scaffolds call these helpers without embedding their
+Generated scaffolds call most of these helpers without embedding their
 definitions; these tests pin the runtime behavior the generated code
-relies on.
+relies on. to_display_string is the exception — nothing generates a call
+to it, so its tests pin what a reviewer gets when they add one by hand.
 """
 
 import importlib.util
@@ -34,6 +35,87 @@ def _load_script(name: str):
 select_helpers = _load_script("apply_select_edits")
 find_any = _load_script("simulate_find_any_append")
 fill = _load_script("fill_empty")
+display = _load_script("to_display_string")
+
+
+# ── to_display_string ───────────────────────────────────────────────────────
+
+
+def test_to_display_string_drops_the_decimal_on_whole_numbers() -> None:
+    # Alteryx renders an integer-valued number without ".0" when it turns
+    # it into a string; astype("string") alone would give "1.0".
+    out = display.to_display_string(pd.Series([1.0, 1.5, 21000.0]))
+    assert list(out) == ["1", "1.5", "21000"]
+    assert out.dtype == "string"
+
+
+def test_to_display_string_keeps_missing_as_na_for_fill_empty() -> None:
+    # Missing stays <NA> so the composition with fill_empty works: the
+    # placeholder is applied after the numeric formatting.
+    out = display.to_display_string(pd.Series([1.0, None]))
+    assert out.isna().iloc[1]
+    assert list(fill.fill_empty(out, "-")) == ["1", "-"]
+
+
+def test_to_display_string_leaves_zero_padded_codes_alone() -> None:
+    # "001" -> "1" would silently corrupt an ID column. A text column is
+    # never run through the numeric formatting, so this is structural
+    # rather than a rule the caller has to remember.
+    assert list(display.to_display_string(pd.Series(["001", "1.0"]))) == ["001", "1.0"]
+    assert list(display.to_display_string(pd.Series(["001"], dtype="string"))) == [
+        "001"
+    ]
+
+
+def test_to_display_string_leaves_booleans_as_words() -> None:
+    # bool passes is_numeric_dtype, so without the explicit exclusion
+    # True/False would come out as "1"/"0".
+    assert list(display.to_display_string(pd.Series([True, False]))) == [
+        "True",
+        "False",
+    ]
+
+
+def test_to_display_string_leaves_dates_alone() -> None:
+    # The worst silent failure: a datetime column formatted as a number
+    # becomes an epoch integer, and NaT becomes int64 min.
+    out = display.to_display_string(pd.Series(pd.to_datetime(["2024-01-01", None])))
+    assert list(out)[0].startswith("2024-01-01")
+    assert out.isna().iloc[1]
+
+
+def test_to_display_string_does_not_overflow_on_huge_floats() -> None:
+    # astype("Int64") on 1e300 raises "cannot safely cast"; values outside
+    # the Int64 range keep their plain representation instead.
+    out = display.to_display_string(pd.Series([1e300, float("inf"), 1.0]))
+    assert list(out) == ["1e+300", "inf", "1"]
+
+
+def test_to_display_string_handles_nullable_integer_columns() -> None:
+    out = display.to_display_string(pd.Series([1, None], dtype="Int64"))
+    assert list(out)[0] == "1"
+    assert out.isna().iloc[1]
+
+
+def test_to_display_string_does_not_mutate_its_input() -> None:
+    s = pd.Series([1.0, 2.5])
+    display.to_display_string(s)
+    assert s.dtype == "float64"
+    assert list(s) == [1.0, 2.5]
+
+
+def test_to_display_string_then_fill_empty_is_the_documented_order() -> None:
+    # The Floor case: a Double column that needs a text placeholder.
+    floor = pd.Series([1.0, None, 21000.0])
+    assert list(fill.fill_empty(display.to_display_string(floor), "-")) == [
+        "1",
+        "-",
+        "21000",
+    ]
+    # Reversed, the placeholder lands in a numeric column first, which
+    # leaves the numbers as numbers — 1.0 never becomes "1".
+    reversed_order = display.to_display_string(fill.fill_empty(floor, "-"))
+    assert list(reversed_order) == ["1.0", "-", "21000.0"]
 
 
 # ── fill_empty ──────────────────────────────────────────────────────────────

@@ -800,32 +800,67 @@ Formula の `IF` は原則 `np.where` / `np.select` に翻訳される（16章�
 
 | Alteryx 式 | 生成コード | 追加の依存 |
 |---|---|---|
+| Alteryx 式 | 生成コード | 追加の依存 |
+|---|---|---|
 | `IF IsNull([c]) THEN v ELSE [c] ENDIF` | `df["c"].fillna(v)` | なし（pandas 組み込み） |
+| `IF !IsNull([c]) THEN [c] ELSE v ENDIF` | 同上 | なし |
 | `IIF(IsNull([c]), v, [c])` | 同上 | なし |
 | `IF IsEmpty([c]) THEN v ELSE [c] ENDIF` | `fill_empty(df["c"], v)` | `reference_impl/fill_empty.py` |
+| `IF !IsEmpty([c]) THEN [c] ELSE v ENDIF` | 同上 | 同上 |
 | `IIF(IsEmpty([c]), v, [c])` | 同上 | 同上 |
 | 上記以外の `IF` / `IIF` | `np.where(...)` / `np.select(...)` | numpy |
 
-**適用条件は「ELSE が、条件でテストした対象そのものを返すこと」。** これを外れる
-ものは補充ではなく分岐なので `np.where` のまま:
+**適用条件は「2分岐のうち一方が、条件でテストした対象そのものを返すこと」。**
+肯定形（`IsNull` → ELSE 側が返す）と否定形（`!IsNull` / `NOT IsNull` → THEN 側が
+返す）は同じ意味なので両方拾う。これを外れるものは補充ではなく分岐なので
+`np.where` のまま:
 
 ```python
-# 補充 → fillna
+# 補充 → fillna（肯定形・否定形とも同じコードになる）
 IF IsNull([A]) THEN 0 ELSE [A] ENDIF        →  df["A"].fillna(0)
+IF !IsNull([A]) THEN [A] ELSE 0 ENDIF       →  df["A"].fillna(0)
 # 別列を返す → 分岐
 IF IsNull([A]) THEN 0 ELSE [B] ENDIF        →  np.where(df["A"].isna(), 0, df["B"])
-# ELSE で加工している → 分岐
+IF !IsNull([A]) THEN [B] ELSE 0 ENDIF       →  np.where(~df["A"].isna(), df["B"], 0)
+# 加工している → 分岐
 IF IsNull([A]) THEN 0 ELSE [A] * 2 ENDIF    →  np.where(df["A"].isna(), 0, df["A"] * 2)
 # ELSE 無し（非該当は NULL になる）→ 分岐
 IF IsNull([A]) THEN 0 ENDIF                 →  np.where(df["A"].isna(), 0, np.nan)
 # ELSEIF がある → 分岐
 IF IsNull([A]) THEN 0 ELSEIF [A] > 5 THEN 1 ELSE [A] ENDIF
                                             →  np.select([...], [...], default=df["A"])
+# 欠損判定ではない条件の否定 → 分岐（`~` があるだけでは補充にしない）
+IF ![A] > 1 THEN [A] ELSE 0 ENDIF           →  np.where(~(df["A"] > 1), df["A"], 0)
 ```
 
 テスト対象は列でなく式でもよい（`IF IsEmpty(Trim([S])) THEN "-" ELSE Trim([S]) ENDIF`
 → `fill_empty(df["S"].str.strip(), '-')`）。関数形にまとめると**式の評価が1回で済む**
 のも利点で、素の pandas で書くと同じ式が3回出てくる。
+
+### 補充**以外**の `IsEmpty` は関数にせず直書きする
+
+同じ `IsEmpty([S])` でも、式の途中やフィルタ条件に出てきた場合は
+`fill_empty()` を使わず `(df["S"].isna() | (df["S"] == ""))` を直書きする。
+
+```python
+IsEmpty([S])                              →  (df["S"].isna() | (df["S"] == ""))
+!IsEmpty([S])                             →  ~(df["S"].isna() | (df["S"] == ""))
+IF IsEmpty([S]) THEN "x" ELSE "y" ENDIF   →  np.where((df["S"].isna() | (df["S"] == "")), 'x', 'y')
+IF IsEmpty([S]) THEN "N/A" ELSE [S] ENDIF →  fill_empty(df["S"], 'N/A')   # 補充だけ関数
+```
+
+一貫していないように見えるが、`fill_empty` は **IsEmpty の訳語ではなく「補充という
+パターン」の訳語**である。ブール文脈の `IsEmpty` が作るのは単なるマスクで、
+そこには dtype の問題が無い（マスクは常に bool）。関数化して得るものが無い一方、
+失うものはある:
+
+- 17章の死コード警告は `== ""` の側が `pd.to_datetime` 変換後に常に False になる、
+  という指摘。マスクを `is_empty(df[col])` に隠すと、警告が指している当のコードが
+  読み手に見えなくなる。
+- Filter のほぼ全ブロックが `reference_impl` のコピーを要求することになる。
+
+関数を使うのは「pandas 組み込みが無く、かつ dtype が懸かっている」ときだけ、
+というのがこの分かれ目の基準。
 
 ### なぜ補充だけ別扱いなのか — dtype が壊れるから
 
@@ -882,6 +917,84 @@ df.loc[mask, col] = value
 
 ---
 
+## 20. 数値を文字列として出力するときの表記（`to_display_string`）
+
+Alteryx は数値を文字列として出力する場面で、**整数相当の値の小数点以下を
+省略する**。
+
+```
+1.0     → "1"
+1.5     → "1.5"
+21000.0 → "21000"
+```
+
+pandas の `astype("string")` は `1.0` を `"1.0"` にするので、Double 列に
+文字列プレースホルダを混ぜた列をそのまま出力すると Alteryx と食い違う。
+19章の補充がまさにこの形を作る:
+
+```python
+# Floor は Double。プレースホルダ "-" を入れると object 列になり、
+# 数値はそのまま残る（"1" ではなく 1.0）
+df["Floor"] = fill_empty(df["Floor"], "-")   # → [1.0, '-', 21000.0]
+
+# 表記を整えてから埋める
+df["Floor"] = fill_empty(to_display_string(df["Floor"]), "-")  # → ['1', '-', '21000']
+```
+
+> **未検証**: Alteryx 側のこの挙動は本リポジトリの golden 突合では未確認。
+> 実出力で確定したらこの行を消し込むこと。
+
+### これは型変換ルールではなく表記ルール
+
+適用する場所を取り違えると壊れる。
+
+| 場所 | 方針 |
+|---|---|
+| 計算中の DataFrame | 数値型のまま保つ（変換しない） |
+| 表示・CSV 出力の直前 | Alteryx 互換の文字列表記へ整える |
+
+### `fill_empty` には組み込まない
+
+`fill_empty()` の存在理由は **dtype を保つこと**（19章）。文字列化はその逆に
+dtype を意図的に捨てる操作なので、組み込むと自分の契約と矛盾する。実際
+`IF IsNull([Amount]) THEN 0 ELSE [Amount] ENDIF` のような**数値のまま埋める
+補充**まで文字列になってしまい、19章で守った dtype がそこで壊れる。
+
+2つは合成して使う。**順序は「文字列化 → 補充」**:
+
+```python
+fill_empty(to_display_string(df["Floor"]), "-")   # ['1', '-', '21000']
+to_display_string(fill_empty(df["Floor"], "-"))   # ['1.0', '-', '21000.0'] ← 逆順は効かない
+```
+
+逆順が効かないのは、数値列に `"-"` を入れた時点で object 列になり、`1.0` が
+数値のまま残って `to_display_string` の数値判定を通らないため。
+
+### 自動適用はしない — 適用対象は型でガードする
+
+scaffold はこの呼び出しを**生成しない**。どの列が「表示用の文字列」になるかは
+Alteryx XML だけでは決まらず実データの型に依存するため、判断はレビューする
+人間の責任範囲（16章と同じ立て付け）。
+
+そのうえで、`to_display_string()` 自身は**数値 dtype の列にのみ表記変換を
+適用する**。「ID・コード・日付列には使わない」という運用ルールに任せず、型で
+落とす。任せた場合に起きる事故は次のとおりで、いずれも例外ではなく**静かに
+間違った値**になる:
+
+| 入力 | 型ガードが無い場合 | 現在の挙動 |
+|---|---|---|
+| `"001"`（ゼロ埋めコード） | `"1"` | `"001"`（文字列列は対象外） |
+| `True` / `False` | `"1"` / `"0"` | `"True"` / `"False"`（bool を明示除外） |
+| `2024-01-01` | `"1704067200000000"` | `"2024-01-01"`（日付は対象外） |
+| `NaT` | `"-9223372036854775808"` | `<NA>` |
+| `1e300` | `TypeError` で落ちる | `"1e+300"`（Int64 範囲外は変換しない） |
+
+bool を明示除外しているのは、pandas の `is_numeric_dtype()` が bool に True を
+返すため。逆に、CSV を `dtype=str` で読んだ数値列は文字列列なので変換されない —
+その場合は先に `pd.to_numeric()` を通すこと。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -901,7 +1014,10 @@ df.loc[mask, col] = value
 | `DateTimeAdd(dt, n, "unit")` | `dt + pd.DateOffset(unit=n)` |
 | `ToDate(val)` | `pd.to_datetime(val)` |
 | `IF IsNull([c]) THEN v ELSE [c] ENDIF`（欠損値補充） | `np.where` ではなく `df["c"].fillna(v)` — `np.where` は ndarray を返し dtype を落とす（`Int64`→`float64` 等）。`IsEmpty` 版は `fill_empty(df["c"], v)`（定義は生成されない — `reference_impl/fill_empty.py` をコピー） |
-| `IF` の ELSE が別列・加工済み・無し、または ELSEIF 付き | 補充ではなく分岐。`np.where` / `np.select` のまま（19章の適用条件表） |
+| `IF !IsNull([c]) THEN [c] ELSE v ENDIF`（否定形の補充） | 肯定形と同じ意味なので同じコードになる（`df["c"].fillna(v)`）。`~` が付いているだけの分岐と混同しないこと |
+| `IF` の分岐が別列・加工済み・ELSE 無し、または ELSEIF 付き | 補充ではなく分岐。`np.where` / `np.select` のまま（19章の適用条件表） |
+| 式の途中・フィルタ条件の `IsEmpty` / `!IsEmpty` | 関数化せず `(df[col].isna() \| (df[col] == ""))` を直書き — 関数を使うのは補充の場合だけ（19章） |
+| Double 列に文字列プレースホルダを入れて出力する | Alteryx は `1.0` を `"1"` と書く。出力直前に `to_display_string()` を通す（`fill_empty(to_display_string(df[col]), "-")` の順）。scaffold は生成しないのでレビュー時に人間が入れる（20章） |
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `simulate_find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/simulate_find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
@@ -919,7 +1035,8 @@ df.loc[mask, col] = value
 - `reference_impl/simulate_find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
 - `reference_impl/apply_select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）
 - `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
+- `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
 - `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin` + `index_right` drop + 埋め込み Select 逸脱の WARNING）
-- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。`if_expr` と `IIF` の両方から呼ばれる）
+- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。肯定形・否定形の両方を判定し、`if_expr` と `IIF` の両方から呼ばれる）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

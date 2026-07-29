@@ -849,6 +849,39 @@ def test_scaffold_formula_isempty_fill_notes_the_helper_source() -> None:
     assert code.index("reference_impl/fill_empty.py") < code.index("= fill_empty(")
 
 
+def test_scaffold_formula_negated_fill_reaches_the_same_code() -> None:
+    # The two ways an Alteryx author writes the same fill must generate the
+    # same thing — otherwise the negated form silently keeps np.where and
+    # loses the column's dtype.
+    positive = scaffold(
+        _formula_doc("Status", 'IF IsEmpty([Status]) THEN "N/A" ELSE [Status] ENDIF')
+    )
+    negated = scaffold(
+        _formula_doc("Status", 'IF !IsEmpty([Status]) THEN [Status] ELSE "N/A" ENDIF')
+    )
+    assert 'df_2["Status"] = fill_empty(df_2["Status"], \'N/A\')' in negated
+    assert negated == positive
+
+
+def test_scaffold_isempty_outside_a_fill_stays_inline() -> None:
+    # Deliberate, not an oversight: fill_empty translates the *fill
+    # pattern*, not the IsEmpty function. In boolean position IsEmpty
+    # produces a mask — nothing to preserve dtype on — and hiding the
+    # == "" half would leave the date/dead-code warning of
+    # docs/alteryx-pandas-differences.md 17 pointing at invisible code.
+    mid_expression = scaffold(
+        _formula_doc("Flag", 'IF IsEmpty([S]) THEN "x" ELSE "y" ENDIF')
+    )
+    assert 'np.where((df_2["S"].isna() | (df_2["S"] == "")), \'x\', \'y\')' in (
+        mid_expression
+    )
+    assert "fill_empty" not in mid_expression
+
+    negated_filter = scaffold_simple(_expr_filter_doc("!IsEmpty([Status])"))
+    assert '~(df_1["Status"].isna() | (df_1["Status"] == ""))' in negated_filter
+    assert "fill_empty" not in negated_filter
+
+
 def test_scaffold_formula_without_fill_omits_the_helper_note() -> None:
     code = scaffold(_formula_doc("Net", "[Gross] - [Tax]"))
     assert "fill_empty" not in code
