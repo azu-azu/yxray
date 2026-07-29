@@ -67,8 +67,10 @@ def fill_empty(series: pd.Series, value: object) -> pd.Series:
     翻訳ミスとして見えた方がよい。`np.where` 版は同じ入力で
     `['1.0', '2.0', 'N/A']`（整数が float 経由で文字列化）を静かに返す。
     """
-    # .eq("") は数値・日付・category 列でも例外を出さず全 False を返すので、
+    # マスクの綴りは scaffold が直書きする IsEmpty と揃えてある
+    # （`(df[col].isna() | (df[col] == ""))`）— 同じ述語だと一目で分かるように。
+    # `== ""` は数値・日付・category 列でも例外を出さず全 False を返すので、
     # 列の型を知らないまま適用できる。nullable dtype（Int64 / string）では
-    # NULL 位置の .eq("") が <NA> になるが、その位置は .isna() が True に
-    # するため OR の結果は True で確定する（Kleene 論理: True | NA == True）。
-    return series.mask(series.isna() | series.eq(""), value)
+    # NULL 位置が <NA> になるが、そこは .isna() が True にするため OR の結果は
+    # True で確定する（Kleene 論理: True | NA == True）。
+    return series.mask(series.isna() | (series == ""), value)
