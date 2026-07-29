@@ -46,6 +46,7 @@ dtype を保つヘルパーで、`Int64` の列に `"-"` を入れると **TypeE
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from numbers import Real
 
@@ -57,6 +58,19 @@ from pandas.api.types import is_bool_dtype, is_complex_dtype, is_numeric_dtype
 # 変換せず素の表記のまま残す。範囲外を無条件に astype("Int64") すると
 # 「cannot safely cast non-equivalent float64 to int64」で落ちる。
 _INT64_BOUND = 2**63
+
+# すでに文字列になっている値のうち、「正準な10進表記で小数部がゼロ」のものだけ
+# 小数部を落とす（"1.0" → "1"）。列ごと pd.to_numeric() にかけるのと違い、
+# 情報を捨てないのがポイント:
+#
+#   "001"     先頭ゼロが有意なコードかもしれないので触らない（整数部は
+#             [1-9]\d* か単独の 0 のみ許可 — "001.0" も対象外）
+#   "B1"      数値でないテキストは残る（to_numeric なら NaN に化ける）
+#   "1.5"     小数部がゼロでないので残る
+#   "1e5"     指数表記は対象外（表記を変えると別物に見えるため）
+#   "-0.0"    符号付きゼロは触らない（"-0" を作らない）
+#   " 1.0"    前後の空白は正準ではないので残す — Trim は呼び出し側の判断
+_ZERO_FRACTION_TEXT = re.compile(r"^(-?[1-9]\d*|0)\.0+$")
 
 
 def _is_real_number(value: object) -> bool:
@@ -83,28 +97,32 @@ def to_display_string(series: pd.Series) -> pd.Series:
     列 dtype で足切りすると中身が本物の float でも変換されないため:
 
         pd.Series([1.0, 1.5, "001", "1.0", None], dtype="object")
-        → ["1", "1.5", "001", "1.0", <NA>]
+        → ["1", "1.5", "001", "1", <NA>]
 
     数値として「入っている」セルだけが対象なので、次の事故は型の時点で
     起こらない — 運用ルールで避けるのではなく構造的に防いでいる:
 
-    - `"001"`（ゼロ埋めコード）が `"1"` になる — 文字列セルは対象外。
-      `pd.to_numeric()` に列ごと通さないのがポイント
+    - `"001"`（ゼロ埋めコード）が `"1"` になる — 先頭ゼロのある表記は対象外
     - `True` / `False` が `"1"` / `"0"` になる — `bool` は `int` の
       サブクラスなので明示的に弾く（Alteryx の Bool→String は "True"/"False"）
     - 日付が `"1704067200000000"`（epoch 整数）に、`NaT` が int64 の最小値に
       なる — `Timestamp` は実数ではないので対象外
 
-    裏返しの制約として、**セルがすでに文字列なら数値扱いしない**。これは
-    `"001"` を守るための仕様そのものなので、関数側では直せない:
+    **すでに文字列になっている値も拾う。** CSV を `dtype=str` で読んだ、
+    前段の `np.where` で文字列化された等の理由で、値としては数値なのにセルが
+    `"1.0"` になっている列は珍しくない。この場合は「正準な10進表記で小数部が
+    ゼロ」の表記だけ小数部を落とす（`_ZERO_FRACTION_TEXT` を参照）:
 
-        1.0     # float → "1"
-        "1.0"   # str   → "1.0" のまま
+        "1.0" → "1"      "001" → "001"     "B1"  → "B1"
+        "1.5" → "1.5"    "1e5" → "1e5"     " 1.0" → " 1.0"
 
-    列が値としては数値なのに `"1.0"` が並んでいる場合（CSV を `dtype=str` で
-    読んだ、前段で文字列化された等）は、**呼び出し側で数値へ戻す**。
-    ただし `errors="coerce"` は数値でないテキストを黙って NaN にするので、
-    取りこぼしの検査とセットで使うこと（20章に手順あり）。
+    列ごと `pd.to_numeric(errors="coerce")` に通すのと違い、**情報を捨てない**
+    のが要点。coerce は `"B1"` のような数値でないテキストを黙って NaN にし、
+    その NaN を後段の `fill_empty()` がプレースホルダで塗り潰すため、消えたことが
+    出力から分からなくなる。どうしても coerce が要る場合の手順は20章。
+
+    なお副作用として、バージョン番号のような「数値ではない `"1.0"`」も `"1"` に
+    なる。表示用の変換なので許容しているが、そういう列には通さないこと。
     """
     result = series.astype("string")
     if is_numeric_dtype(series) and not (
@@ -127,4 +145,7 @@ def to_display_string(series: pd.Series) -> pd.Series:
     # .to_numpy() で位置代入する — Series のまま渡すと index で整列するので、
     # フィルタや concat 後の重複 index を持つ列で ValueError になる。
     result.loc[whole] = numeric.loc[whole].astype("Int64").astype("string").to_numpy()
-    return result
+    # 最後に、数値オブジェクトとしては拾えなかった「文字列の "1.0"」を処理する。
+    # 上で変換済みのセルは "1" になっていてこのパターンに当たらないので、
+    # 二重適用にはならない。
+    return result.str.replace(_ZERO_FRACTION_TEXT, r"\1", regex=True)
