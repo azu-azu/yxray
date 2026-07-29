@@ -204,6 +204,30 @@ def test_to_display_string_only_trims_canonical_decimals(value) -> None:
     ]
 
 
+def test_prefixing_to_numeric_only_adds_normalization_and_loss() -> None:
+    # The comparison behind "default to no pd.to_numeric" in section 20.
+    # Both routes agree on canonical text; where they differ, the parsing
+    # route either normalizes a non-canonical form or destroys a value.
+    source = pd.Series(
+        ["1.0", "21000.0", "1.50", "01.0", "1e5", "001", "B1", "1,000.0"],
+        dtype="object",
+    )
+    plain = list(fill.fill_empty(display.to_display_string(source), "-"))
+    parsed = list(
+        fill.fill_empty(
+            display.to_display_string(pd.to_numeric(source, errors="coerce")), "-"
+        )
+    )
+    assert plain[:2] == parsed[:2] == ["1", "21000"]
+    # Extra normalization the parsing route buys.
+    assert plain[2:5] == ["1.50", "01.0", "1e5"]
+    assert parsed[2:5] == ["1.5", "1", "100000"]
+    # What it costs: a code loses its padding, and two values disappear
+    # behind the placeholder.
+    assert plain[5:] == ["001", "B1", "1,000.0"]
+    assert parsed[5:] == ["1", "-", "-"]
+
+
 def test_parsing_text_back_to_numbers_gives_the_same_result() -> None:
     # pd.to_numeric first also works, but it is the lossy route (see the
     # test below) — the helper handles the common case without it.
