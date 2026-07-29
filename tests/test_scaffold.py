@@ -849,6 +849,20 @@ def test_scaffold_formula_isempty_fill_notes_the_helper_source() -> None:
     assert code.index("reference_impl/fill_empty.py") < code.index("= fill_empty(")
 
 
+def test_scaffold_formula_negated_fill_reaches_the_same_code() -> None:
+    # The two ways an Alteryx author writes the same fill must generate the
+    # same thing — otherwise the negated form silently keeps np.where and
+    # loses the column's dtype.
+    positive = scaffold(
+        _formula_doc("Status", 'IF IsEmpty([Status]) THEN "N/A" ELSE [Status] ENDIF')
+    )
+    negated = scaffold(
+        _formula_doc("Status", 'IF !IsEmpty([Status]) THEN [Status] ELSE "N/A" ENDIF')
+    )
+    assert 'df_2["Status"] = fill_empty(df_2["Status"], \'N/A\')' in negated
+    assert negated == positive
+
+
 def test_scaffold_formula_without_fill_omits_the_helper_note() -> None:
     code = scaffold(_formula_doc("Net", "[Gross] - [Tax]"))
     assert "fill_empty" not in code

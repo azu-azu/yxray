@@ -160,30 +160,56 @@ def _emit_isempty(args: list[_Emitted]) -> str:
     return f'({_series(args[0])}.isna() | ({args[0][0]} == ""))'
 
 
-# The IsNull/IsEmpty emitters above, run backwards: given an IF's condition
-# and its ELSE branch, recognise "the condition tests the ELSE branch itself
-# for missing" so the whole IF collapses to a fill. Reconstructing the
-# emitter output and comparing strings keeps the two definitions honest — if
-# an emitter changes, this stops matching, which costs the peephole and not
-# correctness (the np.where path is still a valid translation).
-def _missing_fill(
-    condition: str, then_code: str, other: _Emitted
-) -> tuple[str, bool] | None:
-    """`IF IsNull/IsEmpty([col]) THEN v ELSE [col] ENDIF` → fill code.
-
-    Returns (code, needs_fill_empty), or None when the IF is not that
-    shape. np.where would be a correct translation too, but it returns an
-    ndarray and so drops the column's dtype (Int64 → float64,
-    string/category → object) — exactly on the columns a missing-value
-    fill targets. .fillna()/fill_empty() keep it.
-    """
-    series = _series(other)
+# The IsNull/IsEmpty emitters above, run backwards: is `condition` exactly
+# "test `kept` for missing"? Reconstructing the emitter output and comparing
+# strings keeps the two definitions honest — if an emitter changes, this
+# stops matching, which costs the peephole and not correctness (the np.where
+# path is still a valid translation).
+def _missing_test(condition: str, kept: _Emitted) -> str | None:
+    """ "isnull" / "isempty" when `condition` tests `kept`, else None."""
+    series = _series(kept)
     if condition == f"{series}.isna()":
-        return f"{series}.fillna({then_code})", False
-    if condition == f'({series}.isna() | ({other[0]} == ""))':
-        # No pandas built-in covers NULL-or-empty, so this one needs the
-        # reference_impl helper; the generator emits a NOTE pointing at it.
-        return f"fill_empty({series}, {then_code})", True
+        return "isnull"
+    if condition == f'({series}.isna() | ({kept[0]} == ""))':
+        return "isempty"
+    return None
+
+
+def _fill_code(test: str, kept: _Emitted, value: str) -> tuple[str, bool]:
+    """(code, needs_fill_empty) filling `kept`'s missing rows with `value`."""
+    if test == "isnull":
+        return f"{_series(kept)}.fillna({value})", False
+    # No pandas built-in covers NULL-or-empty, so this one needs the
+    # reference_impl helper; the generator emits a NOTE pointing at it.
+    return f"fill_empty({_series(kept)}, {value})", True
+
+
+def _missing_fill(
+    condition: str, then_branch: _Emitted, else_branch: _Emitted
+) -> tuple[str, bool] | None:
+    """A two-branch IF that is a missing-value fill → fill code.
+
+    Returns (code, needs_fill_empty), or None when the IF is not a fill.
+    np.where would be a correct translation too, but it returns an ndarray
+    and so drops the column's dtype (Int64 → float64, string/category →
+    object) — exactly on the columns a missing-value fill targets.
+    .fillna()/fill_empty() keep it.
+
+    Both directions count, since Alteryx authors write the test either way
+    round and mean the same thing:
+
+        IF IsNull([c]) THEN v ELSE [c] ENDIF    # ELSE keeps the value
+        IF !IsNull([c]) THEN [c] ELSE v ENDIF   # THEN keeps it
+    """
+    if test := _missing_test(condition, else_branch):
+        return _fill_code(test, else_branch, then_branch[0])
+    # `~` is how not_expr/`!` emit a negated condition; strip it and the
+    # branches swap roles. A `~` in front of anything else fails the test
+    # match below, so this stays a fill-only shortcut.
+    if condition.startswith("~") and (
+        test := _missing_test(condition[1:], then_branch)
+    ):
+        return _fill_code(test, then_branch, else_branch[0])
     return None
 
 
@@ -373,24 +399,25 @@ class _Parser:
         self.expect_keyword("if")
         conditions = [self.expr()[0]]
         self.expect_keyword("then")
-        values = [self.expr()[0]]
+        branches = [self.expr()]
         while self.keyword() == "elseif":
             self.advance()
             conditions.append(self.expr()[0])
             self.expect_keyword("then")
-            values.append(self.expr()[0])
+            branches.append(self.expr())
         else_emitted: _Emitted | None = None
         if self.keyword() == "else":
             self.advance()
             else_emitted = self.expr()
         self.expect_keyword("endif")
-        # A single test whose ELSE hands back the tested column is a
+        values = [branch[0] for branch in branches]
+        # A single test where one branch hands back the tested column is a
         # missing-value fill, not a branch — dtype-preserving pandas exists
         # for it, so no np.* is emitted on that path.
         if (
             len(conditions) == 1
             and else_emitted is not None
-            and (fill := _missing_fill(conditions[0], values[0], else_emitted))
+            and (fill := _missing_fill(conditions[0], branches[0], else_emitted))
         ):
             code, needs_fill_empty = fill
             self.uses_fill_empty = self.uses_fill_empty or needs_fill_empty
@@ -528,7 +555,7 @@ class _Parser:
             if (
                 name.lower() == "iif"
                 and len(args) >= 3
-                and (fill := _missing_fill(args[0][0], args[1][0], args[2]))
+                and (fill := _missing_fill(args[0][0], args[1], args[2]))
             ):
                 code, needs_fill_empty = fill
                 self.uses_fill_empty = self.uses_fill_empty or needs_fill_empty

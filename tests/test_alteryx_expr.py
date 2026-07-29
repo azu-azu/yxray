@@ -159,6 +159,50 @@ def test_null_literal_as_fill_value_still_reports_numpy() -> None:
     assert translation.uses_numpy is True
 
 
+def test_negated_test_is_the_same_fill_with_the_branches_swapped() -> None:
+    # Alteryx authors write the test either way round and mean the same
+    # thing; !IsEmpty(...) THEN [c] keeps the value in the THEN branch.
+    translation = translate_expr('IF !IsEmpty([S]) THEN [S] ELSE "N/A" ENDIF', "df")
+    assert translation.code == "fill_empty(df[\"S\"], 'N/A')"
+    assert translation.uses_numpy is False
+    assert translation.uses_fill_empty is True
+
+
+def test_negated_isnull_fill_becomes_fillna() -> None:
+    assert t("IF !IsNull([A]) THEN [A] ELSE 0 ENDIF") == 'df["A"].fillna(0)'
+
+
+def test_not_keyword_negation_is_recognised_too() -> None:
+    # NOT and ! emit the same `~`, so both reach the peephole.
+    assert t("IF NOT IsNull([A]) THEN [A] ELSE 0 ENDIF") == 'df["A"].fillna(0)'
+
+
+def test_negated_iif_fill_uses_the_peephole() -> None:
+    assert t('IIF(!IsEmpty([S]), [S], "N/A")') == "fill_empty(df[\"S\"], 'N/A')"
+
+
+def test_negated_fill_matches_expressions_not_just_columns() -> None:
+    assert (
+        t('IF !IsEmpty(Trim([S])) THEN Trim([S]) ELSE "-" ENDIF')
+        == "fill_empty(df[\"S\"].str.strip(), '-')"
+    )
+
+
+def test_negated_test_with_a_different_then_column_is_not_a_fill() -> None:
+    assert (
+        t("IF !IsNull([A]) THEN [B] ELSE 0 ENDIF")
+        == 'np.where(~df["A"].isna(), df["B"], 0)'
+    )
+
+
+def test_negated_non_missing_test_is_not_a_fill() -> None:
+    # A `~` in front of something that is not a missing test must not be
+    # mistaken for the negated fill shape.
+    assert (
+        t("IF ![A] > 1 THEN [A] ELSE 0 ENDIF") == 'np.where(~(df["A"] > 1), df["A"], 0)'
+    )
+
+
 def test_different_else_column_is_not_a_fill() -> None:
     # ELSE hands back a *different* column: both branches produce new
     # values, so this is a genuine branch and stays np.where.
