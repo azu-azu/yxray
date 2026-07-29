@@ -33,6 +33,84 @@ def _load_script(name: str):
 
 select_helpers = _load_script("apply_select_edits")
 find_any = _load_script("simulate_find_any_append")
+fill = _load_script("fill_empty")
+
+
+# ── fill_empty ──────────────────────────────────────────────────────────────
+
+
+def test_fill_empty_fills_null_and_empty_string() -> None:
+    s = pd.Series(["a", "", None])
+    assert list(fill.fill_empty(s, "N/A")) == ["a", "N/A", "N/A"]
+
+
+def test_fill_empty_leaves_whitespace_only_alone() -> None:
+    # Alteryx IsEmpty() does not treat "   " as empty; the helper adds no
+    # Trim() of its own — that stays visible in the Alteryx expression.
+    assert list(fill.fill_empty(pd.Series(["   "]), "N/A")) == ["   "]
+
+
+def test_fill_empty_accepts_a_series_as_the_fill_value() -> None:
+    # IF IsEmpty([A]) THEN [B] ELSE [A] ENDIF — aligned on the index.
+    a = pd.Series(["x", "", None])
+    b = pd.Series(["b0", "b1", "b2"])
+    assert list(fill.fill_empty(a, b)) == ["x", "b1", "b2"]
+
+
+def test_fill_empty_does_not_mutate_its_input() -> None:
+    s = pd.Series(["a", None])
+    fill.fill_empty(s, "z")
+    assert s.isna().iloc[1]
+
+
+@pytest.mark.parametrize(
+    ("series", "value"),
+    [
+        (pd.Series([1, 2, None], dtype="Int64"), 0),
+        (pd.Series(["a", "", None], dtype="string"), "N/A"),
+        (pd.Series(pd.Categorical(["x", None, "y"], categories=["x", "y", "z"])), "z"),
+        (pd.Series(pd.to_datetime(["2024-01-01", None])), pd.Timestamp("2020-01-01")),
+    ],
+)
+def test_fill_empty_preserves_dtype(series, value) -> None:
+    # The whole reason this helper exists instead of np.where: np.where
+    # returns an ndarray, so the filled column comes back as float64 /
+    # object / str depending on the input. Losing the dtype on exactly the
+    # columns a missing-value fill targets is what we are avoiding.
+    assert fill.fill_empty(series, value).dtype == series.dtype
+
+
+@pytest.mark.parametrize(
+    ("series", "value"),
+    [
+        (pd.Series([1, 2, None], dtype="Int64"), 0),
+        (pd.Series(["a", "", None], dtype="string"), "N/A"),
+        (pd.Series(["a", "", None]), "N/A"),
+        (pd.Series(pd.Categorical(["x", None, "y"], categories=["x", "y", "z"])), "z"),
+        (pd.Series(pd.to_datetime(["2024-01-01", None])), pd.Timestamp("2020-01-01")),
+    ],
+)
+def test_fill_empty_matches_df_loc_assignment(series, value) -> None:
+    # The in-place form a reviewer would reach for by hand:
+    #     mask = df[col].isna() | df[col].eq("")
+    #     df.loc[mask, col] = value
+    # Same values and same dtype — the helper returns a Series only so it
+    # can also create a new column and stay one line per formula.
+    df = pd.DataFrame({"c": series})
+    df.loc[series.isna() | series.eq(""), "c"] = value
+    expected = df["c"]
+    actual = fill.fill_empty(series, value)
+    assert actual.dtype == expected.dtype
+    assert list(actual) == list(expected)
+
+
+def test_fill_empty_raises_when_the_dtype_cannot_hold_the_value() -> None:
+    # Filling an Int64 column with a string raises rather than silently
+    # producing something else. This is the loud half of preserving dtype,
+    # and it is a real behavior change from np.where, which returns
+    # ['1.0', '2.0', 'N/A'] here — the integers stringified via float.
+    with pytest.raises(TypeError):
+        fill.fill_empty(pd.Series([1, 2, None], dtype="Int64"), "N/A")
 
 
 # ── apply_select_edits ──────────────────────────────────────────────────────

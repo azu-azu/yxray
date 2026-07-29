@@ -621,6 +621,10 @@ df_2 = df_1[~is_drop & ~is_empty]
 整理。`is_drop = ~(...)` のような「名前と中身が逆」の定義は事故のもとなので、semantic
 名を使うならマスクは肯定形で定義する。
 
+なお Formula の `IF IsNull([c]) THEN v ELSE [c] ENDIF` を `fillna` / `fill_empty` に
+落とす変換は、ここで言う「整理」ではない（`IsNull` と `IsEmpty` の区別を保ったまま
+dtype を壊さずに写すだけ）。19章を参照。
+
 ---
 
 ## 17. 日付比較と `IsEmpty()` が同じ列に混在する場合の落とし穴
@@ -788,6 +792,96 @@ scaffold は .shp 読み込みの直前に .dbf 存在チェック
 
 ---
 
+## 19. 欠損値補充 — `np.where` を使わない唯一の分岐パターン
+
+Formula の `IF` は原則 `np.where` / `np.select` に翻訳される（16章の方針どおり、
+構文をそのまま写す）。**例外は「欠損値補充」の形だけ** — この形に限り
+`np.where` を使わない。判定と生成コードは次の表で確定している。
+
+| Alteryx 式 | 生成コード | 追加の依存 |
+|---|---|---|
+| `IF IsNull([c]) THEN v ELSE [c] ENDIF` | `df["c"].fillna(v)` | なし（pandas 組み込み） |
+| `IIF(IsNull([c]), v, [c])` | 同上 | なし |
+| `IF IsEmpty([c]) THEN v ELSE [c] ENDIF` | `fill_empty(df["c"], v)` | `reference_impl/fill_empty.py` |
+| `IIF(IsEmpty([c]), v, [c])` | 同上 | 同上 |
+| 上記以外の `IF` / `IIF` | `np.where(...)` / `np.select(...)` | numpy |
+
+**適用条件は「ELSE が、条件でテストした対象そのものを返すこと」。** これを外れる
+ものは補充ではなく分岐なので `np.where` のまま:
+
+```python
+# 補充 → fillna
+IF IsNull([A]) THEN 0 ELSE [A] ENDIF        →  df["A"].fillna(0)
+# 別列を返す → 分岐
+IF IsNull([A]) THEN 0 ELSE [B] ENDIF        →  np.where(df["A"].isna(), 0, df["B"])
+# ELSE で加工している → 分岐
+IF IsNull([A]) THEN 0 ELSE [A] * 2 ENDIF    →  np.where(df["A"].isna(), 0, df["A"] * 2)
+# ELSE 無し（非該当は NULL になる）→ 分岐
+IF IsNull([A]) THEN 0 ENDIF                 →  np.where(df["A"].isna(), 0, np.nan)
+# ELSEIF がある → 分岐
+IF IsNull([A]) THEN 0 ELSEIF [A] > 5 THEN 1 ELSE [A] ENDIF
+                                            →  np.select([...], [...], default=df["A"])
+```
+
+テスト対象は列でなく式でもよい（`IF IsEmpty(Trim([S])) THEN "-" ELSE Trim([S]) ENDIF`
+→ `fill_empty(df["S"].str.strip(), '-')`）。関数形にまとめると**式の評価が1回で済む**
+のも利点で、素の pandas で書くと同じ式が3回出てくる。
+
+### なぜ補充だけ別扱いなのか — dtype が壊れるから
+
+`np.where()` は ndarray を返すため、代入先の列は元の dtype を失う。
+補充が対象にするのは定義上「NULL を含む列」なので、この差が必ず効く。
+実測（pandas 2.3.3 / 3.0.5、`tests/test_reference_scripts.py` で固定）:
+
+| 元の dtype | `np.where` 後 | `fillna` / `fill_empty` 後 |
+|---|---|---|
+| `Int64` | `float64` | `Int64` |
+| `string` | `object`（3.x は `str`） | `string` |
+| `category` | `object` / `str` | `category` |
+| `datetime64` | `object`（2.x） | `datetime64` |
+
+型が合わない値を入れた場合の挙動も違う。`Int64` の列に `"N/A"` を補充すると
+`fillna` / `fill_empty` は **TypeError で落ちる**が、`np.where` は
+`['1.0', '2.0', 'N/A']` を静かに返す（整数が float 経由で文字列化する）。
+落ちる方が翻訳ミスとして見えるので、この差は許容ではなく利点として扱う。
+
+### なぜ `df.loc[mask, col] = value` ではなく Series を返す関数なのか
+
+レビューで手書きするなら次の形が自然で、これは正しい:
+
+```python
+mask = df[col].isna() | df[col].eq("")
+df.loc[mask, col] = value
+```
+
+値・dtype とも `Series.mask()` と完全に一致する（`Int64` / `int64` / `string` /
+`object` / `datetime64` / `category` で確認済み。`test_fill_empty_matches_df_loc_assignment`
+が固定）。それでも**生成コードは Series を返す関数形**にしてある:
+
+1. Alteryx Formula は既存列の上書きだけでなく**新規フィールドの作成**もできる。
+   `df.loc[mask, col]` は代入先の列が既に存在することを前提にするので、
+   `[新列] = IF IsEmpty([既存列]) ... ENDIF` に使えない。
+2. scaffold の生成規則「1 FormulaField = 1行の `df[...] = <式>`」（Alteryx の
+   上から下への適用順と1対1に対応する）が保てる。in-place 版だと1フィールドが
+   2行に割れる。
+
+### 16章の「レビュー時に人間が整理してよいパターン」との関係
+
+16章は `fillna("")` で **NULL と空文字を一本化する**書き換えを扱っていて、
+「scaffold は生成しない、レビューする人間の判断」としている。本章の変換は
+それとは別物で、方針は一貫している:
+
+- 16章が禁じているのは、**`IsNull` と `IsEmpty` の区別を潰すこと**と、
+  列が文字列だと決めてかかる型依存の書き換え。
+- 本章の変換は区別を潰さない。`IsNull` → `fillna`、`IsEmpty` → `fill_empty` と
+  Alteryx 側の記述をそのまま写している。`fill_empty` の `.eq("")` は数値・日付・
+  category 列でも例外を出さず全 False を返すので、列の型も仮定していない。
+
+つまり「同じ意味の式をより忠実に（dtype を壊さずに）書き写す」変換であって、
+意味の整理ではない。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -806,6 +900,8 @@ scaffold は .shp 読み込みの直前に .dbf 存在チェック
 | `Substring(col, start, length)` | 0-indexed。`str[start:start+length]`（`-1` 補正は不要） |
 | `DateTimeAdd(dt, n, "unit")` | `dt + pd.DateOffset(unit=n)` |
 | `ToDate(val)` | `pd.to_datetime(val)` |
+| `IF IsNull([c]) THEN v ELSE [c] ENDIF`（欠損値補充） | `np.where` ではなく `df["c"].fillna(v)` — `np.where` は ndarray を返し dtype を落とす（`Int64`→`float64` 等）。`IsEmpty` 版は `fill_empty(df["c"], v)`（定義は生成されない — `reference_impl/fill_empty.py` をコピー） |
+| `IF` の ELSE が別列・加工済み・無し、または ELSEIF 付き | 補充ではなく分岐。`np.where` / `np.select` のまま（19章の適用条件表） |
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `simulate_find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/simulate_find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
@@ -822,7 +918,8 @@ scaffold は .shp 読み込みの直前に .dbf 存在チェック
 
 - `reference_impl/simulate_find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
 - `reference_impl/apply_select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）
+- `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
 - `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin` + `index_right` drop + 埋め込み Select 逸脱の WARNING）
-- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）
+- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。`if_expr` と `IIF` の両方から呼ばれる）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

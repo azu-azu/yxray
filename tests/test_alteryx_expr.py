@@ -102,6 +102,91 @@ def test_iif() -> None:
     assert t("IIF([x] > 0, 1, 0)") == 'np.where(df["x"] > 0, 1, 0)'
 
 
+# ── Missing-value fill peephole ─────────────────────────────────────────────
+# An IF whose ELSE hands back the column it just tested for missing is a
+# fill, not a branch. np.where would translate it correctly but returns an
+# ndarray, dropping the column's dtype (Int64 -> float64, string/category
+# -> object) — precisely on the columns a fill targets.
+
+
+def test_isnull_fill_becomes_fillna() -> None:
+    translation = translate_expr("IF IsNull([Amount]) THEN 0 ELSE [Amount] ENDIF", "df")
+    assert translation.code == 'df["Amount"].fillna(0)'
+    # No np.* on this path, so the block must not pull in numpy.
+    assert translation.uses_numpy is False
+    assert translation.uses_fill_empty is False
+
+
+def test_isempty_fill_becomes_fill_empty_helper() -> None:
+    # No pandas built-in covers NULL-or-empty: fillna() alone would leave
+    # "" in place, so this one needs the reference_impl helper.
+    translation = translate_expr(
+        'IF IsEmpty([Status]) THEN "N/A" ELSE [Status] ENDIF', "df"
+    )
+    assert translation.code == "fill_empty(df[\"Status\"], 'N/A')"
+    assert translation.uses_fill_empty is True
+    assert translation.uses_numpy is False
+
+
+def test_iif_missing_fill_uses_the_same_peephole() -> None:
+    assert t("IIF(IsNull([Amount]), 0, [Amount])") == 'df["Amount"].fillna(0)'
+    assert (
+        t('IIF(IsEmpty([Status]), "N/A", [Status])')
+        == "fill_empty(df[\"Status\"], 'N/A')"
+    )
+
+
+def test_missing_fill_value_may_be_another_column() -> None:
+    # Both fillna() and fill_empty() align a Series argument on the index.
+    assert t("IF IsNull([A]) THEN [B] ELSE [A] ENDIF") == 'df["A"].fillna(df["B"])'
+
+
+def test_missing_fill_matches_expressions_not_just_columns() -> None:
+    # The tested operand is an expression; folding it into the helper also
+    # evaluates it once instead of the three times a literal translation
+    # would produce.
+    assert (
+        t('IF IsEmpty(Trim([S])) THEN "-" ELSE Trim([S]) ENDIF')
+        == "fill_empty(df[\"S\"].str.strip(), '-')"
+    )
+
+
+def test_null_literal_as_fill_value_still_reports_numpy() -> None:
+    translation = translate_expr("IF IsEmpty([S]) THEN Null() ELSE [S] ENDIF", "df")
+    assert translation.code == 'fill_empty(df["S"], np.nan)'
+    assert translation.uses_fill_empty is True
+    # np.nan comes from Null(), so numpy is still needed here.
+    assert translation.uses_numpy is True
+
+
+def test_different_else_column_is_not_a_fill() -> None:
+    # ELSE hands back a *different* column: both branches produce new
+    # values, so this is a genuine branch and stays np.where.
+    translation = translate_expr("IF IsNull([A]) THEN 0 ELSE [B] ENDIF", "df")
+    assert translation.code == 'np.where(df["A"].isna(), 0, df["B"])'
+    assert translation.uses_numpy is True
+    assert translation.uses_fill_empty is False
+
+
+def test_transformed_else_branch_is_not_a_fill() -> None:
+    assert (
+        t("IF IsNull([A]) THEN 0 ELSE [A] * 2 ENDIF")
+        == 'np.where(df["A"].isna(), 0, df["A"] * 2)'
+    )
+
+
+def test_missing_else_is_not_a_fill() -> None:
+    # No ELSE means non-matching rows become NULL, not the original value.
+    assert t("IF IsNull([A]) THEN 0 ENDIF") == 'np.where(df["A"].isna(), 0, np.nan)'
+
+
+def test_elseif_chain_is_not_a_fill() -> None:
+    assert (
+        t("IF IsNull([A]) THEN 0 ELSEIF [A] > 5 THEN 1 ELSE [A] ENDIF")
+        == 'np.select([df["A"].isna(), df["A"] > 5], [0, 1], default=df["A"])'
+    )
+
+
 # ── Functions ───────────────────────────────────────────────────────────────
 
 

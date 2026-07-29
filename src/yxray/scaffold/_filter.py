@@ -35,6 +35,7 @@ from yxray.config_utils import (
 )
 from yxray.scaffold._common import (
     FIELD_RE,
+    FILL_EMPTY_NOTE_LINES,
     GeneratedCode,
     Requirement,
     ToolContext,
@@ -253,6 +254,10 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
             translation = None
             pandas_expr = fallback_field_substitute(expr, df_in)
         lines = ["# Alteryx expression — review translation"]
+        if translation is not None and translation.uses_fill_empty:
+            # Rare here (a Filter condition that is really a fill), but the
+            # emitted name has to be accounted for wherever it appears.
+            lines += FILL_EMPTY_NOTE_LINES
         lines += _expression_diagnostic_lines(expr, pandas_expr, translation)
         mask_lines = (
             _filter_mask_lines(translation, df_in, df_out)

@@ -17,6 +17,7 @@ from yxray.config_utils import py_str
 
 __all__ = [
     "FIELD_RE",
+    "FILL_EMPTY_NOTE_LINES",
     "GeneratedCode",
     "PathStyle",
     "Requirement",
@@ -28,6 +29,15 @@ __all__ = [
 
 # [field] notation in Alteryx expressions.
 FIELD_RE = re.compile(r"\[([^\]]+)\]")
+
+# Emitted by any block whose translation calls fill_empty(). Same
+# convention as Select's apply_select_edits and FindReplace's
+# simulate_find_any_append: the definition is not generated, the block
+# points at the file to copy it from.
+FILL_EMPTY_NOTE_LINES = (
+    "# NOTE: fill_empty() is not generated — copy it from",
+    "# reference_impl/fill_empty.py",
+)
 
 
 def fallback_field_substitute(expr: str, df_var: str) -> str:
