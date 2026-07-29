@@ -5,7 +5,7 @@
     find_field   = haystack（探される本文 / targets 側）
     search_field = needle  （探すキーワード / lookup 側）
 
-yxray の scaffold が生成する simulate_find_any_append(...) 呼び出しの定義。
+yxray の scaffold が生成する find_any_append(...) 呼び出しの定義。
 生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
 
 Alteryx XML のアンカー名との対応（XML では lookup 表を "Source" と呼ぶが、
@@ -62,7 +62,7 @@ def _stringify(value: object) -> str:
     return str(value)
 
 
-def simulate_find_any_append(
+def find_any_append(
     targets_df: pd.DataFrame,   # 残したい元データ
     lookup_df: pd.DataFrame,    # ルックアップ表（探す値と追加列を持つ。Alteryx XML では Source）
     *,
@@ -114,7 +114,7 @@ def simulate_find_any_append(
     if verbose:
         # log_label は省略可なので、空のときは飾りごと落とす（"- 🍒  -" を出さない）
         label = f" - 🍒 {log_label} -" if log_label else ""
-        print(f"\n🐷 [Find Replace] simulate find any append{label}")
+        print(f"\n🐷 [Find Replace] find any append{label}")
         print(f"    haystack: '{find_field}' ← この中を 🌲")
         print(f"    needle  : '{search_field}' ← これで探す 🪡")
         print(f"    append  : {append_fields}")
@@ -149,7 +149,7 @@ def simulate_find_any_append(
             "対処: lookup_df 側の該当列を rename して名前をずらし、"
             "append_fields も新しい名前に合わせてから呼び出してください。\n"
             f'  例: 追加列 "{example}" が Targets 側と衝突するとき\n'
-            f'    simulate_find_any_append(\n'
+            f'    find_any_append(\n'
             f'        targets_df,\n'
             f'        lookup_df.rename(columns={{"{example}": "{example}_lookup"}}),\n'
             f'        find_field="{find_field}",\n'
@@ -509,9 +509,9 @@ def _print_summary(
 def main() -> None:
     """使い方の例（動作確認用のデモ）。
 
-    このスクリプトは import して simulate_find_any_append() を直接呼ぶのが本来の
+    このスクリプトは import して find_any_append() を直接呼ぶのが本来の
     使い方。ここはサンプルデータで挙動と出力を確認するためのデモで、
-    `python reference_impl/simulate_find_any_append.py` で実行できる。
+    `python reference_impl/find_any_append.py` で実行できる。
     実データは自分で DataFrame にして関数へ渡すこと。
     """
     targets_df = pd.DataFrame(
@@ -532,7 +532,7 @@ def main() -> None:
         }
     )
 
-    result = simulate_find_any_append(
+    result = find_any_append(
         targets_df,
         lookup_df,
         find_field="text",

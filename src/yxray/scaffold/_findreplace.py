@@ -4,7 +4,7 @@ The tool has four translated shapes, discriminated by FindMode ×
 ReplaceMode (the XML can retain stale settings for the non-selected mode,
 so ReplaceMode is always the primary discriminator):
 
-* FindAny + Append   → simulate_find_any_append() helper call
+* FindAny + Append   → find_any_append() helper call
 * FindWhole + Append → deduplicated left join
 * FindWhole + Replace → lookup-map .map().fillna()
 * anything else      → explicit TODO passthrough
@@ -63,16 +63,15 @@ def _findreplace_any_append(
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
         "# is matched inside the Targets find field\n"
-        "# NOTE: simulate_find_any_append() is not generated — copy"
-        " it from\n"
-        "# reference_impl/simulate_find_any_append.py\n"
+        "# NOTE: find_any_append() is not generated — copy it from\n"
+        "# reference_impl/find_any_append.py\n"
         "# collect_match_diagnostics=True logs the ambiguous matches (1 target"
         " matching\n"
         "# several Source rows) — it is the costly part, set it False once"
         " reviewed\n"
     )
     return (
-        header + f"{df_out} = simulate_find_any_append(\n"
+        header + f"{df_out} = find_any_append(\n"
         f"    {df_f},\n"
         f"    {df_r},\n"
         f"    find_field={py_str(field_find)},\n"

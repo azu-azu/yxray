@@ -33,8 +33,8 @@ def _load_script(name: str):
     return module
 
 
-select_helpers = _load_script("apply_select_edits")
-find_any = _load_script("simulate_find_any_append")
+select_helpers = _load_script("select_edits")
+find_any = _load_script("find_any_append")
 fill = _load_script("fill_empty")
 display = _load_script("to_display_string")
 
@@ -521,7 +521,7 @@ def test_apply_select_edits_type_does_not_mutate_input() -> None:
     assert df["a"].iloc[0] == "1"
 
 
-# ── simulate_find_any_append ────────────────────────────────────────────────
+# ── find_any_append ────────────────────────────────────────────────
 
 
 def _run(targets, lookup, **kwargs):
@@ -530,7 +530,7 @@ def _run(targets, lookup, **kwargs):
     kwargs.setdefault("append_fields", ["label"])
     # case_sensitive has no default in the helper — callers must state it
     kwargs.setdefault("case_sensitive", True)
-    return find_any.simulate_find_any_append(targets, lookup, verbose=False, **kwargs)
+    return find_any.find_any_append(targets, lookup, verbose=False, **kwargs)
 
 
 def test_find_any_substring_match_appends_and_keeps_row_count() -> None:
@@ -751,7 +751,7 @@ def test_find_any_verbose_summary_prints_and_keeps_result_identical() -> None:
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     quiet = _run(targets, lookup)
-    loud = find_any.simulate_find_any_append(
+    loud = find_any.find_any_append(
         targets,
         lookup,
         find_field="text",
@@ -770,7 +770,7 @@ def test_find_any_requires_an_explicit_case_sensitive() -> None:
     targets = pd.DataFrame({"text": ["apple pie"]})
     lookup = pd.DataFrame({"kw": ["apple"], "label": ["L"]})
     with pytest.raises(TypeError):
-        find_any.simulate_find_any_append(
+        find_any.find_any_append(
             targets,
             lookup,
             find_field="text",
@@ -996,7 +996,7 @@ def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
 ) -> None:
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
-    find_any.simulate_find_any_append(
+    find_any.find_any_append(
         targets,
         lookup,
         find_field="text",
@@ -1021,7 +1021,7 @@ def test_find_any_diagnostics_are_off_by_default(capsys) -> None:
     # is a review aid, not something every run should pay for. Generated code
     # asks for it explicitly.
     assert (
-        inspect.signature(find_any.simulate_find_any_append)
+        inspect.signature(find_any.find_any_append)
         .parameters["collect_match_diagnostics"]
         .default
         is False
@@ -1029,7 +1029,7 @@ def test_find_any_diagnostics_are_off_by_default(capsys) -> None:
 
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
-    find_any.simulate_find_any_append(
+    find_any.find_any_append(
         targets,
         lookup,
         find_field="text",
@@ -1059,7 +1059,7 @@ def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
         lambda *args, **kwargs: (calls.append(1), real_scan(*args, **kwargs))[1],
     )
 
-    find_any.simulate_find_any_append(
+    find_any.find_any_append(
         targets,
         lookup,
         find_field="text",
@@ -1071,7 +1071,7 @@ def test_find_any_diagnostics_are_only_scanned_when_something_reads_them(
     )
     assert calls == []
 
-    find_any.simulate_find_any_append(
+    find_any.find_any_append(
         targets,
         lookup,
         find_field="text",
@@ -1090,7 +1090,7 @@ def test_find_any_has_no_replace_multiple_found_argument() -> None:
     # keeping a no-op argument would suggest it changes something.
     assert (
         "replace_multiple_found"
-        not in inspect.signature(find_any.simulate_find_any_append).parameters
+        not in inspect.signature(find_any.find_any_append).parameters
     )
 
 
@@ -1111,7 +1111,7 @@ def test_find_any_same_name_key_does_not_collide() -> None:
     # and no collision is raised.
     targets = pd.DataFrame({"key": ["ABC-101-X", "no hit"]})
     lookup = pd.DataFrame({"key": ["101"], "label": ["L1"]})
-    out = find_any.simulate_find_any_append(
+    out = find_any.find_any_append(
         targets,
         lookup,
         find_field="key",
