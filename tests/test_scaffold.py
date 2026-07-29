@@ -1877,7 +1877,7 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert "simulate_find_any_append(" in code
+    assert "find_any_append(" in code
     assert 'find_field="EL_ID"' in code
     # FieldFind == FieldSearch: the helper output is "Targets columns +
     # append_fields" only — the search value is never added to the output, so
@@ -1900,7 +1900,7 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     # substring semantics live inside the helper — no equality join emitted
     assert "pd.merge" not in code
     assert "TODO: Find Replace" not in code
-    assert "# NOTE: simulate_find_any_append() is not generated" in code
+    assert "# NOTE: find_any_append() is not generated" in code
 
 
 def test_scaffold_findreplace_findany_rmf_not_emitted() -> None:
@@ -2019,7 +2019,7 @@ def test_scaffold_findreplace_targets_source_anchors_route_correctly() -> None:
     )
     code = scaffold(doc)
     # tool 1 (Targets / main) first, tool 2 (Source / lookup) second
-    assert "simulate_find_any_append(\n        df_1,\n        df_2," in code
+    assert "find_any_append(\n        df_1,\n        df_2," in code
     assert 'find_field="key_a"' in code
     assert 'search_field="key_b"' in code
     # distinct find/search names: no rename/drop workaround emitted

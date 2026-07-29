@@ -178,7 +178,7 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "Find & Replace",
         "transform",
         'FindWhole: pd.merge(..., how="left") /'
-        " FindAny: simulate_find_any_append(...) substring lookup",
+        " FindAny: find_any_append(...) substring lookup",
         "partial",
     ),
     "AppendFields": ToolInfo(

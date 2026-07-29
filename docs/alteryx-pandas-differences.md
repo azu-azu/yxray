@@ -283,7 +283,7 @@ Alteryx の **FindReplace ツール**の挙動は `FindMode`（探し方）×
 |----------|-------------|-----------------|
 | **FindWhole**（完全一致） | Append | lookup 表を `drop_duplicates(keep=...)` してから `pd.merge(how="left")` |
 | **FindWhole**（完全一致） | Replace | `ReplaceFoundField` を使う Replace 分岐で翻訳 |
-| **FindAny**（部分一致） | Append | `simulate_find_any_append(...)` の呼び出しを生成（定義は生成しない） |
+| **FindAny**（部分一致） | Append | `find_any_append(...)` の呼び出しを生成（定義は生成しない） |
 | **FindAny**（部分一致） | Replace | **未対応** — TODO コメント + 入力パススルー（`df_out = df_in`）にフォールバック |
 
 ### 設定タグの読み方 — ReplaceMode が主判定
@@ -428,11 +428,11 @@ FindAny は等価結合では意味論を再現できない（`pd.merge` は完�
 ```python
 # Find Replace (FindAny) — substring lookup: each Source search value
 # is matched inside the Targets find field
-# NOTE: simulate_find_any_append() is not generated — copy it from
-# reference_impl/simulate_find_any_append.py
+# NOTE: find_any_append() is not generated — copy it from
+# reference_impl/find_any_append.py
 # collect_match_diagnostics=True logs the ambiguous matches (1 target matching
 # several Source rows) — it is the costly part, set it False once reviewed
-df_3 = simulate_find_any_append(
+df_3 = find_any_append(
     df_1,
     df_2,
     find_field="key_a",
@@ -520,9 +520,9 @@ FindWhole は逆に検索キー列が自動で出力に残る（前述「FindWho
 ```python
 # Find Replace (FindAny) — substring lookup: each Source search value
 # is matched inside the Targets find field
-# NOTE: simulate_find_any_append() is not generated — copy it from
-# reference_impl/simulate_find_any_append.py
-df_3 = simulate_find_any_append(
+# NOTE: find_any_append() is not generated — copy it from
+# reference_impl/find_any_append.py
+df_3 = find_any_append(
     df_1,
     df_2,
     find_field="key",
@@ -1126,7 +1126,7 @@ df["Floor"] = fill_empty(to_display_string(numeric), "-")
 | 式の途中・フィルタ条件の `IsEmpty` / `!IsEmpty` | 関数化せず `(df[col].isna() \| (df[col] == ""))` を直書き — 関数を使うのは補充の場合だけ（19章） |
 | Double 列に文字列プレースホルダを入れて出力する | Alteryx は `1.0` を `"1"` と書く。出力直前に `to_display_string()` を通す（`fill_empty(to_display_string(df[col]), "-")` の順）。scaffold は生成しないのでレビュー時に人間が入れる（20章） |
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
-| FindReplace FindAny + Append | `simulate_find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/simulate_find_any_append.py` をコピー） |
+| FindReplace FindAny + Append | `find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
 | 空間ファイル読み込み（.shp 等） | 読み込み直後に WGS84 へ正規化（CRS None は warning 付き `set_crs`、その他は `to_crs`）— scaffold が自動生成。`.prj` 欠落 .shp × Create Points の sjoin で出る CRS mismatch 警告の恒久対策 |
 | .shp の属性列が geometry しか無い | 同名 `.dbf` サイドカーが同フォルダに無い（GDAL は無音で geometry のみ開く）。scaffold 生成の存在チェックが `FileNotFoundError` で検知 — ファイル一式を揃える |
@@ -1139,7 +1139,7 @@ df["Floor"] = fill_empty(to_display_string(numeric), "-")
 
 ## 関連実装
 
-- `reference_impl/simulate_find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
+- `reference_impl/find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
 - `reference_impl/apply_select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename）
 - `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
 - `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
