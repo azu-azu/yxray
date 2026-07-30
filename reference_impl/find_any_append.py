@@ -142,9 +142,11 @@ def find_any_append(
     コストを増やす方向には効かず、減らす方向にだけ効く。
 
     既定は False。曖昧マッチ表は「翻訳が正しいか人間が確かめる」段階で価値が
-    あるもので、毎回払うには重すぎる（データ次第で全体の8割以上）。scaffold の
-    生成コードは True を明示的に出すので、レビュー中は表が出て、定常運用に
-    移すときにその行を False にすれば消せる。
+    あるもので、毎回払うには重すぎる。コストは lookup 1行につき pandas 呼び出し
+    1回なので、**targets が少なくても lookup 行数だけで決まる**: 実測で lookup
+    4万行のとき targets 300行で13秒・3000行で37秒、走査を切れば0.4秒。scaffold の
+    生成コードもこの既定に合わせて False を明示的に出すので、レビューしたい
+    ときだけその行を True にする。
 
     複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
     同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
@@ -585,7 +587,9 @@ def main() -> None:
         search_field="kw",
         append_fields=["label", "code"],
         case_sensitive=True,  # Alteryx の NoCase=False
-        collect_match_diagnostics=True,  # 生成コードと同じく曖昧マッチ表を出す
+        # デモなので曖昧マッチ表を見せる。生成コードは False を出す（4行の
+        # サンプルでは無視できるが、実データでは lookup 行数分のコストになる）
+        collect_match_diagnostics=True,
     )
 
     print("\n-- result --")

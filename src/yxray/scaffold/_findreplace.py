@@ -53,22 +53,25 @@ def _findreplace_any_append(
     # matters. The helper does not accept it either, for the same reason.
     # case_sensitive IS always emitted: the helper has no default for it, so
     # the generated call must state it (and a reviewer gets to see it).
-    # collect_match_diagnostics IS emitted, as True, even though the helper
-    # defaults it to False: the ambiguous-match table is what a reviewer needs
-    # to check this translation, and it costs a lookup-rows x targets scan
-    # (most of the runtime on a large lookup). Emitting it keeps the table on
-    # while the translation is reviewed and makes the line to flip obvious
-    # once it is trusted.
+    # collect_match_diagnostics IS emitted, as False, matching the helper's
+    # own default: the ambiguity scan runs one pandas call per Source row, so
+    # it dominates the runtime on a large lookup no matter how few Targets
+    # rows there are (measured: a 40k-row Source costs 13s at 300 Targets
+    # rows and 37s at 3k, against 0.4s with the scan off). Defaulting it on
+    # made every generated script pay that before anyone asked for the table.
+    # It is still emitted rather than omitted, so the line to flip when
+    # reviewing a translation stays visible in the generated code.
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
         "# is matched inside the Targets find field\n"
         "# NOTE: find_any_append() is not generated — copy it from\n"
         "# reference_impl/find_any_append.py\n"
-        "# collect_match_diagnostics=True logs the ambiguous matches (1 target"
-        " matching\n"
-        "# several Source rows) — it is the costly part, set it False once"
-        " reviewed\n"
+        "# set collect_match_diagnostics=True to log the ambiguous matches"
+        " (1 target\n"
+        "# matching several Source rows) while reviewing this translation —"
+        " it costs\n"
+        "# one pandas pass per Source row, so leave it False for normal runs\n"
     )
     return (
         header + f"{df_out} = find_any_append(\n"
@@ -78,7 +81,7 @@ def _findreplace_any_append(
         f"    search_field={py_str(field_search)},\n"
         f"    append_fields=[{fields}],\n"
         f"    case_sensitive={case_sensitive},\n"
-        f"    collect_match_diagnostics=True,\n"
+        f"    collect_match_diagnostics=False,\n"
         f"    log_label={py_str(f'ToolID_{tool_id}')},\n"
         f")"
     )
