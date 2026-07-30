@@ -24,26 +24,35 @@ Alteryx XML のアンカー名との対応（XML では lookup 表を "Source" �
   （app/apple の入れ子を両方の並び順で実測 — 長さは無関係）
 - 同じ検索値が複数の lookup 行にあるときは後の行が有効（辞書的上書き）
 - ReplaceMultipleFound は FindAny + Append では出力に影響しない
-  （複数の golden × True/False 両設定で同一出力）。無影響が確定した引数を
-  残すと「効く」と誤解されるため、対応する引数は置かず削除した
-- case_sensitive に既定値は置かない。大小を区別するかは翻訳結果を左右する
-  判断なので、ライブラリ側で先取りせず呼び出し側に必ず明示させる
-  （scaffold の生成コードも常に明示する）
+  （複数の golden × True/False 両設定で同一出力）
 - NoCase=True は大小無視でマッチ（採用規則は維持）
 - 空文字・NULL の検索値は無視される
 - 出力列は「元の Targets 列 + append_fields」のみ（検索値の列は含まない）
 
 FindAny + Append の意味論は上記すべて golden 実測済みで、推定は残っていない。
 
-append_fields に shapely の Geometry（Alteryx の SpatialObj）が含まれる場合の
-注記（golden 実測ではなく型・性能上の配慮）:
-- 他の append 値は表示用に文字列化されるが、Geometry だけは生の shapely
-  オブジェクトのまま返す。文字列化すると str(polygon) が全座標入りの WKT
-  文字列を生成し、複雑なポリゴンでは著しく重いうえ、SpatialObj としての
-  型も失われるため
-- 戻り値はこの関数では常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で
-  空間演算に使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で
-  包み直すこと
+── ここから下は golden ではなく、この実装が下している判断 ──────────
+
+Alteryx の挙動そのものではなく、「翻訳結果を人間がレビューできる形に保つ」
+「入力の型と実行時間を壊さない」ための設計判断。golden で確定した事実と混ぜて
+読まないよう節を分けてある。
+
+- ReplaceMultipleFound に対応する引数は置かない。無影響が確定した引数を
+  残すと「効く」と誤解されるため削除した
+- case_sensitive に既定値は置かない。大小を区別するかは翻訳結果を左右する
+  判断なので、ライブラリ側で先取りせず呼び出し側に必ず明示させる
+  （scaffold の生成コードも常に明示する）
+- collect_match_diagnostics の既定は False。曖昧マッチ表は lookup 行数に
+  比例したコストを毎回払うので、レビューしたいときだけ呼び出し側が True に
+  する（詳細は find_any_append() の docstring）
+- append_fields の Geometry（Alteryx の SpatialObj）は文字列化せず、生の
+  shapely オブジェクトのまま返す。他の append 値は表示用に文字列化するが、
+  str(polygon) は全座標入りの WKT を生成するため、複雑なポリゴンでは重いうえ
+  SpatialObj としての型も失われる。なお「Alteryx の Append が SpatialObj を
+  空間オブジェクトとして出力する」ことは golden 未実測 — ここでの根拠は
+  「入力の型を壊さない」であって、Alteryx 出力との突合ではない
+- 戻り値は常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で空間演算に
+  使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で包み直すこと
 """
 
 from __future__ import annotations
