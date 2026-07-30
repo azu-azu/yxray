@@ -10,6 +10,7 @@ import importlib.util
 import inspect
 import random
 import sys
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -683,6 +684,42 @@ def test_stringify_drops_dot_zero_only_for_integral_floats() -> None:
     assert find_any._stringify(123) == "123"
     assert find_any._stringify(1.5) == "1.5"
     assert find_any._stringify("apple") == "apple"
+
+
+def test_find_any_appended_geometry_is_kept_raw_not_stringified() -> None:
+    # SpatialObj (shapely Geometry) append values must not go through
+    # _stringify: str(polygon) would expand every coordinate into a WKT
+    # string, which is both slow for complex geometries and silently
+    # replaces the intended spatial object with plain text.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    polygon = shapely_geometry.Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    targets = pd.DataFrame({"text": ["apple pie", "nothing here"]})
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "zzz"],
+            "SpatialObj": [polygon, None],
+        }
+    )
+    out = _run(targets, lookup, append_fields=["SpatialObj"])
+    assert out["SpatialObj"].iloc[0] is polygon
+    assert pd.isna(out["SpatialObj"].iloc[1])
+
+
+def test_find_any_appended_geometry_stays_fast_for_a_complex_polygon() -> None:
+    # A polygon with many vertices makes str(polygon) (WKT expansion) slow;
+    # appending it should stay cheap because the raw geometry is preserved
+    # instead of being stringified.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    complex_polygon = shapely_geometry.Polygon(
+        [(x / 1000, (x / 1000) ** 2) for x in range(50_000)]
+    )
+    targets = pd.DataFrame({"text": ["apple pie"] * 200})
+    lookup = pd.DataFrame({"kw": ["apple"], "SpatialObj": [complex_polygon]})
+    start = time.perf_counter()
+    out = _run(targets, lookup, append_fields=["SpatialObj"])
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0
+    assert all(value is complex_polygon for value in out["SpatialObj"])
 
 
 def test_find_any_case_insensitive_matches_when_requested() -> None:

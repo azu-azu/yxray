@@ -34,6 +34,16 @@ Alteryx XML のアンカー名との対応（XML では lookup 表を "Source" �
 - 出力列は「元の Targets 列 + append_fields」のみ（検索値の列は含まない）
 
 FindAny + Append の意味論は上記すべて golden 実測済みで、推定は残っていない。
+
+append_fields に shapely の Geometry（Alteryx の SpatialObj）が含まれる場合の
+注記（golden 実測ではなく型・性能上の配慮）:
+- 他の append 値は表示用に文字列化されるが、Geometry だけは生の shapely
+  オブジェクトのまま返す。文字列化すると str(polygon) が全座標入りの WKT
+  文字列を生成し、複雑なポリゴンでは著しく重いうえ、SpatialObj としての
+  型も失われるため
+- 戻り値はこの関数では常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で
+  空間演算に使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で
+  包み直すこと
 """
 
 from __future__ import annotations
@@ -60,6 +70,31 @@ def _stringify(value: object) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+def _is_geometry(value: object) -> bool:
+    """value が shapely の Geometry (Point/Polygon/...) かどうか。
+
+    shapely を import せず duck typing で判定する。find_any_append 自体は
+    汎用の文字列マッチで、SpatialObj を扱わない呼び出しがほとんどのため、
+    この1判定のためだけに shapely を必須依存へ格上げしたくない。
+    geom_type と wkt は shapely の BaseGeometry に共通する属性で、
+    通常のスカラー値（str/int/float/date 等）には無い。
+    """
+    return hasattr(value, "geom_type") and hasattr(value, "wkt")
+
+
+def _prepare_append_value(value: object) -> object:
+    """append_fields の1値を出力用に整える。
+
+    Geometry はそのまま返す。str(polygon) は全座標入りの WKT 文字列に
+    展開されるため重く、しかも SpatialObj のつもりの値が文字列に化けて
+    型を失う（呼び出し側で再度パースし直す羽目になる）。Geometry 以外は
+    従来どおり _stringify する（123.0 → "123" の桁落ち防止は保つ）。
+    """
+    if _is_geometry(value):
+        return value
+    return _stringify(value) if pd.notna(value) else pd.NA
 
 
 def find_any_append(
@@ -396,9 +431,12 @@ def _find_winner(
             # append 値も needle/haystack と同様に _stringify する。lookup 列が
             # NaN 混在で float64 昇格すると 123 が 123.0 になり、golden の "123"
             # と文字列比較で偽差分になるため（NaN は NA のまま残す）。
+            # ただし Geometry（SpatialObj）は例外: _stringify は最後に str()
+            # を呼ぶため、Polygon 等が全座標入りの巨大な WKT 文字列に化けて
+            # 重いうえに型も失う。_prepare_append_value が Geometry だけ
+            # そのまま素通しする。
             values = tuple(
-                _stringify(value) if pd.notna(value) else pd.NA
-                for value in needle.appends
+                _prepare_append_value(value) for value in needle.appends
             )
             stringified[order] = values
         for field, value in zip(append_fields, values, strict=True):
