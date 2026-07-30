@@ -184,12 +184,29 @@ def test_manual_cluster_controls_are_available() -> None:
     assert 'id="manual-cluster-modal"' in html
     assert "function buildManualClusters(config)" in html
     assert "function removeManualCluster(groupKey)" in html
+    assert "function renameManualCluster(groupKey, label)" in html
+    assert "function openManualClusterRenameModal(groupKey)" in html
+    assert 'id="manual-cluster-modal-title"' in html
     assert "function importManualClusterConfigFromFile(file)" in html
     assert "function computeDeclaredContainerMembership()" in html
     assert "isManualClusterConfigForWorkflow(stored) ? stored : null" in html
     assert "yxray-manual-clusters-" in html
     assert "multiselect: true" in html
     assert '"manual_clusters": [{"label": "prep", "tool_ids": [1, 2]}]' in html
+
+
+def test_manual_cluster_panel_offers_rename() -> None:
+    """The cluster panel exposes a rename button for manual clusters in both the
+    collapsed and expanded states, and the modal doubles as the rename dialog."""
+    html = SingleGraphRenderer().render(WorkflowDoc(filepath="fixture.yxmd"))
+
+    assert "function _manualClusterRenameBtn(groupKey)" in html
+    assert "btn.textContent = 'Rename manual cluster'" in html
+    assert "_setManualClusterModalTitle(title)" in html
+    assert "'Rename Cluster'" in html
+    assert "function validateManualClusterRename(label, existingKey)" in html
+    assert "if (AppState.manualClusterRenameKey) {" in html
+    assert "group.manualKey = manualClusterKey(stored)" in html
 
 
 def test_config_map_includes_raw_node_xml() -> None:
