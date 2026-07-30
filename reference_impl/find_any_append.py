@@ -54,6 +54,14 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+try:
+    from shapely.geometry.base import BaseGeometry
+except ModuleNotFoundError:
+    # shapely は find_any_append の必須依存ではない（空間データを扱わない
+    # 呼び出しがほとんど）。未インストールなら Geometry 判定は常に False
+    # になるだけで、他の動作には影響しない。
+    BaseGeometry = None  # type: ignore[assignment,misc]
+
 # 元データ・ルックアップ表の行を追跡するための内部 ID 列
 TARGET_ROW_ID = "_target_row_id"
 LOOKUP_ROW_ID = "_lookup_row_id"
@@ -75,13 +83,13 @@ def _stringify(value: object) -> str:
 def _is_geometry(value: object) -> bool:
     """value が shapely の Geometry (Point/Polygon/...) かどうか。
 
-    shapely を import せず duck typing で判定する。find_any_append 自体は
-    汎用の文字列マッチで、SpatialObj を扱わない呼び出しがほとんどのため、
-    この1判定のためだけに shapely を必須依存へ格上げしたくない。
-    geom_type と wkt は shapely の BaseGeometry に共通する属性で、
-    通常のスカラー値（str/int/float/date 等）には無い。
+    isinstance のみで判定する（hasattr(value, "wkt") は使わない）。
+    shapely の wkt は保存済み属性ではなく、アクセスした瞬間に Geometry を
+    WKT文字列へ変換する property なので、hasattr で「存在確認」したつもりが
+    実際には毎回 WKT を生成してしまい、避けたかった重い変換がここで
+    そのまま起きる（isinstance は型チェックのみで中身に触れない）。
     """
-    return hasattr(value, "geom_type") and hasattr(value, "wkt")
+    return BaseGeometry is not None and isinstance(value, BaseGeometry)
 
 
 def _prepare_append_value(value: object) -> object:
