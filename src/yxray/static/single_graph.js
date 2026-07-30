@@ -103,6 +103,7 @@ var AppState = {
   resizeState: null,      // {memoId, startDomX, startDomY, startW, startH} while drag-resizing
   manualClusterConfig: null,
   manualClusterModalIds: [],
+  manualClusterRenameKey: null, // group key being renamed while the cluster modal is open
 };
 
 function clusterMinLayer(id) {
@@ -1176,6 +1177,29 @@ function validateManualClusterCandidate(ids, label, membership, existingKey) {
   return errors;
 }
 
+// Rename validation is separate from validateManualClusterCandidate(): the
+// member IDs of an existing cluster are already known-good, and they are listed
+// in AppState.expandedGroups while the cluster is expanded, which the create
+// path treats as an error.
+function validateManualClusterRename(label, existingKey) {
+  var errors = [];
+  if (!label || !label.trim()) errors.push('Cluster name is required.');
+  if (!existingKey) errors.push('This cluster is not a manual cluster.');
+  else if (!findManualClusterByKey(existingKey)) {
+    errors.push('This manual cluster is no longer in the saved config.');
+  }
+  return errors;
+}
+
+function findManualClusterByKey(manualKey) {
+  var config = AppState.manualClusterConfig || emptyManualClusterConfig();
+  var found = null;
+  (config.manual_clusters || []).forEach(function(cluster) {
+    if (manualClusterKey(cluster) === manualKey) found = cluster;
+  });
+  return found;
+}
+
 function setManualClusterError(message) {
   var el = document.getElementById('manual-cluster-error');
   if (!el) return;
@@ -1183,28 +1207,100 @@ function setManualClusterError(message) {
   el.style.display = message ? 'block' : 'none';
 }
 
-function openManualClusterModal() {
-  var ids = selectedRealNodeIds();
-  AppState.manualClusterModalIds = ids;
+function _setManualClusterModalTitle(text) {
+  var el = document.getElementById('manual-cluster-modal-title');
+  if (el) el.textContent = text;
+}
+
+function _openManualClusterModalWith(title, name, previewText) {
   var nameInput = document.getElementById('manual-cluster-name-input');
   var preview = document.getElementById('manual-cluster-members-preview');
-  nameInput.value = '';
-  preview.textContent = ids.length > 0 ? 'ToolIDs: ' + ids.join(', ') : 'No real tool nodes selected. Use Ctrl/Cmd+click to select nodes.';
+  _setManualClusterModalTitle(title);
+  nameInput.value = name;
+  preview.textContent = previewText;
   setManualClusterError('');
   document.getElementById('manual-cluster-modal').classList.add('open');
   document.getElementById('memo-modal-overlay').classList.add('open');
-  setTimeout(function() { nameInput.focus(); }, 50);
+  setTimeout(function() { nameInput.focus(); nameInput.select(); }, 50);
+}
+
+function openManualClusterModal() {
+  var ids = selectedRealNodeIds();
+  AppState.manualClusterModalIds = ids;
+  AppState.manualClusterRenameKey = null;
+  _openManualClusterModalWith(
+    'New Cluster',
+    '',
+    ids.length > 0 ? 'ToolIDs: ' + ids.join(', ') : 'No real tool nodes selected. Use Ctrl/Cmd+click to select nodes.'
+  );
+}
+
+// Reuses the create modal in rename mode: the member set is fixed, only the
+// label is editable. groupKey may be collapsed (clusterMap) or expanded
+// (groupMembers) — both carry isManual/manualKey.
+function openManualClusterRenameModal(groupKey) {
+  var group = AppState.clusterMap[groupKey] || AppState.groupMembers[groupKey];
+  if (!group || !group.isManual) return;
+  AppState.manualClusterModalIds = group.memberIds.slice();
+  AppState.manualClusterRenameKey = groupKey;
+  _openManualClusterModalWith(
+    'Rename Cluster',
+    String(group.toolType || ''),
+    'ToolIDs: ' + group.memberIds.join(', ')
+  );
 }
 
 function closeManualClusterModal() {
   document.getElementById('manual-cluster-modal').classList.remove('open');
   document.getElementById('memo-modal-overlay').classList.remove('open');
   AppState.manualClusterModalIds = [];
+  AppState.manualClusterRenameKey = null;
   setManualClusterError('');
+}
+
+// Applies a new label to a manual cluster: the saved config entry, the in-memory
+// cluster state (including its manualKey, which is derived from the label), and
+// the graph node or expanded-group box caption.
+function renameManualCluster(groupKey, label) {
+  var group = AppState.clusterMap[groupKey] || AppState.groupMembers[groupKey];
+  if (!group || !group.isManual) return ['This cluster is not a manual cluster.'];
+
+  var newLabel = String(label || '').trim();
+  var errors = validateManualClusterRename(newLabel, group.manualKey);
+  if (errors.length > 0) return errors;
+  if (newLabel === group.toolType) return [];
+
+  var stored = findManualClusterByKey(group.manualKey);
+  stored.label = newLabel;
+  saveManualClusterConfig();
+
+  group.toolType = newLabel;
+  group.manualKey = manualClusterKey(stored);
+
+  if (AppState.clusterMap[groupKey]) {
+    nodesDataset.update({
+      id: groupKey,
+      label: newLabel + ' \xd7' + group.memberIds.length,
+      title: newLabel + ' manual cluster \u2014 Click to expand/collapse'
+    });
+  }
+  if (network) network.redraw();
+  return [];
 }
 
 function saveManualClusterFromModal() {
   var label = document.getElementById('manual-cluster-name-input').value.trim();
+  if (AppState.manualClusterRenameKey) {
+    var groupKey = AppState.manualClusterRenameKey;
+    var renameErrors = renameManualCluster(groupKey, label);
+    if (renameErrors.length > 0) {
+      setManualClusterError(renameErrors[0]);
+      return;
+    }
+    closeManualClusterModal();
+    _refreshClusterPanel(groupKey);
+    return;
+  }
   var ids = AppState.manualClusterModalIds.slice();
   var membership = computeDeclaredContainerMembership();
   var errors = validateManualClusterCandidate(ids, label, membership, null);
@@ -2157,6 +2253,18 @@ function _hideClusterJsonBtn() {
   document.getElementById('panel-cluster-json-btn').style.display = 'none';
 }
 
+// "Rename manual cluster" button for the cluster panel, shown above the remove
+// button in both the collapsed and expanded states.
+function _manualClusterRenameBtn(groupKey) {
+  var btn = document.createElement('button');
+  btn.className = 'ctrl-btn';
+  btn.id = 'panel-rename-manual-cluster-btn';
+  btn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:8px;font-size:13px;';
+  btn.textContent = 'Rename manual cluster';
+  btn.onclick = function() { openManualClusterRenameModal(groupKey); };
+  return btn;
+}
+
 // Shared render helper: builds Expand/Collapse button + member list for a cluster.
 // Called from openPanel() and from within the buttons themselves so the panel
 // stays open and its content flips between "Expand" and "Collapse" states.
@@ -2174,6 +2282,7 @@ function _refreshClusterPanel(groupKey) {
     _setPanelBtn('excel');
     _showClusterJsonBtn();
     if (c.isManual) {
+      body.appendChild(_manualClusterRenameBtn(groupKey));
       var removeBtn = document.createElement('button');
       removeBtn.className = 'ctrl-btn';
       removeBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';
@@ -2202,6 +2311,7 @@ function _refreshClusterPanel(groupKey) {
     _setPanelBtn('excel');
     _showClusterJsonBtn();
     if (group.isManual) {
+      body.appendChild(_manualClusterRenameBtn(groupKey));
       var removeBtn2 = document.createElement('button');
       removeBtn2.className = 'ctrl-btn';
       removeBtn2.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';
@@ -2465,6 +2575,7 @@ function openPanel(nodeId) {
     collapseBtn.onclick = (function(gk) { return function() { recollapseGroup(gk); _refreshClusterPanel(gk); }; })(_groupKey);
     body.appendChild(collapseBtn);
     if (_group && _group.isManual) {
+      body.appendChild(_manualClusterRenameBtn(_groupKey));
       var removeManualBtn = document.createElement('button');
       removeManualBtn.className = 'ctrl-btn';
       removeManualBtn.style.cssText = 'display:block;width:100%;padding:7px;margin-bottom:14px;color:#f87171;font-size:13px;';

@@ -62,6 +62,8 @@ In the generated HTML report:
 3. Enter a cluster name and save.
 4. Use **Export Clusters** to download the manual cluster JSON.
 
+To rename a cluster, click it (or any of its member nodes while expanded), then click **Rename manual cluster** in the right panel and enter the new name. The rename updates the graph node, the expanded-group caption, and the JSON that **Export Clusters** writes. Member nodes are not changed by a rename.
+
 Manual clusters are saved in browser `localStorage` while you work, keyed by a workflow fingerprint. They are not automatically written into the project directory. Exporting creates a JSON file through the browser download flow, usually in your Downloads folder.
 
 You can later reuse that JSON with:
