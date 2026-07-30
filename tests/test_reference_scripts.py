@@ -10,6 +10,7 @@ import importlib.util
 import inspect
 import random
 import sys
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -683,6 +684,107 @@ def test_stringify_drops_dot_zero_only_for_integral_floats() -> None:
     assert find_any._stringify(123) == "123"
     assert find_any._stringify(1.5) == "1.5"
     assert find_any._stringify("apple") == "apple"
+
+
+def test_find_any_appended_geometry_is_kept_raw_not_stringified() -> None:
+    # SpatialObj (shapely Geometry) append values must not go through
+    # _stringify: str(polygon) would expand every coordinate into a WKT
+    # string, which is both slow for complex geometries and silently
+    # replaces the intended spatial object with plain text.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    polygon = shapely_geometry.Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    targets = pd.DataFrame({"text": ["apple pie", "nothing here"]})
+    lookup = pd.DataFrame(
+        {
+            "kw": ["apple", "zzz"],
+            "SpatialObj": [polygon, None],
+        }
+    )
+    out = _run(targets, lookup, append_fields=["SpatialObj"])
+    assert out["SpatialObj"].iloc[0] is polygon
+    assert pd.isna(out["SpatialObj"].iloc[1])
+
+
+def test_find_any_is_geometry_never_touches_the_wkt_property(monkeypatch) -> None:
+    # A prior version detected geometries with
+    # hasattr(value, "geom_type") and hasattr(value, "wkt"). shapely's
+    # wkt is a *property* that renders the full WKT string on every
+    # access, so that "existence probe" was itself generating the huge
+    # string it was supposed to avoid. isinstance() must be the entire
+    # check — this pins that no attribute named "wkt" is ever touched by
+    # making it raise if accessed, then asserting detection still works.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    shapely_base = pytest.importorskip("shapely.geometry.base")
+
+    def _poison(self: object) -> str:
+        raise AssertionError(
+            "wkt was accessed — geometry detection must use isinstance() only"
+        )
+
+    monkeypatch.setattr(shapely_base.BaseGeometry, "wkt", property(_poison))
+    polygon = shapely_geometry.Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    assert find_any._is_geometry(polygon) is True
+
+
+def test_find_any_appended_many_distinct_geometries_are_all_kept_raw() -> None:
+    # A single reused polygon can't catch a per-row geometry-detection bug:
+    # the winner-selection cache stringifies each winning lookup row only
+    # once, so with one polygon shared by every target row the check runs
+    # once no matter how many target rows there are. Use a distinct polygon
+    # per lookup row instead, so the cache can't hide a cost or a mistake
+    # that only shows up once per distinct geometry.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    row_count = 200
+    polygons = [
+        shapely_geometry.Polygon(
+            [(x / 1000, (x / 1000) ** 2 + offset) for x in range(300)]
+        )
+        for offset in range(row_count)
+    ]
+    # fixed-width, delimited keys so no keyword is ever a substring of
+    # another (e.g. "keyword_1" inside "keyword_10") — a collision there
+    # would fail on the leftmost-match rule itself, not on geometry
+    # handling, and would be mistaken for this test catching the bug
+    keys = [f"KW{i:03d}X" for i in range(row_count)]
+    targets = pd.DataFrame({"text": keys})
+    lookup = pd.DataFrame({"kw": keys, "SpatialObj": polygons})
+    out = _run(targets, lookup, append_fields=["SpatialObj"])
+    assert all(
+        actual is expected
+        for actual, expected in zip(out["SpatialObj"], polygons, strict=True)
+    )
+
+
+def test_find_any_is_geometry_is_much_cheaper_than_probing_for_wkt() -> None:
+    # Self-calibrating perf check (no wall-clock magic number, so it can't
+    # be flaky on a slow CI box): isinstance() must stay far cheaper than
+    # the old hasattr(value, "geom_type") and hasattr(value, "wkt") check,
+    # measured on distinct complex polygons in the same run so only the
+    # ratio matters. hasattr(value, "wkt") is what actually caused the
+    # ~25s slowdown this fix addresses, since wkt is a property that
+    # renders the whole geometry to WKT text on every access.
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    polygons = [
+        shapely_geometry.Polygon(
+            [(x / 1000, (x / 1000) ** 2 + offset) for x in range(20_000)]
+        )
+        for offset in range(20)
+    ]
+
+    def _is_geometry_via_hasattr(value: object) -> bool:
+        return hasattr(value, "geom_type") and hasattr(value, "wkt")
+
+    start = time.perf_counter()
+    for polygon in polygons:
+        find_any._is_geometry(polygon)
+    fixed_elapsed = time.perf_counter() - start
+
+    start = time.perf_counter()
+    for polygon in polygons:
+        _is_geometry_via_hasattr(polygon)
+    buggy_elapsed = time.perf_counter() - start
+
+    assert fixed_elapsed * 20 < buggy_elapsed
 
 
 def test_find_any_case_insensitive_matches_when_requested() -> None:

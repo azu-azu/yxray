@@ -24,16 +24,35 @@ Alteryx XML のアンカー名との対応（XML では lookup 表を "Source" �
   （app/apple の入れ子を両方の並び順で実測 — 長さは無関係）
 - 同じ検索値が複数の lookup 行にあるときは後の行が有効（辞書的上書き）
 - ReplaceMultipleFound は FindAny + Append では出力に影響しない
-  （複数の golden × True/False 両設定で同一出力）。無影響が確定した引数を
-  残すと「効く」と誤解されるため、対応する引数は置かず削除した
-- case_sensitive に既定値は置かない。大小を区別するかは翻訳結果を左右する
-  判断なので、ライブラリ側で先取りせず呼び出し側に必ず明示させる
-  （scaffold の生成コードも常に明示する）
+  （複数の golden × True/False 両設定で同一出力）
 - NoCase=True は大小無視でマッチ（採用規則は維持）
 - 空文字・NULL の検索値は無視される
 - 出力列は「元の Targets 列 + append_fields」のみ（検索値の列は含まない）
 
 FindAny + Append の意味論は上記すべて golden 実測済みで、推定は残っていない。
+
+── ここから下は golden ではなく、この実装が下している判断 ──────────
+
+Alteryx の挙動そのものではなく、「翻訳結果を人間がレビューできる形に保つ」
+「入力の型と実行時間を壊さない」ための設計判断。golden で確定した事実と混ぜて
+読まないよう節を分けてある。
+
+- ReplaceMultipleFound に対応する引数は置かない。無影響が確定した引数を
+  残すと「効く」と誤解されるため削除した
+- case_sensitive に既定値は置かない。大小を区別するかは翻訳結果を左右する
+  判断なので、ライブラリ側で先取りせず呼び出し側に必ず明示させる
+  （scaffold の生成コードも常に明示する）
+- collect_match_diagnostics の既定は False。曖昧マッチ表は lookup 行数に
+  比例したコストを毎回払うので、レビューしたいときだけ呼び出し側が True に
+  する（詳細は find_any_append() の docstring）
+- append_fields の Geometry（Alteryx の SpatialObj）は文字列化せず、生の
+  shapely オブジェクトのまま返す。他の append 値は表示用に文字列化するが、
+  str(polygon) は全座標入りの WKT を生成するため、複雑なポリゴンでは重いうえ
+  SpatialObj としての型も失われる。なお「Alteryx の Append が SpatialObj を
+  空間オブジェクトとして出力する」ことは golden 未実測 — ここでの根拠は
+  「入力の型を壊さない」であって、Alteryx 出力との突合ではない
+- 戻り値は常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で空間演算に
+  使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で包み直すこと
 """
 
 from __future__ import annotations
@@ -43,6 +62,14 @@ import time
 from dataclasses import dataclass
 
 import pandas as pd
+
+try:
+    from shapely.geometry.base import BaseGeometry
+except ModuleNotFoundError:
+    # shapely は find_any_append の必須依存ではない（空間データを扱わない
+    # 呼び出しがほとんど）。未インストールなら Geometry 判定は常に False
+    # になるだけで、他の動作には影響しない。
+    BaseGeometry = None  # type: ignore[assignment,misc]
 
 # 元データ・ルックアップ表の行を追跡するための内部 ID 列
 TARGET_ROW_ID = "_target_row_id"
@@ -60,6 +87,31 @@ def _stringify(value: object) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+def _is_geometry(value: object) -> bool:
+    """value が shapely の Geometry (Point/Polygon/...) かどうか。
+
+    isinstance のみで判定する（hasattr(value, "wkt") は使わない）。
+    shapely の wkt は保存済み属性ではなく、アクセスした瞬間に Geometry を
+    WKT文字列へ変換する property なので、hasattr で「存在確認」したつもりが
+    実際には毎回 WKT を生成してしまい、避けたかった重い変換がここで
+    そのまま起きる（isinstance は型チェックのみで中身に触れない）。
+    """
+    return BaseGeometry is not None and isinstance(value, BaseGeometry)
+
+
+def _prepare_append_value(value: object) -> object:
+    """append_fields の1値を出力用に整える。
+
+    Geometry はそのまま返す。str(polygon) は全座標入りの WKT 文字列に
+    展開されるため重く、しかも SpatialObj のつもりの値が文字列に化けて
+    型を失う（呼び出し側で再度パースし直す羽目になる）。Geometry 以外は
+    従来どおり _stringify する（123.0 → "123" の桁落ち防止は保つ）。
+    """
+    if _is_geometry(value):
+        return value
+    return _stringify(value) if pd.notna(value) else pd.NA
 
 
 def find_any_append(
@@ -99,9 +151,11 @@ def find_any_append(
     コストを増やす方向には効かず、減らす方向にだけ効く。
 
     既定は False。曖昧マッチ表は「翻訳が正しいか人間が確かめる」段階で価値が
-    あるもので、毎回払うには重すぎる（データ次第で全体の8割以上）。scaffold の
-    生成コードは True を明示的に出すので、レビュー中は表が出て、定常運用に
-    移すときにその行を False にすれば消せる。
+    あるもので、毎回払うには重すぎる。コストは lookup 1行につき pandas 呼び出し
+    1回なので、**targets が少なくても lookup 行数だけで決まる**: 実測で lookup
+    4万行のとき targets 300行で13秒・3000行で37秒、走査を切れば0.4秒。scaffold の
+    生成コードもこの既定に合わせて False を明示的に出すので、レビューしたい
+    ときだけその行を True にする。
 
     複数の lookup 行にマッチしたときどの行が採用されるか（最も左のマッチ →
     同点なら lookup 順で先の行 → 同じ検索値なら後の行）と、NoCase・空文字・
@@ -396,9 +450,12 @@ def _find_winner(
             # append 値も needle/haystack と同様に _stringify する。lookup 列が
             # NaN 混在で float64 昇格すると 123 が 123.0 になり、golden の "123"
             # と文字列比較で偽差分になるため（NaN は NA のまま残す）。
+            # ただし Geometry（SpatialObj）は例外: _stringify は最後に str()
+            # を呼ぶため、Polygon 等が全座標入りの巨大な WKT 文字列に化けて
+            # 重いうえに型も失う。_prepare_append_value が Geometry だけ
+            # そのまま素通しする。
             values = tuple(
-                _stringify(value) if pd.notna(value) else pd.NA
-                for value in needle.appends
+                _prepare_append_value(value) for value in needle.appends
             )
             stringified[order] = values
         for field, value in zip(append_fields, values, strict=True):
@@ -539,7 +596,9 @@ def main() -> None:
         search_field="kw",
         append_fields=["label", "code"],
         case_sensitive=True,  # Alteryx の NoCase=False
-        collect_match_diagnostics=True,  # 生成コードと同じく曖昧マッチ表を出す
+        # デモなので曖昧マッチ表を見せる。生成コードは False を出す（4行の
+        # サンプルでは無視できるが、実データでは lookup 行数分のコストになる）
+        collect_match_diagnostics=True,
     )
 
     print("\n-- result --")

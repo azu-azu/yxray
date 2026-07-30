@@ -430,17 +430,18 @@ FindAny は等価結合では意味論を再現できない（`pd.merge` は完�
 # is matched inside the Targets find field
 # NOTE: find_any_append() is not generated — copy it from
 # reference_impl/find_any_append.py
-# collect_match_diagnostics=True logs the ambiguous matches (1 target matching
-# several Source rows) — it is the costly part, set it False once reviewed
+# set collect_match_diagnostics=True to log the ambiguous matches (1 target
+# matching several Source rows) while reviewing this translation — it costs
+# one pandas pass per Source row, so leave it False for normal runs
 df_3 = find_any_append(
     df_1,
     df_2,
     find_field="key_a",
     search_field="key_b",
     append_fields=["col_a", "col_b"],
-    case_sensitive=True,             # Alteryx の NoCase=False に対応
-    collect_match_diagnostics=True,  # 曖昧マッチ表を出す（重い）
-    log_label="ToolID_3",            # 実行ログにどのツールか表示される
+    case_sensitive=True,              # Alteryx の NoCase=False に対応
+    collect_match_diagnostics=False,  # レビュー時だけ True にする（重い）
+    log_label="ToolID_3",             # 実行ログにどのツールか表示される
 )
 ```
 
@@ -456,13 +457,18 @@ df_3 = find_any_append(
 `collect_match_diagnostics` は「1 target が複数の Source 行にマッチした行」の
 一覧を実行ログに出すかどうかで、**表示量ではなく計算量**を決める。採用値を
 決めるだけなら target ごとに1回の検索で済むが、この一覧は全検索値を全 target に
-当てないと出せず、大きい lookup では処理時間の大半を占める（4500 targets ×
-2000 検索値で 5.4 秒 → 0.9 秒）。そのため helper 側の既定は `False` で、
-**生成コードは `True` を明示的に出す**: 翻訳が正しいかを人間が確かめる段階では
-一覧が要り、信用できたらその行を `False` にすれば消せる。診断を止めても
+当てないと出せない。コストは Source 1行につき pandas 呼び出し1回なので、
+**Targets が少なくても Source の行数だけで決まる**: 実測で Source 4万行のとき
+Targets 300行で13秒・3000行で37秒、走査を切れば0.4秒。そのため helper 側の
+既定は `False` で、**生成コードもそれに合わせて `False` を明示的に出す**:
+翻訳が正しいかを人間が確かめるときだけその行を `True` にする。診断を止めても
 戻り値は完全に同一で、消えるのは曖昧マッチの集計と表示だけ。なお診断の読み手は
 実行ログだけなので、`verbose=False` のときは `collect_match_diagnostics=True`
 でも走査しない（誰も読めない集計に時間を使わない）。
+
+引数を省略せず `False` を明示的に出すのは、`case_sensitive` と同じ理由で
+**レビュー時に切り替える行を生成コード上で見えるようにする**ため。省略すると
+helper の既定に頼ることになり、有効化の手掛かりが生成コードから消える。
 
 **関数定義そのものは生成 .py に埋め込まない**（Select の
 `apply_select_edits` / `SelectColumnEdit` も同方針で、参照実装は
@@ -529,7 +535,7 @@ df_3 = find_any_append(
     search_field="key",
     append_fields=["col_a", "col_b"],
     case_sensitive=True,
-    collect_match_diagnostics=True,
+    collect_match_diagnostics=False,
     log_label="ToolID_3",
 )
 ```
