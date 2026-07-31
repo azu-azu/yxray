@@ -76,6 +76,18 @@ def test_spatial_info_hint_agrees_with_what_scaffold_generates() -> None:
     assert ".length" not in hint
 
 
+def test_distance_hint_agrees_with_what_scaffold_generates() -> None:
+    # The hint used to show sjoin_nearest, which is the two-input nearest
+    # form — the generator translates the single-input one (two spatial
+    # fields of one record) and refuses two-input mode, so the hint must
+    # not point at a shape the generator never emits.
+    hint, supported = python_hint_for("Distance")
+    assert supported == "partial"
+    assert "sjoin_nearest" not in hint
+    assert "estimate_utm_crs" in hint
+    assert "routing service" in hint
+
+
 def test_alteryx_formula_shares_the_formula_hint() -> None:
     assert python_hint_for("AlteryxFormula") == python_hint_for("Formula")
 
