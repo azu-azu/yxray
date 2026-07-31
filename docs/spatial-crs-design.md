@@ -63,6 +63,7 @@ yxray の空間処理は、
 | `_io.py` | ファイル由来の空間データを EPSG:4326 に正規化する(確立) |
 | `_spatial.py` / Create Points | 新しい geometry に EPSG:4326 を付与する(確立) |
 | `_spatial.py` / Spatial Match | 空間結合に限定される(信頼) |
+| `_spatial.py` / Spatial Info | 重心の算出に限定される(信頼) |
 
 `_spatial.py` の先頭 docstring にも、この分担が明記されている。
 
@@ -106,7 +107,7 @@ if left.crs != right.crs:
 空間ファイルの拡張子は `src/yxray/scaffold/_io.py` で定義されている。
 
 ```python
-SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
+SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb", ".tab"})
 ```
 
 これらの拡張子は `pd.read_csv()` ではなく `gpd.read_file()` で読み込まれる。
@@ -250,6 +251,41 @@ df_out = gpd.sjoin(
 不変条件を信頼して責務を空間結合に限定した結果である
 ([Design principle](#design-principle) 参照)。
 
+### Spatial Info は不変条件を宣言し直す
+
+`gen_spatialinfo()` が生成するコードは概ね次のとおりである。
+
+```python
+_geom = gpd.GeoSeries(
+    df_1["SpatialObj"] if "SpatialObj" in df_1.columns else df_1.geometry,
+    crs="EPSG:4326",
+)
+df_2 = df_1.copy()
+df_2["Centroid"] = _geom.centroid
+```
+
+3点、意図がある。
+
+**1. 入力列名は XML どおりに引かず、アクティブ geometry へ落ちる。**
+Alteryx は空間列を `SpatialObj` と呼ぶが、`gpd.read_file()` も Create Points も
+生成フレームでは `geometry` と名付ける。XML の名前がそのまま列として存在するのは、
+上流でリネームされている場合か、前段の Spatial Info が作った `Centroid` を
+入力に選んでいる場合だけなので、両方に対応する形にしてある。
+
+**2. GeoDataFrame 化ではなく GeoSeries 化。**
+`gpd.GeoDataFrame(df, geometry=...)` にするとアクティブ geometry を
+上書きしてしまう。重心は *列を1本足すだけ* の操作なので、フレームの
+空間としての性格は変えない。
+
+**3. `crs="EPSG:4326"` はアサーション。**
+プレーンな Series ならラベル付けになり、すでに GeoSeries なら
+CRS 不一致で `ValueError` になる。不変条件が崩れていたら黙って進まない。
+
+なお `.centroid` を EPSG:4326 のまま呼ぶと GeoPandas が警告を出す
+(度空間の平面重心になるため)。建物スケールでは測地的な重心との差は無視できる。
+一方 **面積・長さは同じ扱いにできない** ので、`Area`/`Length` が選択されていても
+生成せず TODO に落としている([Limitations](#limitations) の距離・バッファと同じ理由)。
+
 ### Filter や Select で何もしなくてよい理由
 
 GeoDataFrame に対して通常の行・列操作を行っても、
@@ -322,8 +358,13 @@ EPSG:4326 のままで問題ない。
 | 入力パス | 現状の扱い |
 | --- | --- |
 | `C:\data\mesh.shp` | `gpd.read_file` + 正規化 ✅ |
+| `C:\data\master.tab`(MapInfo TAB) | `gpd.read_file` + 正規化 ✅(2026-07-31 追加) |
 | `C:\data\geo.gdb\layer1`(レイヤー名付き gdb) | `pd.read_csv` 扱いになり正規化されない |
 | `C:\data\pts.yxdb`(SpatialObj を含み得る) | 同上 |
+
+`.tab` はタブ区切りテキストの拡張子でもあるため、判定は拡張子だけで、
+中身までは見ていない。テキストの `.tab` を読むワークフローでは
+生成コードの読み込み部分を手で戻す必要がある。
 
 このようなワークフローでは、生成されたコードの読み込み部分を
 手で修正する必要がある。

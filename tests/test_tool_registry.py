@@ -63,6 +63,19 @@ def test_formula_hint_agrees_with_what_scaffold_generates() -> None:
     assert "np.where" in hint
 
 
+def test_spatial_info_hint_agrees_with_what_scaffold_generates() -> None:
+    # Same two-code-path trap as Formula (docs/explain-output-anatomy.md):
+    # the generator translates CentroidObj only, so the hint must not
+    # advertise the .area / .length it deliberately refuses to emit.
+    hint, supported = python_hint_for("SpatialInfo")
+    assert supported == "partial"
+    assert "gpd.GeoSeries" in hint
+    assert ".centroid" in hint
+    assert "CentroidObj only" in hint
+    assert ".area" not in hint
+    assert ".length" not in hint
+
+
 def test_alteryx_formula_shares_the_formula_hint() -> None:
     assert python_hint_for("AlteryxFormula") == python_hint_for("Formula")
 

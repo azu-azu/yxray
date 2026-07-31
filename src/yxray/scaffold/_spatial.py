@@ -1,6 +1,7 @@
-"""Spatial tools (Create Points, Spatial Match) for the scaffold generator.
+"""Spatial tools (Create Points, Spatial Match, Spatial Info) for the
+scaffold generator.
 
-Both emit geopandas code; the CRS story that makes them safe (everything
+All emit geopandas code; the CRS story that makes them safe (everything
 normalized to WGS84, matching Alteryx's SpatialObj convention) is split
 with _io: file reads normalize on load there, Create Points hard-codes
 EPSG:4326 here.
@@ -150,4 +151,95 @@ def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
         f"    predicate={py_str(predicate)},\n"
         f').drop(columns=["index_right"])'
     )
+    return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
+
+
+# Spatial Info adds one field per selected item, named after the item: the
+# tool's output MetaInfo tags the new field with
+# source="SpatialInfo: CentroidObj Source=SpatialObj", and the tool has no
+# rename UI, so the name is fixed. {item: (output field, GeoSeries attribute,
+# comment lines)}.
+#
+# Only CentroidObj is translated, following _findreplace's rule of emitting
+# real code for the verified combinations and an explicit TODO for the rest.
+# Area and Length are held back on purpose: Alteryx returns them in the unit
+# its config selects (sq miles, km) while EPSG:4326 — the CRS every frame
+# carries here, see docs/spatial-crs-design.md — measures in degrees, so
+# .area/.length would put a wrong number in a column golden CSVs compare.
+# Centroid has neither problem, being a SpatialObj golden CSVs never show.
+_SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
+    "CentroidObj": (
+        "Centroid",
+        "centroid",
+        "# Centroid is a SpatialObj — like the geometry column it appears"
+        " only in\n"
+        "# Alteryx's Map tab, never in the Results grid or golden CSVs;"
+        " drop it\n"
+        "# on the comparison side, not here\n"
+        "# .centroid on EPSG:4326 is a planar centroid in degrees (geopandas"
+        "\n# warns); the offset from a geodesic one is negligible at"
+        " building scale",
+    ),
+}
+
+_SPATIAL_INFO_SKIP_NOTE = (
+    "#   Area/Length need a projected CRS (EPSG:4326 measures in degrees) and\n"
+    "#   Alteryx's unit setting; other items await golden verification"
+)
+
+
+def _selected_items(config: dict[str, Any]) -> list[str]:
+    """Item names under <SelectedItems>, in XML order."""
+    selected = config.get("SelectedItems", {})
+    if not isinstance(selected, dict):
+        return []
+    names = (
+        field_name(item)
+        for item in as_list(selected.get("Item"))
+        if isinstance(item, dict)
+    )
+    return [name for name in names if name]
+
+
+def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    spatial_obj = ctx.config.get("SpatialObj", {})
+    field = field_name(spatial_obj) if isinstance(spatial_obj, dict) else ""
+    items = _selected_items(ctx.config)
+    translated = [item for item in items if item in _SPATIAL_INFO_ITEMS]
+    skipped = [item for item in items if item not in _SPATIAL_INFO_ITEMS]
+
+    lines: list[str] = []
+    if skipped:
+        lines.append(
+            "# TODO: Spatial Info — selected items not translated: "
+            + comment_safe(", ".join(skipped))
+        )
+        lines.append(_SPATIAL_INFO_SKIP_NOTE)
+    if not field or not translated:
+        reason = "no input SpatialObj field" if not field else "no translatable items"
+        lines.append(f"{df_out} = {df_in}  # TODO: Spatial Info — {reason}")
+        return GeneratedCode("\n".join(lines))
+
+    lines.append(
+        "# spatial tool — requires geopandas\n"
+        f"# the XML's spatial field is {comment_safe(field)!r}, but a frame read"
+        " through\n"
+        "# gpd.read_file (or built by Create Points) names its geometry"
+        ' "geometry" —\n'
+        "# fall back to the active geometry when the XML name is not a column\n"
+        "# the crs= labels a plain Series and asserts on a GeoSeries: every"
+        " frame\n"
+        "# here is EPSG:4326 by construction (docs/spatial-crs-design.md)\n"
+        "_geom = gpd.GeoSeries(\n"
+        f"    {df_in}[{py_str(field)}] if {py_str(field)} in {df_in}.columns"
+        f" else {df_in}.geometry,\n"
+        '    crs="EPSG:4326",\n'
+        ")\n"
+        f"{df_out} = {df_in}.copy()"
+    )
+    for item in translated:
+        out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
+        lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = _geom.{attr}")
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
