@@ -326,6 +326,20 @@ _DISTANCE_WARNING = (
 )
 
 
+# estimate_utm_crs() derives the zone from total_bounds, so it raises
+# ValueError("NaN or None values are not allowed.") when there is nothing to
+# derive from: every geometry missing, every geometry empty, or no rows at
+# all. Alteryx returns null distances in that case rather than failing, so
+# the generated code matches it — and logs, because an all-null spatial
+# field usually means an upstream read or join lost the geometry. Rows that
+# are individually missing need no guard: the estimate ignores them and
+# their distance comes out NaN, which is the null Alteryx writes.
+_EMPTY_GEOMETRY_NOTE = (
+    "# no geometry to estimate a UTM zone from (all missing/empty, or no\n"
+    "# rows) is not an error in Alteryx — it just yields null distances"
+)
+
+
 def _distance_todo(reason: str) -> str:
     return f"# TODO: Distance — {comment_safe(reason)}"
 
@@ -406,13 +420,25 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         f"_src = {_geoseries_expr(df_in, src_field)}",
         f"_dst = {_geoseries_expr(df_in, dst_field)}",
         _METRIC_CRS_NOTE,
-        "_crs_m = _src.estimate_utm_crs()",
     ]
     if _flag(config, "DistToInsideEdge"):
         body.append(_DISTANCE_INSIDE_EDGE_NOTE)
+    out_field = py_str("Distance" + units)
     body += [
         _DISTANCE_WARNING,
         f"{df_out} = {df_in}.copy()",
-        f"{df_out}[{py_str('Distance' + units)}] = (\n    {measure}\n)",
+        _EMPTY_GEOMETRY_NOTE,
+        "if pd.notna(_src.total_bounds).all():",
+        "    _crs_m = _src.estimate_utm_crs()",
+        f"    {df_out}[{out_field}] = (\n        {measure}\n    )",
+        "else:",
+        "    logger.warning(",
+        f'        "no usable {comment_safe(src_field)} geometry —'
+        f' %s is null", {out_field}',
+        "    )",
+        f'    {df_out}[{out_field}] = float("nan")',
     ]
-    return GeneratedCode("\n".join([*body, *lines]), requirements=_GEOPANDAS)
+    return GeneratedCode(
+        "\n".join([*body, *lines]),
+        requirements=_GEOPANDAS | {Requirement.LOGGING},
+    )

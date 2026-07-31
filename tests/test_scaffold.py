@@ -2332,6 +2332,25 @@ def test_scaffold_distance_measures_in_a_metric_crs() -> None:
     assert "WARNING: this is a planar UTM distance" in code
 
 
+def test_scaffold_distance_guards_an_unestimatable_crs() -> None:
+    # estimate_utm_crs() derives the zone from total_bounds, so it raises
+    # ValueError("NaN or None values are not allowed.") when every geometry
+    # is missing or empty, or there are no rows. Alteryx returns null
+    # distances there instead of failing, so the block must not crash.
+    code = scaffold(_distance_doc())
+    assert "if pd.notna(_src.total_bounds).all():" in code
+    assert "    _crs_m = _src.estimate_utm_crs()" in code
+    assert "no usable Centroid geometry" in code
+    assert 'df_2["DistanceKilometers"] = float("nan")' in code
+
+
+def test_scaffold_simple_distance_sets_up_a_logger() -> None:
+    # The empty-geometry branch warns, so the .md header must declare one.
+    code = scaffold_simple(_distance_doc())
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
+
+
 def test_scaffold_distance_reads_both_fields_from_one_record() -> None:
     # Source and Destination name two spatial columns of the same frame; the
     # Centroid is the column Spatial Info added upstream, so it resolves by

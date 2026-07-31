@@ -296,11 +296,31 @@ EPSG:4326 のまま `.distance()` を呼ぶと度が返る。
 ```python
 _src = gpd.GeoSeries(df_1["Centroid"] if ... else df_1.geometry, crs="EPSG:4326")
 _dst = gpd.GeoSeries(df_1["SpatialObj"] if ... else df_1.geometry, crs="EPSG:4326")
-_crs_m = _src.estimate_utm_crs()
-df_2["DistanceKilometers"] = (
-    _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000
-)
+if pd.notna(_src.total_bounds).all():
+    _crs_m = _src.estimate_utm_crs()
+    df_2["DistanceKilometers"] = (
+        _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000
+    )
+else:
+    logger.warning("no usable Centroid geometry — %s is null", "DistanceKilometers")
+    df_2["DistanceKilometers"] = float("nan")
 ```
+
+`total_bounds` を先に見ているのは、`estimate_utm_crs()` が
+**ゾーンの推定材料が無いと `ValueError: NaN or None values are not allowed.`
+で落ちる** ためである。該当するのは3ケース。
+
+| 状態 | `total_bounds` | Alteryx |
+| --- | --- | --- |
+| geometry が全部 null | `[nan nan nan nan]` | 距離は null になるだけ |
+| geometry が全部 empty | 同上 | 同上 |
+| 行が0件 | 同上 | 出力も0件 |
+
+一部の行だけ null の場合はガードに掛からない。推定は残りの行から行われ、
+欠けている行の距離だけ `NaN`(= Alteryx の null)になる。
+
+このガードが発火したときは、上流の読み込みか結合が geometry を
+落としている可能性が高いので、`logger.warning` で必ず痕跡を残す。
 
 投影の作法は
 [メートル演算は UTM へ投影してから測る](#メートル演算は-utm-へ投影してから測る共通ルール)
