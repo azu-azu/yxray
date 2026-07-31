@@ -43,6 +43,7 @@
      ▼                    ▼
  FindReplace       CreatePoints
                    SpatialMatch
+                   SpatialInfo
 
   （↑ すべての生成モジュールは _common だけに依存する）
                          │
@@ -91,7 +92,7 @@ __init__              ← 外部にはここだけ見せる
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
-| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch |
+| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo |
 | `_registry` | セグメント→生成関数の対応表(`GENERATORS`) | — |
 | `_assemble` | 全体組み立て・公開API | — |
 
@@ -161,8 +162,30 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
   「対応不可」と分かる形の明示的TODOに落とす
 - `Directory`/`Buffer`(`"partial"`)は後者に該当し、2026-07-19 時点で
   リポジトリ内に検証材料(実ワークフローXML)が無いため未昇格。
-  `MultiRowFormula`/`SpatialInfo`/`Distance`/`PolySplit`/`DynamicInput`
+  `MultiRowFormula`/`Distance`/`PolySplit`/`DynamicInput`
   (`"no"`)はcommit `56b34d5` で「1つの生成スニペットに還元すると誤ったコードを
   出すリスクの方が高い」と判断され、そもそも昇格候補から意図的に外されている
 - 昇格させる場合は本ドキュメントの表と `tool_registry.py` の該当 `ToolInfo`
   (hint文言が実際の生成コードと食い違わないよう)を両方更新すること
+
+### `SpatialInfo` の部分昇格(2026-07-31、`"no"` → `"partial"`)
+
+同じく `56b34d5` で候補外だったが、実ワークフローの `<Node>` XML が出てきたので
+`_findreplace` 型の部分昇格をした。**選択項目のうち `CentroidObj` だけ実コード、
+他は明示 TODO** という形である。
+
+`SelectedItems` の項目ごとに、golden 突合が要るかどうかが割れるのが理由:
+
+| 項目 | 出力の型 | golden CSV に出るか | 判断 |
+| --- | --- | --- | --- |
+| `CentroidObj` | SpatialObj | **出ない**(Map タブのみ) | 昇格。値がズレても CSV 比較を汚さない |
+| `Area` / `Length` | 数値 | 出る | 未昇格。EPSG:4326 は単位が度で、Alteryx の単位設定(sq miles / km)と一致しない |
+| その他 | — | — | 未昇格。実XMLが無く項目名すら未確定 |
+
+出力列名 `Centroid` は推測ではなく、実XMLの MetaInfo
+(`source="SpatialInfo: CentroidObj Source=SpatialObj"`)で裏取りしてある。
+Spatial Info はチェックボックスだけでリネームUIを持たないため、名前は固定。
+
+項目を増やすときは `_spatial.py` の `_SPATIAL_INFO_ITEMS` に1行足す。
+ただし数値を返す項目は、投影CRSの選択と Alteryx の単位設定を決めるまで
+足してはいけない。

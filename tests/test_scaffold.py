@@ -303,9 +303,49 @@ def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
     assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
 
 
+def test_scaffold_tab_read_guards_missing_dat() -> None:
+    # A MapInfo .tab is only a header file: geometry lives in the .map and
+    # the attribute table in the .dat, so a .tab on its own cannot produce
+    # the columns Alteryx declares. Same guard shape as .shp/.dbf, and
+    # .DAT passes too for uppercase sets from Windows.
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="DbFileInput",
+            x=0,
+            y=0,
+            config={"FileName": r"C:\data\master.tab"},
+        )
+    )
+    code = scaffold(doc)
+    assert 'any(_tab.with_suffix(s).exists() for s in (".dat", ".DAT"))' in code
+    assert 'raise FileNotFoundError(f"{_tab}: .dat sidecar not found")' in code
+    assert "df_1 = gpd.read_file(_tab)" in code
+    # .tab is a spatial format, so the read normalizes CRS like any other…
+    assert 'df_1 = df_1.to_crs("EPSG:4326")' in code
+    # …but SHAPE_RESTORE_SHX is shapefile-specific and must not leak here.
+    assert "SHAPE_RESTORE_SHX" not in code
+
+
+def test_scaffold_tab_write_goes_through_geopandas() -> None:
+    doc = _doc(
+        AlteryxNode(
+            tool_id=ToolID(1),
+            tool_type="DbFileOutput",
+            x=0,
+            y=0,
+            config={"FileName": r"C:\data\out.tab"},
+        )
+    )
+    code = scaffold(doc)
+    assert "import geopandas as gpd" in code
+    assert ".to_file(" in code
+    assert ".to_csv(" not in code
+
+
 def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
-    # Only .shp splits its attributes into a sidecar; single-file spatial
-    # formats read whole, so no guard and no pathlib import.
+    # Only .shp and .tab split their attributes into a sidecar; single-file
+    # spatial formats read whole, so no guard and no pathlib import.
     doc = _doc(
         AlteryxNode(
             tool_id=ToolID(1),
@@ -2178,6 +2218,66 @@ def test_scaffold_spatialmatch_unmatched_select_config_ignored() -> None:
     )
     code = scaffold(doc)
     assert "embedded Select" not in code
+
+
+def _spatialinfo_doc(
+    items: list[dict] | dict, field: str = "SpatialObj"
+) -> WorkflowDoc:
+    return _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="SpatialInfo",
+            x=10,
+            y=0,
+            config={
+                "SpatialObj": {"@field": field},
+                "SelectedItems": {"Item": items},
+            },
+        )
+    )
+
+
+def test_scaffold_spatialinfo_centroid() -> None:
+    # Alteryx names the new field after the item — its output MetaInfo tags
+    # it source="SpatialInfo: CentroidObj Source=SpatialObj" — and the tool
+    # has no rename UI, so "Centroid" is fixed.
+    code = scaffold(_spatialinfo_doc({"@name": "CentroidObj"}))
+    assert "import geopandas as gpd" in code
+    assert (
+        '    df_1["SpatialObj"] if "SpatialObj" in df_1.columns else df_1.geometry,'
+        in code
+    )
+    assert '    crs="EPSG:4326",' in code
+    assert "df_2 = df_1.copy()" in code
+    assert 'df_2["Centroid"] = _geom.centroid' in code
+    # a Centroid column never reaches a golden CSV, same as geometry
+    assert "drop it" in code
+    assert "TODO: Spatial Info" not in code
+
+
+def test_scaffold_spatialinfo_untranslated_items_stay_todo() -> None:
+    # Area/Length are numeric columns golden CSVs do compare, and EPSG:4326
+    # measures in degrees — emitting .area here would be a wrong number, so
+    # only the CentroidObj half is translated (the _findreplace rule).
+    code = scaffold(_spatialinfo_doc([{"@name": "CentroidObj"}, {"@name": "Area"}]))
+    assert 'df_2["Centroid"] = _geom.centroid' in code
+    assert "# TODO: Spatial Info — selected items not translated: Area" in code
+    assert "projected CRS" in code
+    assert ".area" not in code
+
+
+def test_scaffold_spatialinfo_no_translatable_item_passes_through() -> None:
+    code = scaffold(_spatialinfo_doc({"@name": "Area"}))
+    assert "df_2 = df_1  # TODO: Spatial Info — no translatable items" in code
+    assert "gpd.GeoSeries(" not in code
+    # nothing spatial is emitted, so the block must not pull geopandas in
+    assert "import geopandas as gpd" not in code
+
+
+def test_scaffold_spatialinfo_without_spatial_field_is_todo() -> None:
+    code = scaffold(_spatialinfo_doc({"@name": "CentroidObj"}, field=""))
+    assert "df_2 = df_1  # TODO: Spatial Info — no input SpatialObj field" in code
+    assert "_geom" not in code
 
 
 # ── Unsupported ────────────────────────────────────────────────────────────

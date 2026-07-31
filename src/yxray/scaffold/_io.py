@@ -2,7 +2,8 @@
 
 Everything that depends on the file path — extension dispatch
 (csv/excel/spatial), post-read CRS normalization, the .shp-without-.shx
-GDAL workaround, and the .dbf-sidecar guard — lives here, shared by
+GDAL workaround, and the sidecar guards (.shp/.dbf, .tab/.dat) — lives
+here, shared by
 gen_input/gen_output (the .py scaffold, paths via INPUTS/OUTPUTS dicts)
 and scaffold_simple_blocks (the .md scaffold, raw path literals).
 """
@@ -19,7 +20,26 @@ from yxray.scaffold._common import (
     ToolContext,
 )
 
-SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb"})
+SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb", ".tab"})
+
+# Formats that keep their attribute table in a same-name sidecar rather than
+# in the file the workflow names: read one without its sidecar and the
+# attribute columns Alteryx declares are gone, so both get an existence check
+# in front of the read. Uppercase suffixes pass too — GDAL's sidecar lookup
+# is case-insensitive and Windows-produced sets are often uppercase.
+# Each entry is (accepted suffixes, the comment explaining the guard).
+SIDECAR_EXTS: dict[str, tuple[tuple[str, ...], str]] = {
+    ".shp": (
+        (".dbf", ".DBF"),
+        "# attribute columns live in the same-name .dbf sidecar; GDAL opens\n"
+        "# a .shp without it geometry-only, with no error — fail loudly",
+    ),
+    ".tab": (
+        (".dat", ".DAT"),
+        "# a MapInfo .tab is only a header file — the attribute table lives\n"
+        "# in the same-name .dat sidecar, so refuse to read without it",
+    ),
+}
 
 # GDAL refuses a .shp whose .shx sidecar is missing; Alteryx reads it anyway,
 # so generated code must opt in to restoring the index. Process-wide config —
@@ -35,6 +55,14 @@ SHX_NOTE_LINES = [
 
 def is_shp(path: str | None) -> bool:
     return path is not None and pathlib.Path(path).suffix.lower() == ".shp"
+
+
+def sidecar_ext(path: str | None) -> str:
+    """The path's extension when it needs a sidecar guard, else ""."""
+    if not path:
+        return ""
+    ext = pathlib.Path(path).suffix.lower()
+    return ext if ext in SIDECAR_EXTS else ""
 
 
 def _file_read(path_expr: str, ext: str) -> str:
@@ -80,22 +108,24 @@ def _crs_normalize_stmt(target: str, src_expr: str) -> str:
     )
 
 
-def _shp_read_stmt(target: str, path_expr: str) -> str:
-    """.shp read with a .dbf-sidecar guard in front.
+def _sidecar_read_stmt(target: str, path_expr: str, ext: str) -> str:
+    """Spatial read with a sidecar-existence guard in front.
 
-    GDAL treats the .dbf as optional — a .shp whose .dbf sidecar is missing
-    (or SHAPE_RESTORE_SHX reviving a lone .shp) opens geometry-only with no
-    error, and every attribute column Alteryx declares silently vanishes.
-    Fail loudly before the read instead. .DBF too: sidecar lookup is
-    case-insensitive in GDAL, so uppercase sets from Windows must pass.
+    For .shp GDAL treats the .dbf as optional — a .shp whose .dbf sidecar is
+    missing (or SHAPE_RESTORE_SHX reviving a lone .shp) opens geometry-only
+    with no error, and every attribute column Alteryx declares silently
+    vanishes. For .tab the attribute table is likewise not in the named file.
+    Fail loudly before the read instead of reading a stripped frame.
     """
+    suffixes, note = SIDECAR_EXTS[ext]
+    var = f"_{ext.lstrip('.')}"
+    accepted = ", ".join(f'"{s}"' for s in suffixes)
     return (
-        "# attribute columns live in the same-name .dbf sidecar; GDAL opens\n"
-        "# a .shp without it geometry-only, with no error — fail loudly\n"
-        f"_shp = Path({path_expr})\n"
-        'if not any(_shp.with_suffix(s).exists() for s in (".dbf", ".DBF")):\n'
-        '    raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")\n'
-        f"{target} = gpd.read_file(_shp)\n" + _crs_normalize_stmt(target, "_shp")
+        f"{note}\n"
+        f"{var} = Path({path_expr})\n"
+        f"if not any({var}.with_suffix(s).exists() for s in ({accepted})):\n"
+        f'    raise FileNotFoundError(f"{{{var}}}: {suffixes[0]} sidecar not found")\n'
+        f"{target} = gpd.read_file({var})\n" + _crs_normalize_stmt(target, var)
     )
 
 
@@ -109,8 +139,8 @@ def read_stmt(target: str, path: str | None, path_expr: str) -> str:
     if not path:
         return f"{target} = pd.read_csv(...)  # TODO: set file path"
     ext = pathlib.Path(path).suffix.lower()
-    if ext == ".shp":
-        return _shp_read_stmt(target, path_expr)
+    if ext in SIDECAR_EXTS:
+        return _sidecar_read_stmt(target, path_expr, ext)
     stmt = f"{target} = {_file_read(path_expr, ext)}"
     if ext in SPATIAL_EXTS:
         stmt += "\n" + _crs_normalize_stmt(target, path_expr)
@@ -153,13 +183,13 @@ def _path_requirements(path: str | None) -> frozenset[Requirement]:
 def _read_requirements(path: str | None) -> frozenset[Requirement]:
     """What the read_stmt emission relies on, beyond pandas.
 
-    Spatial reads also declare LOGGING (the CRS-None branch warns);
-    .shp reads additionally declare PATHLIB (the .dbf guard builds a Path).
+    Spatial reads also declare LOGGING (the CRS-None branch warns); sidecar
+    formats additionally declare PATHLIB (the guard builds a Path).
     """
     reqs = set(_path_requirements(path))
     if reqs:
         reqs.add(Requirement.LOGGING)
-    if is_shp(path):
+    if sidecar_ext(path):
         reqs.add(Requirement.PATHLIB)
     return frozenset(reqs)
 

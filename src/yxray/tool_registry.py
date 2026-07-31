@@ -202,9 +202,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "SpatialInfo": ToolInfo(
         "Spatial Info",
         "transform",
-        "# TODO: spatial info — depends on SelectedItems, e.g. "
-        "gdf.geometry.centroid / .area / .length / .is_valid",
-        "no",
+        'df["Centroid"] = gpd.GeoSeries(geom, crs="EPSG:4326").centroid  '
+        "# CentroidObj only; Area/Length need a projected CRS",
+        "partial",
     ),
     "Buffer": ToolInfo(
         "Buffer",
@@ -302,9 +302,12 @@ SCAFFOLD_FINDREPLACE_SEGMENTS = frozenset({"FindReplace"})
 SCAFFOLD_APPENDFIELDS_SEGMENTS = frozenset({"AppendFields"})
 SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})
 SCAFFOLD_SPATIALMATCH_SEGMENTS = frozenset({"SpatialMatch"})
+SCAFFOLD_SPATIALINFO_SEGMENTS = frozenset({"SpatialInfo"})
 SCAFFOLD_BROWSE_SEGMENTS = frozenset({"Browse", "BrowseV2"})
 SCAFFOLD_SPATIAL_SEGMENTS = (
-    SCAFFOLD_CREATEPOINTS_SEGMENTS | SCAFFOLD_SPATIALMATCH_SEGMENTS
+    SCAFFOLD_CREATEPOINTS_SEGMENTS
+    | SCAFFOLD_SPATIALMATCH_SEGMENTS
+    | SCAFFOLD_SPATIALINFO_SEGMENTS
 )
 
 
