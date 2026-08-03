@@ -44,6 +44,7 @@
  FindReplace       CreatePoints
                    SpatialMatch
                    SpatialInfo
+                   Distance
 
   （↑ すべての生成モジュールは _common だけに依存する）
                          │
@@ -92,7 +93,7 @@ __init__              ← 外部にはここだけ見せる
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
-| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo |
+| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo, Distance |
 | `_registry` | セグメント→生成関数の対応表(`GENERATORS`) | — |
 | `_assemble` | 全体組み立て・公開API | — |
 
@@ -162,7 +163,7 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
   「対応不可」と分かる形の明示的TODOに落とす
 - `Directory`/`Buffer`(`"partial"`)は後者に該当し、2026-07-19 時点で
   リポジトリ内に検証材料(実ワークフローXML)が無いため未昇格。
-  `MultiRowFormula`/`Distance`/`PolySplit`/`DynamicInput`
+  `MultiRowFormula`/`PolySplit`/`DynamicInput`
   (`"no"`)はcommit `56b34d5` で「1つの生成スニペットに還元すると誤ったコードを
   出すリスクの方が高い」と判断され、そもそも昇格候補から意図的に外されている
 - 昇格させる場合は本ドキュメントの表と `tool_registry.py` の該当 `ToolInfo`
@@ -188,4 +189,28 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 
 項目を増やすときは `_spatial.py` の `_SPATIAL_INFO_ITEMS` に1行足す。
 ただし数値を返す項目は、投影CRSの選択と Alteryx の単位設定を決めるまで
-足してはいけない。
+足してはいけない(投影CRSの方は
+[spatial-crs-design.md の共通ルール](spatial-crs-design.md#メートル演算は-utm-へ投影してから測る共通ルール)
+で解決済みだが、単位設定は Spatial Info の XML に現れないため未解決)。
+
+### `Distance` の部分昇格(2026-07-31、`"no"` → `"partial"`)
+
+同じく実XMLが出てきたので昇格。**単一入力・直線距離だけ実コード、
+方位と2入力モードとドライブタイムは TODO** という形である。
+
+単一入力に限る根拠は MetaInfo で、出力 RecordInfo が1系統の列しか持たない
+(2入力なら `Target_`/`Universe_` 接頭辞つきで両系統が並ぶ)。
+`SpatialObjSource`/`SpatialObjDest` は同じレコード内の2列を指している。
+
+| 出力 | 判断 |
+| --- | --- |
+| 距離 | 昇格。ただし投影誤差があるので生成コードに WARNING を出す |
+| 方位(`Direction`) | 未昇格。8方位なのは `size="2"` から確定できるが、ポリゴンのどの点への方位かが不明 |
+| ドライブタイム | 未昇格。routing サービスが要る |
+| 2入力モード | 未昇格。`ReturnNearest` の行選択規則が未検証 |
+
+距離だけ「golden 突合なし」の原則を緩めているのは、
+**形が完全に確定していて、残る不確定が投影誤差だけ** だからである。
+しかも誤差は golden diff に必ず現れる(黙って通らない)。
+それでも Double 列なので、生成コードに
+`WARNING: this is a planar UTM distance` を残してある。

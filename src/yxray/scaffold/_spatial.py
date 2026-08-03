@@ -1,10 +1,15 @@
-"""Spatial tools (Create Points, Spatial Match, Spatial Info) for the
-scaffold generator.
+"""Spatial tools (Create Points, Spatial Match, Spatial Info, Distance)
+for the scaffold generator.
 
 All emit geopandas code; the CRS story that makes them safe (everything
 normalized to WGS84, matching Alteryx's SpatialObj convention) is split
 with _io: file reads normalize on load there, Create Points hard-codes
 EPSG:4326 here.
+
+Distance is the one tool that cannot just trust that invariant — it
+outputs a metric number, and EPSG:4326 measures in degrees — so it
+projects into an estimated UTM zone for the measurement alone. That rule
+is shared, not per-tool: see _METRIC_CRS_NOTE.
 """
 
 from __future__ import annotations
@@ -28,6 +33,63 @@ from yxray.scaffold._common import (
 )
 
 _GEOPANDAS = frozenset({Requirement.GEOPANDAS})
+
+
+def _flag(config: dict[str, Any], key: str, *, default: bool = False) -> bool:
+    """A <Key value="True"/> switch, or `default` when the tag is absent."""
+    node = config.get(key)
+    if not isinstance(node, dict):
+        return default
+    value = node.get("@value")
+    return default if value is None else str(value).lower() == "true"
+
+
+def _spatial_field_note(*fields: str) -> str:
+    """Why the generated code does not simply index the XML's field name."""
+    quoted = " and ".join(repr(comment_safe(f)) for f in fields)
+    head = (
+        f"# the XML's spatial field is {quoted}"
+        if len(fields) == 1
+        else f"# the XML's spatial fields are {quoted}"
+    )
+    return (
+        f"{head}, but a frame read through\n"
+        "# gpd.read_file (or built by Create Points) names its geometry"
+        ' "geometry" —\n'
+        "# fall back to the active geometry when the XML name is not a column\n"
+        "# the crs= labels a plain Series and asserts on a GeoSeries: every"
+        " frame\n"
+        "# here is EPSG:4326 by construction (docs/spatial-crs-design.md)"
+    )
+
+
+def _geoseries_expr(df: str, field: str) -> str:
+    """A GeoSeries for an Alteryx spatial field of `df`.
+
+    Alteryx calls the field SpatialObj (or whatever an upstream tool named
+    it); the generated frames call the active geometry "geometry", so the
+    XML name is used only when it really is a column — which it is exactly
+    when an earlier tool created it, e.g. Spatial Info's Centroid.
+    """
+    return (
+        "gpd.GeoSeries(\n"
+        f"    {df}[{py_str(field)}] if {py_str(field)} in {df}.columns"
+        f" else {df}.geometry,\n"
+        '    crs="EPSG:4326",\n'
+        ")"
+    )
+
+
+# Metric operations have no answer on EPSG:4326 — the invariant CRS here
+# (docs/spatial-crs-design.md) — because its unit is the degree, so the
+# project-wide rule is: project every operand into ONE metric CRS estimated
+# from the data, measure there, convert metres into the unit the tool's
+# config asks for. UTM stays sub-metre inside its zone; EPSG:3857 is not an
+# option, overstating by 1/cos(latitude) — 23% at Tokyo's 35.7°N.
+_METRIC_CRS_NOTE = (
+    "# EPSG:4326 measures in degrees — project both operands into one metric\n"
+    "# CRS (UTM estimated from the data) before measuring"
+)
 
 
 def gen_createpoints(ctx: ToolContext) -> GeneratedCode:
@@ -224,22 +286,159 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
 
     lines.append(
         "# spatial tool — requires geopandas\n"
-        f"# the XML's spatial field is {comment_safe(field)!r}, but a frame read"
-        " through\n"
-        "# gpd.read_file (or built by Create Points) names its geometry"
-        ' "geometry" —\n'
-        "# fall back to the active geometry when the XML name is not a column\n"
-        "# the crs= labels a plain Series and asserts on a GeoSeries: every"
-        " frame\n"
-        "# here is EPSG:4326 by construction (docs/spatial-crs-design.md)\n"
-        "_geom = gpd.GeoSeries(\n"
-        f"    {df_in}[{py_str(field)}] if {py_str(field)} in {df_in}.columns"
-        f" else {df_in}.geometry,\n"
-        '    crs="EPSG:4326",\n'
-        ")\n"
+        f"{_spatial_field_note(field)}\n"
+        f"_geom = {_geoseries_expr(df_in, field)}\n"
         f"{df_out} = {df_in}.copy()"
     )
     for item in translated:
         out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
         lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = _geom.{attr}")
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
+
+
+# Metres per unit, keyed by Alteryx's OutputUnits spelling. The output field
+# is named "Distance" + that spelling, confirmed by the tool's output
+# MetaInfo: source="Distance: Distance Source=Centroid Destination=SpatialObj
+# Units=Kilometers" on a field named DistanceKilometers. An unlisted spelling
+# falls through to a TODO rather than guessing a conversion factor.
+_DISTANCE_UNITS: dict[str, float] = {
+    "Kilometers": 1000.0,
+    "Meters": 1.0,
+    "Miles": 1609.344,
+    "Feet": 0.3048,
+    "Yards": 0.9144,
+    "NauticalMiles": 1852.0,
+}
+
+_DISTANCE_INSIDE_EDGE_NOTE = (
+    "# DistToInsideEdge=True: measure to the boundary, so a source inside the\n"
+    "# destination polygon gets the distance to its nearest edge instead of 0\n"
+    "# (outside the polygon the two are identical)"
+)
+
+# The distance lands in a Double column that golden CSVs do compare, and a
+# planar UTM measurement is not bit-identical to whatever earth model the
+# Alteryx engine uses. The shape of the translation is settled; the last
+# digits are not, so the generated code says so instead of implying parity.
+_DISTANCE_WARNING = (
+    "# WARNING: this is a planar UTM distance — Alteryx measures on its own\n"
+    "# earth model, so diff this column against golden output before trusting it"
+)
+
+
+# estimate_utm_crs() derives the zone from total_bounds, so it raises
+# ValueError("NaN or None values are not allowed.") when there is nothing to
+# derive from: every geometry missing, every geometry empty, or no rows at
+# all. Alteryx returns null distances in that case rather than failing, so
+# the generated code matches it — and logs, because an all-null spatial
+# field usually means an upstream read or join lost the geometry. Rows that
+# are individually missing need no guard: the estimate ignores them and
+# their distance comes out NaN, which is the null Alteryx writes.
+_EMPTY_GEOMETRY_NOTE = (
+    "# no geometry to estimate a UTM zone from (all missing/empty, or no\n"
+    "# rows) is not an error in Alteryx — it just yields null distances"
+)
+
+
+def _distance_todo(reason: str) -> str:
+    return f"# TODO: Distance — {comment_safe(reason)}"
+
+
+def _direction_todos(config: dict[str, Any], src: str, dst: str) -> list[str]:
+    """TODO lines for the direction outputs, which are never generated.
+
+    The cardinal field is named Direction and holds an 8-point compass point
+    (its MetaInfo declares size=2, and 16-point labels need 3 characters),
+    but which point of a polygon destination Alteryx takes the bearing to is
+    not pinned down by anything in the XML — so it stays a TODO.
+    """
+    todos: list[str] = []
+    pair = f"{comment_safe(src)} -> {comment_safe(dst)}"
+    if _flag(config, "OutputCardinalDirection"):
+        todos.append(
+            _distance_todo('"Direction" (8-point compass) is not translated:')
+            + f"\n#   {pair}, but the point Alteryx takes the bearing to on a"
+            "\n#   polygon destination is unverified"
+        )
+    if _flag(config, "OutputDirectionDegrees"):
+        todos.append(
+            _distance_todo("the bearing-in-degrees output is not translated:")
+            + f"\n#   {pair}, same open question, and its field name is not"
+            "\n#   confirmed by any MetaInfo we have"
+        )
+    return todos
+
+
+def gen_distance(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    config = ctx.config
+    src_field = first_text(config, "SpatialObjSource")
+    dst_field = first_text(config, "SpatialObjDest")
+    units = first_text(config, "OutputUnits")
+
+    blocker = ""
+    if _flag(config, "OutputDriveTimeAndDistance"):
+        blocker = (
+            "drive-time/drive-distance mode has no pandas equivalent"
+            " (needs a routing service)"
+        )
+    elif len(ctx.preds) > 1:
+        blocker = (
+            "two-input mode pairs whole streams — how ReturnNearest picks the"
+            " rows is unverified, so only the single-input form is translated"
+        )
+    elif not _flag(config, "OutputDistance", default=True):
+        blocker = "the distance output is switched off"
+    elif not src_field or not dst_field:
+        blocker = "Source/Destination spatial fields not found"
+    elif units not in _DISTANCE_UNITS:
+        blocker = f"unknown OutputUnits {units!r} — no conversion from metres"
+
+    lines = _direction_todos(config, src_field, dst_field)
+    if blocker:
+        lines.insert(0, _distance_todo(blocker))
+        lines.append(f"{df_out} = {df_in}")
+        return GeneratedCode("\n".join(lines))
+
+    dst_expr = "_dst.to_crs(_crs_m)"
+    if _flag(config, "DistToInsideEdge"):
+        dst_expr += ".boundary"
+    measure = f"_src.to_crs(_crs_m).distance({dst_expr})"
+    per_unit = _DISTANCE_UNITS[units]
+    if per_unit != 1.0:
+        # .10g keeps every digit of the factors (%g's default 6 would emit
+        # 1609.34 for a mile) while dropping the trailing .0 from round ones.
+        measure += f" / {per_unit:.10g}"
+
+    body = [
+        "# spatial tool — requires geopandas",
+        "# single input: Source and Destination are two spatial fields of the"
+        " same\n# record — the Centroid here is the column Spatial Info added"
+        " upstream",
+        _spatial_field_note(src_field, dst_field),
+        f"_src = {_geoseries_expr(df_in, src_field)}",
+        f"_dst = {_geoseries_expr(df_in, dst_field)}",
+        _METRIC_CRS_NOTE,
+    ]
+    if _flag(config, "DistToInsideEdge"):
+        body.append(_DISTANCE_INSIDE_EDGE_NOTE)
+    out_field = py_str("Distance" + units)
+    body += [
+        _DISTANCE_WARNING,
+        f"{df_out} = {df_in}.copy()",
+        _EMPTY_GEOMETRY_NOTE,
+        "if pd.notna(_src.total_bounds).all():",
+        "    _crs_m = _src.estimate_utm_crs()",
+        f"    {df_out}[{out_field}] = (\n        {measure}\n    )",
+        "else:",
+        "    logger.warning(",
+        f'        "no usable {comment_safe(src_field)} geometry —'
+        f' %s is null", {out_field}',
+        "    )",
+        f'    {df_out}[{out_field}] = float("nan")',
+    ]
+    return GeneratedCode(
+        "\n".join([*body, *lines]),
+        requirements=_GEOPANDAS | {Requirement.LOGGING},
+    )

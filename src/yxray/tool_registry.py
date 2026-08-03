@@ -216,10 +216,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "Distance": ToolInfo(
         "Distance",
         "transform",
-        "# TODO: distance — straight-line: gpd.sjoin_nearest(targets, sources, "
-        'distance_col="Distance"); drive-time/drive-distance mode has no pandas '
-        "equivalent (needs a routing service)",
-        "no",
+        'df["Distance<Units>"] = src.to_crs(src.estimate_utm_crs()).distance(dst)'
+        "  # straight-line only; drive-time mode needs a routing service",
+        "partial",
     ),
     "PolySplit": ToolInfo(
         "Poly Split",
@@ -303,11 +302,13 @@ SCAFFOLD_APPENDFIELDS_SEGMENTS = frozenset({"AppendFields"})
 SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})
 SCAFFOLD_SPATIALMATCH_SEGMENTS = frozenset({"SpatialMatch"})
 SCAFFOLD_SPATIALINFO_SEGMENTS = frozenset({"SpatialInfo"})
+SCAFFOLD_DISTANCE_SEGMENTS = frozenset({"Distance"})
 SCAFFOLD_BROWSE_SEGMENTS = frozenset({"Browse", "BrowseV2"})
 SCAFFOLD_SPATIAL_SEGMENTS = (
     SCAFFOLD_CREATEPOINTS_SEGMENTS
     | SCAFFOLD_SPATIALMATCH_SEGMENTS
     | SCAFFOLD_SPATIALINFO_SEGMENTS
+    | SCAFFOLD_DISTANCE_SEGMENTS
 )
 
 

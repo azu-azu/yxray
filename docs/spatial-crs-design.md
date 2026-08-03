@@ -64,6 +64,7 @@ yxray の空間処理は、
 | `_spatial.py` / Create Points | 新しい geometry に EPSG:4326 を付与する(確立) |
 | `_spatial.py` / Spatial Match | 空間結合に限定される(信頼) |
 | `_spatial.py` / Spatial Info | 重心の算出に限定される(信頼) |
+| `_spatial.py` / Distance | 測るあいだだけメートル系へ投影する(一時離脱) |
 
 `_spatial.py` の先頭 docstring にも、この分担が明記されている。
 
@@ -114,13 +115,13 @@ SPATIAL_EXTS = frozenset({".shp", ".geojson", ".gpkg", ".gdb", ".tab"})
 
 さらに空間ファイルを読んだ場合に限り、`read_stmt()` が
 直後に `_crs_normalize_stmt()` の出力を追加する
-(.shp の場合は `_shp_read_stmt()` 経由で、.dbf サイドカーの
-存在チェックも前置される —
+(サイドカーを持つ形式 — .shp/.dbf と .tab/.dat — は
+`_sidecar_read_stmt()` 経由で、存在チェックも前置される —
 [shapefile-sidecar-anatomy.md](shapefile-sidecar-anatomy.md) 参照)。
 
 ```python
-if ext == ".shp":
-    return _shp_read_stmt(target, path_expr)
+if ext in SIDECAR_EXTS:
+    return _sidecar_read_stmt(target, path_expr, ext)
 stmt = f"{target} = {_file_read(path_expr, ext)}"
 if ext in SPATIAL_EXTS:
     stmt += "\n" + _crs_normalize_stmt(target, path_expr)
@@ -286,6 +287,53 @@ CRS 不一致で `ValueError` になる。不変条件が崩れていたら黙�
 一方 **面積・長さは同じ扱いにできない** ので、`Area`/`Length` が選択されていても
 生成せず TODO に落としている([Limitations](#limitations) の距離・バッファと同じ理由)。
 
+### Distance はメートル系へ一時離脱する
+
+`gen_distance()` は、不変条件をそのまま信頼できない唯一のツールである。
+出力が「キロメートル」という **メートル単位の数値** だからで、
+EPSG:4326 のまま `.distance()` を呼ぶと度が返る。
+
+```python
+_src = gpd.GeoSeries(df_1["Centroid"] if ... else df_1.geometry, crs="EPSG:4326")
+_dst = gpd.GeoSeries(df_1["SpatialObj"] if ... else df_1.geometry, crs="EPSG:4326")
+if pd.notna(_src.total_bounds).all():
+    _crs_m = _src.estimate_utm_crs()
+    df_2["DistanceKilometers"] = (
+        _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000
+    )
+else:
+    logger.warning("no usable Centroid geometry — %s is null", "DistanceKilometers")
+    df_2["DistanceKilometers"] = float("nan")
+```
+
+`total_bounds` を先に見ているのは、`estimate_utm_crs()` が
+**ゾーンの推定材料が無いと `ValueError: NaN or None values are not allowed.`
+で落ちる** ためである。該当するのは3ケース。
+
+| 状態 | `total_bounds` | Alteryx |
+| --- | --- | --- |
+| geometry が全部 null | `[nan nan nan nan]` | 距離は null になるだけ |
+| geometry が全部 empty | 同上 | 同上 |
+| 行が0件 | 同上 | 出力も0件 |
+
+一部の行だけ null の場合はガードに掛からない。推定は残りの行から行われ、
+欠けている行の距離だけ `NaN`(= Alteryx の null)になる。
+
+このガードが発火したときは、上流の読み込みか結合が geometry を
+落としている可能性が高いので、`logger.warning` で必ず痕跡を残す。
+
+投影の作法は
+[メートル演算は UTM へ投影してから測る](#メートル演算は-utm-へ投影してから測る共通ルール)
+に共通ルールとしてまとめてある。`.boundary` を挟んでいるのは
+Alteryx の `DistToInsideEdge=True`(ソースがポリゴンの内側なら 0 ではなく
+最寄りの辺までの距離を返す)に対応するためで、外側のときは
+`.distance(poly)` と `.distance(poly.boundary)` が恒等的に一致するので
+両ケースをこれ1つで満たせる。
+
+方位(`Direction`)は生成しない。8方位の文字列であることは
+MetaInfo の `size="2"` から確定できるが(16方位なら `NNE` で3文字必要)、
+ポリゴン相手にどの点への方位を取るのかが XML からは決まらないためである。
+
 ### Filter や Select で何もしなくてよい理由
 
 GeoDataFrame に対して通常の行・列操作を行っても、
@@ -394,9 +442,39 @@ df_result = df_metric.to_crs(original_crs)
 地域に合った UTM や日本の平面直角座標系など、
 対象地域に適した CRS を選ぶべきである。
 
-現状の scaffold が生成する Spatial Match は述語ベースに限られるため、
-**生成コードの範囲ではこの問題は起きない**。
-生成後のコードに手作業で距離・バッファ処理を足す場合の注意点である。
+この問題に生成コード側で答えを出しているのが、次の共通ルールである。
+
+### メートル演算は UTM へ投影してから測る(共通ルール)
+
+Distance のようにメートル単位の数値を出すツールは、
+不変条件(EPSG:4326)のままでは翻訳できない。かといって
+ツールごとに投影先を選ぶと基準がバラつくので、
+**投影先の決め方を1つに固定** している(`_spatial.py` の `_METRIC_CRS_NOTE`)。
+
+```python
+_crs_m = _src.estimate_utm_crs()          # データから UTM ゾーンを推定
+_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)) / 1000   # m → km
+```
+
+ルールは3つ。
+
+1. **投影先はデータから推定した UTM**(`estimate_utm_crs()`)。
+   ゾーン内ならスケール誤差は 0.1% 未満で、建物スケールなら cm オーダー
+2. **オペランドは全部、同じ CRS へ投影する**。
+   片方だけ投影すると座標系の違う数値どうしを比べることになる
+3. **測るのはメートル、単位換算は最後**。
+   Alteryx の `OutputUnits`(Kilometers / Miles / …)に応じて割る
+
+EPSG:3857 は使わない。緯度によって `1/cos(緯度)` 倍に膨らむので、
+東京(北緯35.7°)では距離が約 23% 過大になる。
+
+なお、この投影は **測るあいだだけの一時離脱** であり、
+出力フレームの geometry 列は EPSG:4326 のままである
+(新しい列に数値を入れるだけで、フレームを投影し直さない)。
+
+Spatial Info の Area/Length にこのルールを適用していないのは、
+CRS の問題が解けても **Alteryx 側の単位設定が XML に現れない** ためで、
+CRS とは別の未解決点が残っているからである。
 
 ---
 

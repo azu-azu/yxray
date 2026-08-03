@@ -2280,6 +2280,144 @@ def test_scaffold_spatialinfo_without_spatial_field_is_todo() -> None:
     assert "_geom" not in code
 
 
+def _distance_config(**overrides: object) -> dict:
+    # The real node's configuration (ToolID 1106): straight-line distance in
+    # kilometers between two spatial fields of one record, plus a cardinal
+    # direction. The drive-time settings are inert while
+    # OutputDriveTimeAndDistance is False.
+    config: dict = {
+        "OutputDistance": {"@value": "True"},
+        "ReturnNearest": {"@value": "False"},
+        "DistToInsideEdge": {"@value": "True"},
+        "OutputDriveTimeAndDistance": {"@value": "False"},
+        "SpatialObjSource": {"#text": "Centroid"},
+        "SpatialObjDest": {"#text": "SpatialObj"},
+        "DriveTimeDataSet": {"#text": "Latest"},
+        "AllowReverseRoute": {"@value": "True"},
+        "MaxDriveTime": {"@value": "30"},
+        "DriveDistanceOnly": {"@value": "False"},
+        "OutputCardinalDirection": {"@value": "True"},
+        "OutputDirectionDegrees": {"@value": "False"},
+        "IsMetric": {"@value": "True"},
+        "OutputUnits": {"#text": "Kilometers"},
+    }
+    config.update(overrides)
+    return config
+
+
+def _distance_doc(**overrides: object) -> WorkflowDoc:
+    return _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Distance",
+            x=10,
+            y=0,
+            config=_distance_config(**overrides),
+        )
+    )
+
+
+def test_scaffold_distance_measures_in_a_metric_crs() -> None:
+    # EPSG:4326 measures in degrees, but the tool outputs kilometers, so both
+    # operands project into one UTM zone estimated from the data. EPSG:3857
+    # would overstate by 1/cos(latitude) and must not appear.
+    code = scaffold(_distance_doc())
+    assert "_crs_m = _src.estimate_utm_crs()" in code
+    assert "3857" not in code
+    # the output field name is Distance + the XML's OutputUnits spelling,
+    # confirmed by the node's MetaInfo (DistanceKilometers)
+    assert 'df_2["DistanceKilometers"] = (' in code
+    assert "_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000" in code
+    # a Double column golden CSVs compare — the block must not imply parity
+    assert "WARNING: this is a planar UTM distance" in code
+
+
+def test_scaffold_distance_guards_an_unestimatable_crs() -> None:
+    # estimate_utm_crs() derives the zone from total_bounds, so it raises
+    # ValueError("NaN or None values are not allowed.") when every geometry
+    # is missing or empty, or there are no rows. Alteryx returns null
+    # distances there instead of failing, so the block must not crash.
+    code = scaffold(_distance_doc())
+    assert "if pd.notna(_src.total_bounds).all():" in code
+    assert "    _crs_m = _src.estimate_utm_crs()" in code
+    assert "no usable Centroid geometry" in code
+    assert 'df_2["DistanceKilometers"] = float("nan")' in code
+
+
+def test_scaffold_simple_distance_sets_up_a_logger() -> None:
+    # The empty-geometry branch warns, so the .md header must declare one.
+    code = scaffold_simple(_distance_doc())
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
+
+
+def test_scaffold_distance_reads_both_fields_from_one_record() -> None:
+    # Source and Destination name two spatial columns of the same frame; the
+    # Centroid is the column Spatial Info added upstream, so it resolves by
+    # name, while SpatialObj falls back to the active geometry.
+    code = scaffold(_distance_doc())
+    assert "_src = gpd.GeoSeries(" in code
+    assert 'df_1["Centroid"] if "Centroid" in df_1.columns else df_1.geometry' in code
+    assert (
+        'df_1["SpatialObj"] if "SpatialObj" in df_1.columns else df_1.geometry' in code
+    )
+
+
+def test_scaffold_distance_inside_edge_measures_to_the_boundary() -> None:
+    # DistToInsideEdge=True means a source inside the polygon reports the
+    # distance to the nearest edge instead of 0 — .boundary does exactly
+    # that, and outside the polygon it is identical to plain .distance.
+    assert ".boundary)" in scaffold(_distance_doc())
+    plain = scaffold(_distance_doc(DistToInsideEdge={"@value": "False"}))
+    assert "_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)) / 1000" in plain
+    assert ".boundary" not in plain
+
+
+def test_scaffold_distance_converts_to_the_configured_unit() -> None:
+    miles = scaffold(_distance_doc(OutputUnits={"#text": "Miles"}))
+    assert 'df_2["DistanceMiles"] = (' in miles
+    assert "/ 1609.344" in miles
+    # metres need no conversion, so no division is emitted
+    meters = scaffold(_distance_doc(OutputUnits={"#text": "Meters"}))
+    assert 'df_2["DistanceMeters"] = (' in meters
+    assert "/ 1" not in meters
+
+
+def test_scaffold_distance_unknown_unit_is_todo() -> None:
+    code = scaffold(_distance_doc(OutputUnits={"#text": "Leagues"}))
+    assert "# TODO: Distance — unknown OutputUnits 'Leagues'" in code
+    assert "df_2 = df_1" in code
+    assert "estimate_utm_crs" not in code
+
+
+def test_scaffold_distance_direction_stays_todo() -> None:
+    # Direction is an 8-point compass string (its MetaInfo declares size=2),
+    # but which point of a polygon destination the bearing runs to is not
+    # settled by the XML, so it is never generated.
+    code = scaffold(_distance_doc())
+    assert '# TODO: Distance — "Direction" (8-point compass) is not translated' in code
+    assert "Centroid -> SpatialObj" in code
+    # …while the distance half is still real code
+    assert 'df_2["DistanceKilometers"]' in code
+
+
+def test_scaffold_distance_drive_time_mode_is_todo() -> None:
+    code = scaffold(_distance_doc(OutputDriveTimeAndDistance={"@value": "True"}))
+    assert "# TODO: Distance — drive-time/drive-distance mode" in code
+    assert "routing service" in code
+    assert "estimate_utm_crs" not in code
+    assert "import geopandas as gpd" not in code
+
+
+def test_scaffold_distance_two_inputs_is_todo() -> None:
+    # Two streams pair rows instead of reading two fields of one record, and
+    # how ReturnNearest picks them is unverified.
+    doc = _two_input_doc("Distance", _distance_config(), "Target", "Destination")
+    code = scaffold(doc)
+    assert "# TODO: Distance — two-input mode" in code
+    assert "estimate_utm_crs" not in code
+
+
 # ── Unsupported ────────────────────────────────────────────────────────────
 
 
