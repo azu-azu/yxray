@@ -312,6 +312,29 @@ SCAFFOLD_SPATIAL_SEGMENTS = (
 )
 
 
+# Every app-interface tool (Tab, TextBox, Action, Control Parameter, and the
+# ToolContainer grouping box) is an AlteryxGuiToolkit plugin. They carry no
+# data: an Action's edge into a Filter says "this rewrites the Filter's
+# config at runtime", not "this feeds it rows", so data-flow code has to
+# leave them out even when the parser was asked to keep them.
+UI_TOOL_PREFIX = "AlteryxGuiToolkit."
+
+
+def is_ui_tool(tool_type: str) -> bool:
+    """An app-interface / canvas-decoration tool rather than a data tool."""
+    return tool_type.startswith(UI_TOOL_PREFIX)
+
+
+def is_dataflow_tool(tool_type: str) -> bool:
+    """A tool that actually passes rows, so it belongs in the data graph.
+
+    ToolContainer is matched by name as well as by prefix: the parser keeps
+    containers even when it filters the rest of the toolkit, and older files
+    have been seen writing the plugin under a different namespace.
+    """
+    return not is_ui_tool(tool_type) and "ToolContainer" not in tool_type
+
+
 def tool_segment(tool_type: str) -> str:
     return tool_type.split(".")[-1]
 

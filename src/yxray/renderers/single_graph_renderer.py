@@ -203,12 +203,15 @@ class SingleGraphRenderer:
             if int(c.src_tool) in data_node_ids and int(c.dst_tool) in data_node_ids
         ]
 
+        overrides = self._runtime_overrides(doc)
         config_map: dict[str, Any] = {
             str(int(node.tool_id)): {
                 "label": f"{node.tool_type.split('.')[-1]} (ID: {int(node.tool_id)})",
                 "tool_type": node.tool_type.split(".")[-1],
                 "containerId": node.container_id,
+                "annotation": node.annotation,
                 "config": self._clean_config(node),
+                "runtime_overrides": overrides.get(int(node.tool_id), []),
                 "raw_xml": node.raw_xml,
             }
             for node in data_nodes
@@ -229,6 +232,70 @@ class SingleGraphRenderer:
         ]
 
         return nodes_json, edges_json, config_map, containers_json
+
+    @staticmethod
+    def _runtime_overrides(doc: WorkflowDoc) -> dict[int, list[str]]:
+        """{tool_id: ["File ← [#1] 出力ファイル名 (ToolID 951)", ...]}.
+
+        A batch macro rewrites part of a tool's configuration per record, so
+        the panel has to say which field is not what it looks like. Every
+        tool along the chain gets its own view of the same rewrite — the
+        destination sees what replaces its field, the Action sees what it
+        writes, the Control Parameter sees where its value ends up — because
+        whichever one is clicked should answer the question on its own.
+        (The last two are only visible with --no-filter-ui-tools.)
+
+        The interface's own structural warnings ride along on every row:
+        they change how far the [#N] mapping can be trusted.
+        """
+        interface = doc.macro_interface
+        if not interface:
+            return {}
+        rows: dict[int, list[str]] = {}
+        for action in interface.actions:
+            target = (
+                f"{action.destination_tool_id}/{action.destination_field}"
+                if action.destination_tool_id is not None
+                else action.destination_field or "(unknown destination)"
+            )
+            params = [interface.param(i) for i in action.param_indexes]
+            named = ", ".join(
+                f"[#{p.index}] {p.label}" for p in params if p is not None
+            )
+            bare_ref = (
+                len(params) == 1
+                and params[0] is not None
+                and (action.expression.strip() == f"[#{params[0].index}]")
+            )
+            if not named:
+                source = action.expression
+            elif bare_ref:
+                # The whole expression is the reference — no point echoing it.
+                source = named
+            else:
+                source = f"{action.expression} ({named})"
+
+            if action.destination_tool_id is not None:
+                field = action.destination_field or "(whole configuration)"
+                by = f" — Action {action.tool_id}" if action.tool_id else ""
+                rows.setdefault(action.destination_tool_id, []).append(
+                    f"{field} ← {source}{by}"
+                )
+            if action.tool_id is not None:
+                rows.setdefault(action.tool_id, []).append(
+                    f"rewrites {target} as {source}"
+                )
+            for param in params:
+                if param is None or param.tool_id is None:
+                    continue
+                via = f" via Action {action.tool_id}" if action.tool_id else ""
+                rows.setdefault(param.tool_id, []).append(
+                    f"[#{param.index}] {param.label} → {target}{via}"
+                )
+
+        for lines in rows.values():
+            lines.extend(f"⚠ {w}" for w in interface.warnings)
+        return rows
 
     def _container_fill_color(self, node: AlteryxNode) -> str | None:
         """Return '#rrggbb' extracted from container config, or None if absent/white.

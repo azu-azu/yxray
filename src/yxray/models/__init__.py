@@ -9,6 +9,7 @@ to change without breaking any callers.
 """
 
 from yxray.models.diff import DiffResult, EdgeDiff, NodeDiff
+from yxray.models.macro import ControlParam, MacroAction, MacroInterface
 from yxray.models.normalized import (
     NormalizedNode,
     NormalizedWorkflowDoc,
@@ -29,6 +30,10 @@ __all__ = [
     "WorkflowDoc",
     "AlteryxNode",
     "AlteryxConnection",
+    # Batch-macro interface models
+    "MacroInterface",
+    "ControlParam",
+    "MacroAction",
     # Diff models
     "DiffResult",
     "NodeDiff",

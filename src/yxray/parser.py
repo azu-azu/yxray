@@ -22,6 +22,7 @@ perform any file I/O beyond the etree.parse() call inside parse_one.
 from __future__ import annotations
 
 import pathlib
+import re
 from typing import Any
 
 from lxml import etree
@@ -35,6 +36,9 @@ from yxray.models import (
     AlteryxConnection,
     AlteryxNode,
     AnchorName,
+    ControlParam,
+    MacroAction,
+    MacroInterface,
     ToolID,
     WorkflowDoc,
 )
@@ -163,6 +167,95 @@ def _node_raw_xml(elem: etree._Element) -> str:
     return "\n".join(dedented)
 
 
+_TOOL_ID_IN_NAME_RE = re.compile(r"\((\d+)\)")
+_PARAM_REF_RE = re.compile(r"\[#(\d+)\]")
+
+
+def _element_text(parent: etree._Element | None, tag: str) -> str:
+    if parent is None:
+        return ""
+    child = parent.find(tag)
+    return (child.text or "").strip() if child is not None else ""
+
+
+def _parse_control_params(root: etree._Element) -> tuple[list[ControlParam], list[str]]:
+    """Control Parameters in the order that defines their [#N] indexes.
+
+    <BatchMacro><ControlParams> is the block Alteryx itself resolves [#N]
+    against. <Questions> describes the same parameters but is Interface-tab
+    design data: it mixes in Tab elements and can appear more than once (a
+    real .yxmc in this project has two such blocks, which made a naive
+    reader see four parameters where there are two). So only BatchMacro is
+    read here — see tools/analyze_macro_actions.py, where that was found.
+    """
+    warnings: list[str] = []
+    blocks = root.findall(".//BatchMacro/ControlParams")
+    if not blocks:
+        return [], warnings
+    if len(blocks) > 1:
+        warnings.append(
+            f"found {len(blocks)} <BatchMacro><ControlParams> blocks (expected 1);"
+            " using the first — [#N] indexes may be wrong"
+        )
+    params: list[ControlParam] = []
+    for index, elem in enumerate(blocks[0].findall("ControlParam"), start=1):
+        name = _element_text(elem, "Name")
+        match = _TOOL_ID_IN_NAME_RE.search(name)
+        params.append(
+            ControlParam(
+                index=index,
+                name=name,
+                description=_element_text(elem, "Description"),
+                tool_id=int(match.group(1)) if match else None,
+            )
+        )
+    return params, warnings
+
+
+def _parse_macro_actions(root: etree._Element) -> list[MacroAction]:
+    """Action rewrites, each targeting one ToolID/field of another tool.
+
+    The Action's own ToolID is written as a <ToolId value="..."/> child, not
+    as an attribute; the attribute form is accepted too so a hand-edited file
+    still reads. <Destination> is "952/File" — ToolID and field name.
+    """
+    actions: list[MacroAction] = []
+    for elem in root.findall(".//Actions//Action"):
+        expression = _element_text(elem, "Expression")
+        destination = _element_text(elem, "Destination")
+        if not expression and not destination:
+            continue
+        tool_id_elem = elem.find("ToolId")
+        # Both .get() calls are typed str | None, so the trailing "" is what
+        # makes this a str rather than an optional one.
+        tool_id_str = (
+            (tool_id_elem.get("value") if tool_id_elem is not None else None)
+            or elem.get("ToolId")
+            or ""
+        )
+        dst_id_str, _, dst_field = destination.partition("/")
+        actions.append(
+            MacroAction(
+                tool_id=int(tool_id_str) if tool_id_str.isdigit() else None,
+                expression=expression,
+                destination_tool_id=int(dst_id_str) if dst_id_str.isdigit() else None,
+                destination_field=dst_field,
+                param_indexes=tuple(int(n) for n in _PARAM_REF_RE.findall(expression)),
+            )
+        )
+    return actions
+
+
+def _parse_macro_interface(root: etree._Element) -> MacroInterface:
+    """The batch-macro interface, or an empty instance for a plain workflow."""
+    params, warnings = _parse_control_params(root)
+    return MacroInterface(
+        control_params=tuple(params),
+        actions=tuple(_parse_macro_actions(root)),
+        warnings=tuple(warnings),
+    )
+
+
 def _parse_nodes(
     root: etree._Element,
     *,
@@ -218,6 +311,10 @@ def _collect_node(
         width: float = float(pos.get("width", "0")) if pos is not None else 0.0
         height: float = float(pos.get("height", "0")) if pos is not None else 0.0
 
+        annotation: str = _element_text(
+            node_elem.find("Properties/Annotation"), "AnnotationText"
+        )
+
         config_elem: etree._Element | None = node_elem.find("Properties/Configuration")
         config: dict[str, Any] = (
             _element_to_dict(config_elem) if config_elem is not None else {}
@@ -258,6 +355,7 @@ def _collect_node(
                 config=config,
                 container_id=container_id,
                 raw_xml=_node_raw_xml(node_elem),
+                annotation=annotation,
             )
         )
 
@@ -320,6 +418,7 @@ def _tree_to_workflow(
         filepath=filepath,
         nodes=tuple(_parse_nodes(root, filter_ui_tools=filter_ui_tools)),
         connections=tuple(_parse_connections(root)),
+        macro_interface=_parse_macro_interface(root),
     )
 
 

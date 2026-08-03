@@ -235,6 +235,35 @@ def test_diff_no_filter_ui_tools_flag_detects_interface_node_changes(
     assert unfiltered_result.exit_code == 1  # unfiltered: the TextBox change is visible
 
 
+def test_show_ui_is_an_alias_for_no_filter_ui_tools(tmp_path: pathlib.Path) -> None:
+    """--show-ui/--hide-ui must mean the same as the long pair, on both commands.
+
+    The alias sits on the second half of the flag pair on purpose: the first
+    half is the True (filtering) side, so a name like "--ui" placed there
+    would switch UI tools *off* — the opposite of how it reads.
+    """
+    workflow = tmp_path / "workflow.yxmd"
+    workflow.write_bytes(UI_TOOL_YXMD)
+
+    def node_count(*flags: str) -> str:
+        result = runner.invoke(
+            app,
+            ["inspect", str(workflow), *flags, "-o", str(tmp_path / "r.html")],
+        )
+        assert result.exit_code == 0
+        return result.stderr.split("(")[1].split(" nodes")[0]
+
+    assert node_count("--show-ui") == node_count("--no-filter-ui-tools") == "2"
+    assert node_count("--hide-ui") == node_count("--filter-ui-tools") == "1"
+    assert node_count() == "1"
+
+    # diff carries the same pair.
+    path_b = tmp_path / "b.yxmd"
+    path_b.write_bytes(UI_TOOL_YXMD_CHANGED)
+    shown = runner.invoke(app, ["diff", str(workflow), str(path_b), "--show-ui"])
+    assert shown.exit_code == 1  # the TextBox change is visible
+
+
 def test_cluster_backup_list_restore_commands(tmp_path: pathlib.Path) -> None:
     cluster_file = tmp_path / "clusters.json"
     cluster_file.write_text('{"version": 1}', encoding="utf-8")

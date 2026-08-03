@@ -49,16 +49,20 @@
 
 lxml で XML を読み、2種類の要素を抽出する(`_parse_nodes` / `_parse_connections`):
 
-- `<Node>` → `AlteryxNode`(`tool_id` / `tool_type` / `config` / 座標 / 元XML)
+- `<Node>` → `AlteryxNode`(`tool_id` / `tool_type` / `config` / 座標 / 注釈 / 元XML)
 - `<Connection>` → `AlteryxConnection`(`src_tool` → `dst_tool` を結ぶ有向辺)
+- `<BatchMacro>` / `<RuntimeProperties><Actions>` → `MacroInterface`
+  (コントロールパラメータと、実行時の設定書き換え。`<Nodes>` の外にあるので
+  `WorkflowDoc` 側が持つ — [macro-interface-model.md](macro-interface-model.md) 参照)
 
 結果を `WorkflowDoc` に束ねる(`models/workflow.py`):
 
 ```
 WorkflowDoc
 ├── filepath
-├── nodes         : tuple[AlteryxNode, ...]
-└── connections   : tuple[AlteryxConnection, ...]
+├── nodes           : tuple[AlteryxNode, ...]
+├── connections     : tuple[AlteryxConnection, ...]
+└── macro_interface : MacroInterface（バッチマクロ以外では空）
 ```
 
 **接続は `WorkflowDoc` 側に持ち、`AlteryxNode` は topology-free**
@@ -70,8 +74,10 @@ WorkflowDoc
 `topo_order(doc)` が `connections` を依存グラフとして解釈し、
 **実行順に並んだ `tool_id` のリスト**を返す。中身は Kahn's algorithm:
 
-1. `ToolContainer` ノードを除外(見た目のグループ化用でデータフローを持たず、
-   残すと入次数0の「偽のソース」になる)。
+1. `AlteryxGuiToolkit.*` ノードを除外(`ToolContainer` は見た目のグループ化、
+   Action/ControlParam は実行時の設定書き換えで、どちらも行を流さない。
+   残すと入次数0の「偽のソース」になる)。判定は
+   `tool_registry.is_dataflow_tool()`。
 2. 各辺から**入次数**(何個の上流に依存するか)と後続ノードを作る。
 3. 入次数0のノード(依存のないソース)から取り出し、後続の入次数を1つ減らす。
    0になったら次に取り出す。これを繰り返す。
@@ -83,6 +89,10 @@ WorkflowDoc
 
 - `build_predecessor_map(doc)` → `{dst: [src, ...]}`。各ツールの入力元を引く。
   scaffold 側で「このツールの入力フレームは誰か」を解決するのに使う。
+  **接続はノードのフィルタと無関係に全件パースされる**ため、ここでも
+  データフローツール以外を落としている(落とさないと、除外されたノードを
+  指す辺が `preds[0]` に来て `df_?` が生成される —
+  [macro-interface-model.md](macro-interface-model.md) 参照)。
 - `compute_node_layer(doc)` → 各ノードの階層(描画レイアウト用)。
 
 ### 3. `scaffold/` パッケージ — コード生成

@@ -193,9 +193,10 @@ def _diff_impl(  # noqa: B008
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
         "--filter-ui-tools/--no-filter-ui-tools",
+        "--hide-ui/--show-ui",
         help=(
-            "Include AlteryxGuiToolkit.* app interface nodes"
-            " (Tab, TextBox, Action, etc.) filtered by default"
+            "--show-ui: include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, Control Parameter), filtered by default"
             " when comparing .yxwz apps against .yxmd workflows"
         ),
     ),
@@ -355,9 +356,11 @@ def _inspect_impl(  # noqa: B008
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
         "--filter-ui-tools/--no-filter-ui-tools",
+        "--hide-ui/--show-ui",
         help=(
-            "Include AlteryxGuiToolkit.* app interface nodes"
-            " (Tab, TextBox, Action, etc.) filtered by default"
+            "--show-ui: include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, Control Parameter), filtered by default."
+            " Saved cluster files are tied to this setting"
         ),
     ),
     cluster_file: pathlib.Path | None = typer.Option(  # noqa: B008
@@ -549,6 +552,7 @@ def _explain_impl(  # noqa: B008
       acd explain workflow.yxmd
       acd ex workflow.yxmd -o build/
     """
+    from yxray.macro_overrides import detect_macro_overrides
     from yxray.output_collisions import detect_duplicate_outputs
     from yxray.scaffold import scaffold, scaffold_simple_blocks
     from yxray.staleness import detect_stale_select_fields
@@ -571,6 +575,11 @@ def _explain_impl(  # noqa: B008
         warnings_by_tool.setdefault(w.tool_id, []).append(w.message)
     for dw in duplicate_output_warnings:
         warnings_by_tool.setdefault(dw.tool_id, []).append(dw.message)
+    # Batch-macro rewrites come before the tool's own block for the same
+    # reason the others do: the config the block was generated from is not
+    # what runs.
+    for mw in detect_macro_overrides(doc):
+        warnings_by_tool.setdefault(mw.tool_id, []).append(mw.message)
 
     md_header, md_blocks = scaffold_simple_blocks(
         doc, warnings_by_tool=warnings_by_tool

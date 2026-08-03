@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from yxray.models.macro import MacroInterface
 from yxray.models.types import AnchorName, ToolID
 
 
@@ -32,6 +33,13 @@ class AlteryxNode:
     """Original <Node>...</Node> XML source for this tool, dedented.
     Used for side-by-side display next to generated Python (explain .md,
     inspect report panel). Empty for programmatically-built nodes.
+    Not part of diff/normalization — those operate on `config` only.
+    """
+    annotation: str = ""
+    """Properties/Annotation/AnnotationText — the caption Alteryx draws under
+    the tool on the canvas. The only human-readable identity some tools have:
+    a Control Parameter or Action node carries an empty <Configuration/>, so
+    without this there is nothing to show but the plugin name.
     Not part of diff/normalization — those operate on `config` only.
     """
 
@@ -63,4 +71,11 @@ class WorkflowDoc:
     connections: tuple[AlteryxConnection, ...] = field(default_factory=tuple)
     """All connections for this workflow. Stored on WorkflowDoc, not on AlteryxNode.
     AlteryxNode is topology-free — it has no references to connections.
+    """
+    macro_interface: MacroInterface = field(default_factory=MacroInterface)
+    """Batch-macro Control Parameters and Action rewrites, or an empty instance.
+
+    Document-level like `connections`, because that is where the XML puts it:
+    the blocks sit outside <Nodes> entirely, so no AlteryxNode could own them.
+    Empty for every workflow that is not a batch macro.
     """
