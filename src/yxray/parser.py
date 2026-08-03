@@ -226,9 +226,13 @@ def _parse_macro_actions(root: etree._Element) -> list[MacroAction]:
         if not expression and not destination:
             continue
         tool_id_elem = elem.find("ToolId")
+        # Both .get() calls are typed str | None, so the trailing "" is what
+        # makes this a str rather than an optional one.
         tool_id_str = (
-            tool_id_elem.get("value") if tool_id_elem is not None else None
-        ) or elem.get("ToolId", "")
+            (tool_id_elem.get("value") if tool_id_elem is not None else None)
+            or elem.get("ToolId")
+            or ""
+        )
         dst_id_str, _, dst_field = destination.partition("/")
         actions.append(
             MacroAction(
