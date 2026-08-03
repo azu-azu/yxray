@@ -24,9 +24,15 @@ def detect_duplicate_outputs(doc: WorkflowDoc) -> list[DuplicateOutputWarning]:
     Two Output tools sharing a static path most often happens when the
     underlying file is meant to differ at runtime (e.g. an Action tool
     overwrites it via a Control Parameter) but the Configuration still shows
-    the same default. yxray does not model Action-driven path overrides, so
-    scaffold() would otherwise silently emit two blocks that clobber each
-    other's output file when run as one script.
+    the same default, so scaffold() would otherwise silently emit two blocks
+    that clobber each other's output file when run as one script.
+
+    macro_overrides names that cause directly when the workflow declares it —
+    a batch macro's <Actions> block says which field of which tool is
+    rewritten. This check stays because it catches the same collision without
+    needing the declaration: an app's interface tools, a path assembled
+    somewhere upstream, or a macro whose Action does not resolve to a tool in
+    this document all leave two identical paths and nothing else to go on.
     """
     by_path: dict[str, list[int]] = {}
     for node in doc.nodes:
