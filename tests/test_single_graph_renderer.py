@@ -226,3 +226,39 @@ def test_panel_renders_source_xml_section() -> None:
     html = SingleGraphRenderer().render(doc)
     assert "source (Node XML)" in html
     assert "entry.raw_xml" in html
+
+
+def test_config_map_carries_batch_macro_overrides() -> None:
+    """Each tool in a rewrite chain gets the view of it that answers its own
+    panel: the destination sees what replaces its field, the Action sees what
+    it writes, the Control Parameter sees where its value lands."""
+    import pathlib
+    import tempfile
+
+    from tests.fixtures import BATCH_MACRO_YXMC
+    from yxray.parser import parse_one
+
+    path = pathlib.Path(tempfile.mkdtemp()) / "batch.yxmc"
+    path.write_bytes(BATCH_MACRO_YXMC)
+    config_map = _config_map(parse_one(path, filter_ui_tools=False))
+
+    assert config_map["2"]["runtime_overrides"] == [
+        "File ← [#1] 出力ファイル名 — Action 952"
+    ]
+    assert config_map["952"]["runtime_overrides"] == [
+        "rewrites 2/File as [#1] 出力ファイル名"
+    ]
+    assert config_map["951"]["runtime_overrides"] == [
+        "[#1] 出力ファイル名 → 2/File via Action 952"
+    ]
+    # A Control Parameter's <Configuration/> is empty, so without the
+    # annotation the panel would have nothing but the plugin name to show.
+    assert config_map["951"]["annotation"] == "コントロールパラメーター (951)"
+    assert config_map["951"]["config"] == {}
+
+
+def test_config_map_has_no_overrides_for_a_plain_workflow() -> None:
+    doc = _doc(AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0))
+    entry = _config_map(doc)["1"]
+    assert entry["runtime_overrides"] == []
+    assert entry["annotation"] == ""

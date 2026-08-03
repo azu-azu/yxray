@@ -7,6 +7,7 @@ from collections import deque
 from typing import Any
 
 from yxray.models.workflow import WorkflowDoc
+from yxray.tool_registry import is_dataflow_tool
 
 
 def topo_order(doc: WorkflowDoc) -> list[int]:
@@ -17,15 +18,18 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
     uneven length still come out close to numeric/flow order instead of
     being interleaved by whichever branch resolves first.
 
-    ToolContainer nodes are excluded — they carry no data-flow information
-    and would otherwise appear as spurious sources (in_degree == 0).
+    AlteryxGuiToolkit nodes are excluded — ToolContainer groups tools
+    visually, and the interface tools (Action, Control Parameter, …) rewrite
+    configuration at runtime rather than passing rows. Both would otherwise
+    appear as spurious sources (in_degree == 0).
     Any remaining nodes after cycle detection are appended in original order.
     """
 
-    # 1. 対象ノードを集める。ToolContainer は見た目上のグループ化用で
-    #    データフローを持たないノードなので除外する（残すと入次数0の
-    #    「偽のソース」として順序に混ざってしまう）。
-    node_ids = [int(n.tool_id) for n in doc.nodes if "ToolContainer" not in n.tool_type]
+    # 1. 対象ノードを集める。AlteryxGuiToolkit.* はデータを運ばないので
+    #    除外する（残すと入次数0の「偽のソース」として順序に混ざる）。
+    #    ToolContainer は見た目のグループ化、Action/ControlParam は実行時の
+    #    設定書き換えで、どちらも行を流さない。
+    node_ids = [int(n.tool_id) for n in doc.nodes if is_dataflow_tool(n.tool_type)]
 
     # 2. Connection を依存グラフとしてモデル化し、入次数と後続ノードを作る。
     #    除外済みノード（ToolContainer 等）や未知ノードに触れる接続は無視する。
@@ -64,11 +68,28 @@ def topo_order(doc: WorkflowDoc) -> list[int]:
 
 
 def build_predecessor_map(doc: WorkflowDoc) -> dict[int, list[int]]:
-    """Return {dst_tool_id: [src_tool_ids]} for all connections in *doc*."""
+    """Return {dst_tool_id: [src_tool_ids]} for the data-flow connections.
+
+    Only sources that are data tools present in *doc* are listed. Both
+    exclusions matter to callers that read preds[0] as "the input frame":
+
+    - Connections are parsed whole, so filtering interface nodes out of
+      `doc.nodes` leaves their edges behind. An Action wired into a Filter
+      would otherwise make the Filter's first predecessor a tool that has no
+      frame, and scaffold emitted `df_2 = df_?[...]` — invalid Python, and
+      only when the Action's edge happened to be listed first in the XML.
+    - With filtering off those nodes do exist, and would then contribute a
+      real-looking `df_<action id>` that is never assigned.
+    """
+    known_data_tools = {
+        int(n.tool_id) for n in doc.nodes if is_dataflow_tool(n.tool_type)
+    }
     preds: dict[int, list[int]] = {}
     for c in doc.connections:
-        dst = int(c.dst_tool)
-        preds.setdefault(dst, []).append(int(c.src_tool))
+        src = int(c.src_tool)
+        if src not in known_data_tools:
+            continue
+        preds.setdefault(int(c.dst_tool), []).append(src)
     return preds
 
 

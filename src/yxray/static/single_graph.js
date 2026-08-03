@@ -2610,7 +2610,39 @@ var _TABLE_RENDERERS = {
   'Sort':             renderSortTable,
 };
 
+// Appends a simple "key / list of lines" section, used for the sections that
+// are plain text rather than a config table.
+function _appendTextRows(container, keyText, lines, style) {
+  if (!lines || !lines.length) return;
+  var row = document.createElement('div');
+  row.className = 'config-row';
+  var key = document.createElement('div');
+  key.className = 'config-key';
+  key.textContent = keyText;
+  var val = document.createElement('div');
+  val.className = 'config-val';
+  if (style) val.style.cssText = style;
+  val.textContent = lines.join('\n');
+  row.appendChild(key);
+  row.appendChild(val);
+  container.appendChild(row);
+}
+
 function _renderPanelEntry(entry, container) {
+  // The tool's canvas caption. Some tools have no other identity: a Control
+  // Parameter or Action node carries an empty <Configuration/>.
+  if (entry.annotation) {
+    _appendTextRows(container, 'annotation', [entry.annotation]);
+  }
+  // A batch macro rewrites these fields per record, so the configuration
+  // shown below them is only the design-time default.
+  _appendTextRows(
+    container,
+    'runtime override (batch macro)',
+    entry.runtime_overrides,
+    'color:var(--badge-filter-text);background:var(--badge-filter-bg);'
+      + 'border:1px solid var(--badge-filter-border);'
+  );
   if (entry.python_hint) {
     var hintRow = document.createElement('div');
     hintRow.className = 'config-row';

@@ -255,6 +255,100 @@ CHILDNODES_CONTAINER_YXMD: bytes = b"""\
 </AlteryxDocument>
 """
 
+# BATCH_MACRO_YXMC: a batch macro's interface. The Control Parameter (951) and
+# Action (952) nodes carry an empty <Configuration/> — everything that says
+# what they do lives outside <Nodes>, in <BatchMacro><ControlParams> (which
+# defines the [#N] order) and <RuntimeProperties><Actions> (which says where
+# each value lands). The Action is also wired into the Output tool, so the
+# fixture covers the interface edge that used to leak into the data graph.
+BATCH_MACRO_YXMC: bytes = """\
+<?xml version="1.0" encoding="utf-8"?>
+<AlteryxDocument yxmdVer="2023.2">
+  <Nodes>
+    <Node ToolID="1176">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="3101" y="54" width="369" height="301"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration><Caption>コンテナ 1176</Caption></Configuration>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="951">
+          <GuiSettings Plugin="AlteryxGuiToolkit.Questions.ControlParam.ControlParam">
+            <Position x="3270" y="103"/>
+          </GuiSettings>
+          <Properties>
+            <Configuration/>
+            <Annotation DisplayMode="0">
+              <Name/>
+              <AnnotationText>コントロールパラメーター (951)</AnnotationText>
+            </Annotation>
+          </Properties>
+        </Node>
+        <Node ToolID="952">
+          <GuiSettings Plugin="AlteryxGuiToolkit.Action.Action">
+            <Position x="3294" y="271"/>
+          </GuiSettings>
+          <Properties>
+            <Configuration/>
+            <Annotation DisplayMode="0">
+              <Name/>
+              <AnnotationText>値を更新</AnnotationText>
+            </Annotation>
+          </Properties>
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+        <Position x="100" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration><File>in.csv</File></Configuration></Properties>
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="300" y="100"/>
+      </GuiSettings>
+      <Properties><Configuration><File>out.csv</File></Configuration></Properties>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="952" Connection="Output"/>
+      <Destination ToolID="2" Connection="Input"/>
+    </Connection>
+    <Connection>
+      <Origin ToolID="1" Connection="Output"/>
+      <Destination ToolID="2" Connection="Input"/>
+    </Connection>
+    <Connection>
+      <Origin ToolID="951" Connection="Output"/>
+      <Destination ToolID="952" Connection="Input"/>
+    </Connection>
+  </Connections>
+  <Properties>
+    <RuntimeProperties>
+      <Actions>
+        <Action>
+          <ToolId value="952"/>
+          <Expression>[#1]</Expression>
+          <Destination>2/File</Destination>
+        </Action>
+      </Actions>
+    </RuntimeProperties>
+  </Properties>
+  <BatchMacro>
+    <ControlParams>
+      <ControlParam>
+        <Name>コントロールパラメーター (951)</Name>
+        <Description>出力ファイル名</Description>
+      </ControlParam>
+    </ControlParams>
+  </BatchMacro>
+</AlteryxDocument>
+""".encode()
+
+
 # ---------------------------------------------------------------------------
 # Invalid / error-triggering fixtures
 # ---------------------------------------------------------------------------
