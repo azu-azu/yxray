@@ -193,9 +193,10 @@ def _diff_impl(  # noqa: B008
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
         "--filter-ui-tools/--no-filter-ui-tools",
+        "--hide-ui/--show-ui",
         help=(
-            "Include AlteryxGuiToolkit.* app interface nodes"
-            " (Tab, TextBox, Action, etc.) filtered by default"
+            "--show-ui: include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, Control Parameter), filtered by default"
             " when comparing .yxwz apps against .yxmd workflows"
         ),
     ),
@@ -355,9 +356,11 @@ def _inspect_impl(  # noqa: B008
     filter_ui_tools: bool = typer.Option(  # noqa: B008
         True,
         "--filter-ui-tools/--no-filter-ui-tools",
+        "--hide-ui/--show-ui",
         help=(
-            "Include AlteryxGuiToolkit.* app interface nodes"
-            " (Tab, TextBox, Action, etc.) filtered by default"
+            "--show-ui: include AlteryxGuiToolkit.* app interface nodes"
+            " (Tab, TextBox, Action, Control Parameter), filtered by default."
+            " Saved cluster files are tied to this setting"
         ),
     ),
     cluster_file: pathlib.Path | None = typer.Option(  # noqa: B008

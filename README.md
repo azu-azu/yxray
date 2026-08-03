@@ -35,11 +35,17 @@ Custom output path:
 acd inspect workflow.yxmd -o report.html
 ```
 
-Include `AlteryxGuiToolkit.*` UI nodes (filtered by default):
+Include `AlteryxGuiToolkit.*` UI nodes — Tab, TextBox, Action, Control
+Parameter (filtered by default; `--no-filter-ui-tools` is the long form of
+the same flag, and `diff` takes it too):
 
 ```bash
-acd inspect workflow.yxmd --no-filter-ui-tools
+acd inspect workflow.yxmd --show-ui
 ```
+
+A saved manual cluster file is tied to this setting: its workflow
+fingerprint covers the nodes the report was built from, so a file exported
+with `--show-ui` will not load without it (and vice versa).
 
 Start from a previously exported manual cluster file:
 

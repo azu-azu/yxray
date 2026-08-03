@@ -40,7 +40,8 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 `AlteryxGuiToolkit.Action.Action` なので、どちらも消える。
 コンテナだけが残って中身が空に見えるのはこのため。
 
-`acd inspect --no-filter-ui-tools` を付ければノード自体は出る。
+`acd inspect --show-ui`(長い別名は `--no-filter-ui-tools`)を付ければ
+ノード自体は出る。
 
 ### 層2: `explain` にはそのフラグが無い
 
@@ -160,7 +161,7 @@ df_1.to_csv(r"C:\data\out.csv", index=False)
 | Action(952) | `rewrites 2/File as [#1] 出力ファイル名` |
 | ControlParam(951) | `[#1] 出力ファイル名 → 2/File via Action 952` |
 
-後ろ2つは `--no-filter-ui-tools` のときだけ見える。
+後ろ2つは `--show-ui` のときだけ見える。
 書き換えられる側は常に見える(ここが一番重要な情報なので)。
 
 `MacroInterface.warnings` は、影響を受ける全行に `⚠` 付きで併記する。
@@ -196,7 +197,7 @@ df_2 = df_?[df_?["a"] > 1]   # 構文エラー。接続の並び順次第で発�
 判定は `tool_registry.is_dataflow_tool()` に集約してある。
 Action → Filter という辺は「実行時に設定を書き換える」であって
 「行を流す」ではないので、**フィルタの有無に関わらず** データグラフから
-外すのが正しい。この修正により、`--no-filter-ui-tools` で
+外すのが正しい。この修正により、`--show-ui` で
 インターフェースノードを取り込んでも、`df_951 = ...` のような
 無意味なスタブは生成されない。
 
