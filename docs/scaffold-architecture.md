@@ -214,3 +214,43 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 しかも誤差は golden diff に必ず現れる(黙って通らない)。
 それでも Double 列なので、生成コードに
 `WARNING: this is a planar UTM distance` を残してある。
+
+---
+
+## 生成コードにヘルパー関数を出すかどうか
+
+「毎回同じパターンが出るなら `apply_select_edits` のように関数化すべきか」の
+判断基準は
+[alteryx-pandas-differences.md 19章「生成コード側の関数化はいつ許されるか」](alteryx-pandas-differences.md#生成コード側の関数化はいつ許されるか--全ツール共通の基準)
+にある。要点だけ再掲:
+
+- 選択肢は4つ — (a) 生成器側の関数 / (b) `GeneratedCode.helpers` / (c)
+  `reference_impl/` / (d) ベタ書き。**既定は (a) で DRY を取り、出力側では取らない**。
+- 出力側へ出すのは「pandas 組み込みで書けない」かつ「ベタ書きだと静かに間違う」
+  かつ「設定でなく機構」かつ「golden で固定できる」かつ「繰り返し出る」を
+  **すべて**満たすときだけ。出現回数だけでは昇格させない。
+- 満たしたうえで、自己完結するなら (b)、golden で挙動を育てるなら (c)。
+
+### 空間ツールの繰り返しパターンを関数化しない判断（2026-08-04）
+
+Spatial Info / Distance で毎ブロック同じ形が出るが、いずれも (d) のまま置く。
+
+| 繰り返している部分 | 判断 |
+| --- | --- |
+| `df_out["Centroid"] = _geom.centroid` | (d)。`.centroid` が geopandas 組み込みそのもので、隠す機構が無い。生成ブロック15行のうち11行はコメント（golden CSV に出ない理由・平面centroidの誤差・Area/Length が無い理由）で、それこそがこのブロックの中身。関数にするとコメントの置き場が消える。項目を増やすときの変更点は今も `_SPATIAL_INFO_ITEMS` の1行だけで、重複は既に (a) で潰れている |
+| `_spatial_field_note()` + `_geoseries_expr()`（XML のフィールド名 → 無ければアクティブ geometry、+ `crs="EPSG:4326"` のラベル付け） | 当面 (a)。現時点で SpatialInfo ×1・Distance ×2 の3箇所に出るが、中身は分岐の無い1式で、CRS は 4326 固定の不変条件（[spatial-crs-design.md](spatial-crs-design.md)）に守られている |
+
+`_geoseries_expr` の昇格条件（どれかが起きたら見直す。回数だけでは動かさない）:
+
+1. 4326 以外の CRS を扱う必要が出て、フォールバックに**分岐**が増えたとき
+2. geometry 列の候補が複数ある／CRS が `None` のケースを実データで踏んだとき
+3. 呼び出し箇所が5を超え、**かつ** 1 か 2 が起きているとき
+
+昇格するなら (c) ではなく **(b) を先に検討する**。CRS 解決は設定ではなく純粋な
+機構で、利用者にコピー手順を課す理由が無いため。`reference_impl` に置くのは
+「挙動を golden / `tests/test_reference_scripts.py` で固定したい」ものに限る。
+
+いずれの場合も `tool_registry.py` の `python_hint`（現状
+`df["Centroid"] = gpd.GeoSeries(geom, crs="EPSG:4326").centroid`）を同時に直すこと
+— Formula で `.assign()`（hint）と添字代入（scaffold）がズレた前例がある
+（`docs/explain-output-anatomy.md`）。
