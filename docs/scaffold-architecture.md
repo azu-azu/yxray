@@ -205,7 +205,7 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 | 出力 | 判断 |
 | --- | --- |
 | 距離 | 昇格。ただし投影誤差があるので生成コードに WARNING を出す |
-| 方位(`Direction`) | 未昇格。8方位なのは `size="2"` から確定できるが、ポリゴンのどの点への方位かが不明 |
+| 方位(`Direction`) | 未昇格。8方位なのは `size="2"` から確定できるが、ポリゴンのどの点への方位かが不明 — [distance-direction-pending.md](distance-direction-pending.md) |
 | ドライブタイム | 未昇格。routing サービスが要る |
 | 2入力モード | 未昇格。`ReturnNearest` の行選択規則が未検証 |
 
