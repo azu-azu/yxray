@@ -235,7 +235,7 @@ class SingleGraphRenderer:
 
     @staticmethod
     def _runtime_overrides(doc: WorkflowDoc) -> dict[int, list[str]]:
-        """{tool_id: ["File ← [#1] 出力ファイル名 (ToolID 951)", ...]}.
+        """{tool_id: ["File ← [#1] 出力ファイル名 (ToolID 101)", ...]}.
 
         A batch macro rewrites part of a tool's configuration per record, so
         the panel has to say which field is not what it looks like. Every

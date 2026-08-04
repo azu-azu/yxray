@@ -32,7 +32,7 @@ class ControlParam:
     name: str
     description: str
     tool_id: int | None = None
-    """Canvas ToolID, read out of the default name "コントロールパラメーター (951)".
+    """Canvas ToolID, read out of the default name "コントロールパラメーター (101)".
 
     None when the parameter was renamed — the link to the canvas node is lost
     with it, but the index and description still identify the parameter.

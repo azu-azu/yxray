@@ -57,7 +57,7 @@ def parse_control_params(root: ET.Element) -> list[ControlParamRef]:
     for i, cp in enumerate(blocks[0].findall("ControlParam"), start=1):
         name_el = cp.find("Name")
         desc_el = cp.find("Description")
-        # Name は "コントロールパラメーター (951)" 形式 — 括弧内の ToolID を取り出す
+        # Name は "コントロールパラメーター (101)" 形式 — 括弧内の ToolID を取り出す
         name = name_el.text if name_el is not None else ""
         m = re.search(r"\((\d+)\)", name)
         params.append(

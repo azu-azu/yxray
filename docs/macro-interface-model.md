@@ -6,6 +6,11 @@
 ノードのフィルタ(`filter_ui_tools`)の話と、
 **そもそもノードの中に情報が無い** という話が重なっていた。
 
+> XML の構造と設定値は実バッチマクロで裏取り済みだが、**ToolID は匿名化して
+> ある**(ControlParam を `101`、Action を `102`、書き換え先を `2` と呼ぶ)。
+> `コントロールパラメーター (101)` の形式そのものは Alteryx の既定名で、
+> パーサがここから ToolID を取り出す仕様に依存している。
+
 ---
 
 ## TL;DR
@@ -19,10 +24,10 @@ yxray はこの2ブロックを `WorkflowDoc.macro_interface` としてパース
 **書き換えられる側のツール** に警告として出す。
 
 ```
-[#1] 出力ファイル名 (ToolID 951)      ← <BatchMacro><ControlParams> 由来
+[#1] 出力ファイル名 (ToolID 101)      ← <BatchMacro><ControlParams> 由来
         │
         ▼
-Action 952                            ← <RuntimeProperties><Actions> 由来
+Action 102                            ← <RuntimeProperties><Actions> 由来
         │  Expression=[#1]  Destination=2/File
         ▼
 ToolID 2 の File を実行時に上書き      ← ここに警告が出る
@@ -56,12 +61,12 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 ### 層3(本命): ノードを出しても中身が無い
 
 ```xml
-<Node ToolID="951">
+<Node ToolID="101">
   <GuiSettings Plugin="AlteryxGuiToolkit.Questions.ControlParam.ControlParam">
   <Properties>
     <Configuration />          ← 空
     <Annotation>
-      <AnnotationText>コントロールパラメーター (951)</AnnotationText>
+      <AnnotationText>コントロールパラメーター (101)</AnnotationText>
 ```
 
 パーサが読むのは `Properties/Configuration` だけなので、
@@ -77,7 +82,7 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 <BatchMacro>
   <ControlParams>
     <ControlParam>
-      <Name>コントロールパラメーター (951)</Name>
+      <Name>コントロールパラメーター (101)</Name>
       <Description>出力ファイル名</Description>
     </ControlParam>
   </ControlParams>
@@ -93,7 +98,7 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 なので `<BatchMacro>` 側だけを読む。2ブロック以上あった場合は
 先頭を使い、`MacroInterface.warnings` に記録して黙って進まない。
 
-キャンバス上の ToolID は `<Name>` の `(951)` から取る。
+キャンバス上の ToolID は `<Name>` の `(101)` から取る。
 リネームされていると取れないので `tool_id=None` になるが、
 `[#N]` と Description は生きる。
 
@@ -101,7 +106,7 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 
 ```xml
 <Action>
-  <ToolId value="952"/>
+  <ToolId value="102"/>
   <Expression>[#1]</Expression>
   <Destination>2/File</Destination>
 </Action>
@@ -140,8 +145,8 @@ ToolID 2 の File を実行時に上書き      ← ここに警告が出る
 
 ```python
 # ToolID_2: DbFileOutput
-# WARNING: Batch macro: Action 952 rewrites "File" at runtime as [#1] from
-# [#1] 出力ファイル名 (ToolID 951). The configuration here is only the
+# WARNING: Batch macro: Action 102 rewrites "File" at runtime as [#1] from
+# [#1] 出力ファイル名 (ToolID 101). The configuration here is only the
 # design-time default — parameterize this value instead of hard-coding it.
 df_1.to_csv(r"C:\data\out.csv", index=False)
 ```
@@ -157,9 +162,9 @@ df_1.to_csv(r"C:\data\out.csv", index=False)
 
 | クリックしたノード | 表示 |
 | --- | --- |
-| 書き換えられるツール(2) | `File ← [#1] 出力ファイル名 — Action 952` |
-| Action(952) | `rewrites 2/File as [#1] 出力ファイル名` |
-| ControlParam(951) | `[#1] 出力ファイル名 → 2/File via Action 952` |
+| 書き換えられるツール(2) | `File ← [#1] 出力ファイル名 — Action 102` |
+| Action(102) | `rewrites 2/File as [#1] 出力ファイル名` |
+| ControlParam(101) | `[#1] 出力ファイル名 → 2/File via Action 102` |
 
 後ろ2つは `--show-ui` のときだけ見える。
 書き換えられる側は常に見える(ここが一番重要な情報なので)。
@@ -198,7 +203,7 @@ df_2 = df_?[df_?["a"] > 1]   # 構文エラー。接続の並び順次第で発�
 Action → Filter という辺は「実行時に設定を書き換える」であって
 「行を流す」ではないので、**フィルタの有無に関わらず** データグラフから
 外すのが正しい。この修正により、`--show-ui` で
-インターフェースノードを取り込んでも、`df_951 = ...` のような
+インターフェースノードを取り込んでも、`df_101 = ...` のような
 無意味なスタブは生成されない。
 
 ---
@@ -210,7 +215,7 @@ Action → Filter という辺は「実行時に設定を書き換える」で�
   「ここは実行時に変わる」という事実まで
 - **`Expression` は評価しない。** `[#1]` のような単純参照はそのまま出すが、
   式が組み立てられている場合(文字列連結など)は式のまま表示する
-- **ToolID の対応はパラメータ名依存。** `(951)` を含む既定名から取るので、
+- **ToolID の対応はパラメータ名依存。** `(101)` を含む既定名から取るので、
   リネームされていると `tool_id=None` になる
 - **`<Questions>` は読まない。** 上記の理由で信用できないため
 - **Action 以外のインターフェースツール**(Tab / TextBox / チェックボックス系)は
