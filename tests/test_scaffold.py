@@ -2281,7 +2281,7 @@ def test_scaffold_spatialinfo_without_spatial_field_is_todo() -> None:
 
 
 def _distance_config(**overrides: object) -> dict:
-    # The real node's configuration (ToolID 1106): straight-line distance in
+    # The real node's configuration (ToolID anonymized): straight-line distance in
     # kilometers between two spatial fields of one record, plus a cardinal
     # direction. The drive-time settings are inert while
     # OutputDriveTimeAndDistance is False.
