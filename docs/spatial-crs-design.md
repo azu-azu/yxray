@@ -283,7 +283,7 @@ Alteryx は空間列を `SpatialObj` と呼ぶが、`gpd.read_file()` も Create
 CRS 不一致で `ValueError` になる。不変条件が崩れていたら黙って進まない。
 
 なお `.centroid` を EPSG:4326 のまま呼ぶと GeoPandas が警告を出す
-(度空間の平面重心になるため)。建物スケールでは測地的な重心との差は無視できる。
+(度空間の平面重心になるため)。数百m スケールでは測地的な重心との差は無視できる。
 一方 **面積・長さは同じ扱いにできない** ので、`Area`/`Length` が選択されていても
 生成せず TODO に落としている([Limitations](#limitations) の距離・バッファと同じ理由)。
 
@@ -330,9 +330,30 @@ Alteryx の `DistToInsideEdge=True`(ソースがポリゴンの内側なら 0 �
 `.distance(poly)` と `.distance(poly.boundary)` が恒等的に一致するので
 両ケースをこれ1つで満たせる。
 
-方位(`Direction`)は生成しない。8方位の文字列であることは
-MetaInfo の `size="2"` から確定できるが(16方位なら `NNE` で3文字必要)、
-ポリゴン相手にどの点への方位を取るのかが XML からは決まらないためである。
+### 方位(`Direction`)を生成しない理由
+
+同じ Distance ノードは方位も出しているが、こちらは生成しない。
+8方位の文字列であることは MetaInfo の `size="2"` から確定できるが
+(16方位なら `NNE` で3文字必要)、**ポリゴン相手にどの点への方位を取るのかが
+XML からは決まらない** ためである。距離と違って形が確定していないので、
+「残る不確定が投影誤差だけ」という距離の昇格根拠が使えない。
+
+しかも `Direction` は String 列なので **golden CSV に出る**。
+`Centroid` のように「値がズレても比較を汚さない」逃げ道がなく、
+現状の生成コードは golden 比較で列が1本足りない状態にある。
+
+方位を CRS の観点から見たときの注意点は2つ。
+
+1. **最寄り点は宛先の `.boundary` に対して取る**。起点は宛先ポリゴン自身の
+   重心なので常に内側にあり、生ポリゴンに `nearest_points()` を当てると
+   同一点が返って全行 `N` になる(例外は出ない)
+2. **方位そのものは投影平面ではなく測地で取るのが安全**。UTM の子午線収差は
+   中緯度(φ ≈ 35°)・中央子午線から 1.3° 離れで 0.7° 前後あり、8方位に
+   丸めても境界付近の数 % が反転しうる。最寄り点を UTM で求め、その2点を
+   EPSG:4326 へ戻して `pyproj.Geod.inv` に渡せば、この変数を消せる
+
+いずれも実測で確認済み。詳細と golden 突合の手順は
+[distance-direction-pending.md](distance-direction-pending.md) にまとめてある。
 
 ### Filter や Select で何もしなくてよい理由
 
@@ -405,8 +426,8 @@ EPSG:4326 のままで問題ない。
 
 | 入力パス | 現状の扱い |
 | --- | --- |
-| `C:\data\mesh.shp` | `gpd.read_file` + 正規化 ✅ |
-| `C:\data\master.tab`(MapInfo TAB) | `gpd.read_file` + 正規化 ✅(2026-07-31 追加) |
+| `C:\data\areas.shp` | `gpd.read_file` + 正規化 ✅ |
+| `C:\data\polygons.tab`(MapInfo TAB) | `gpd.read_file` + 正規化 ✅(2026-07-31 追加) |
 | `C:\data\geo.gdb\layer1`(レイヤー名付き gdb) | `pd.read_csv` 扱いになり正規化されない |
 | `C:\data\pts.yxdb`(SpatialObj を含み得る) | 同上 |
 
@@ -459,7 +480,7 @@ _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)) / 1000   # m → km
 ルールは3つ。
 
 1. **投影先はデータから推定した UTM**(`estimate_utm_crs()`)。
-   ゾーン内ならスケール誤差は 0.1% 未満で、建物スケールなら cm オーダー
+   ゾーン内ならスケール誤差は 0.1% 未満で、数百m スケールなら cm オーダー
 2. **オペランドは全部、同じ CRS へ投影する**。
    片方だけ投影すると座標系の違う数値どうしを比べることになる
 3. **測るのはメートル、単位換算は最後**。

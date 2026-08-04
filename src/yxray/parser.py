@@ -217,7 +217,7 @@ def _parse_macro_actions(root: etree._Element) -> list[MacroAction]:
 
     The Action's own ToolID is written as a <ToolId value="..."/> child, not
     as an attribute; the attribute form is accepted too so a hand-edited file
-    still reads. <Destination> is "952/File" — ToolID and field name.
+    still reads. <Destination> is "102/File" — ToolID and field name.
     """
     actions: list[MacroAction] = []
     for elem in root.findall(".//Actions//Action"):

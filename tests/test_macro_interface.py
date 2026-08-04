@@ -39,7 +39,7 @@ def test_control_params_are_indexed_by_position(macro_path: pathlib.Path) -> Non
     assert param.index == 1
     assert param.description == "出力ファイル名"
     # The canvas ToolID is only recoverable from the default name.
-    assert param.tool_id == 951
+    assert param.tool_id == 101
     assert param.label == "出力ファイル名"
 
 
@@ -47,7 +47,7 @@ def test_actions_resolve_their_destination_and_params(
     macro_path: pathlib.Path,
 ) -> None:
     (action,) = parse_one(macro_path).macro_interface.actions
-    assert action.tool_id == 952
+    assert action.tool_id == 102
     assert action.expression == "[#1]"
     assert action.destination_tool_id == 2
     assert action.destination_field == "File"
@@ -81,8 +81,8 @@ def test_annotation_text_is_parsed(macro_path: pathlib.Path) -> None:
     nodes = {
         int(n.tool_id): n for n in parse_one(macro_path, filter_ui_tools=False).nodes
     }
-    assert nodes[951].annotation == "コントロールパラメーター (951)"
-    assert nodes[952].annotation == "値を更新"
+    assert nodes[101].annotation == "コントロールパラメーター (101)"
+    assert nodes[102].annotation == "値を更新"
     assert nodes[1].annotation == ""
 
 
@@ -95,9 +95,9 @@ def test_override_warning_names_the_field_action_and_parameter(
     (warning,) = detect_macro_overrides(parse_one(macro_path))
     assert warning.tool_id == 2
     assert warning.field == "File"
-    assert warning.action_tool_id == 952
-    assert "Action 952" in warning.message
-    assert "[#1] 出力ファイル名 (ToolID 951)" in warning.message
+    assert warning.action_tool_id == 102
+    assert "Action 102" in warning.message
+    assert "[#1] 出力ファイル名 (ToolID 101)" in warning.message
     assert "design-time default" in warning.message
 
 
@@ -143,7 +143,7 @@ def test_interface_edges_never_become_data_predecessors(
     for filter_ui_tools in (True, False):
         doc = parse_one(macro_path, filter_ui_tools=filter_ui_tools)
         assert build_predecessor_map(doc) == {2: [1]}
-        assert 952 not in topo_order(doc)
+        assert 102 not in topo_order(doc)
         code = scaffold(doc)
         assert "df_?" not in code
         assert "df_1.to_csv" in code
@@ -152,11 +152,11 @@ def test_interface_edges_never_become_data_predecessors(
 def test_interface_nodes_are_not_scaffolded_as_data_tools(
     macro_path: pathlib.Path,
 ) -> None:
-    # Even when they are parsed in, they carry no rows — a `df_951 = ...`
+    # Even when they are parsed in, they carry no rows — a `df_101 = ...`
     # stub would be noise in the generated script.
     code = scaffold(parse_one(macro_path, filter_ui_tools=False))
-    assert "df_951" not in code
-    assert "df_952" not in code
+    assert "df_101" not in code
+    assert "df_102" not in code
 
 
 def test_unknown_predecessor_tools_are_dropped() -> None:
