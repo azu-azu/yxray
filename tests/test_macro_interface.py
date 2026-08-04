@@ -152,11 +152,11 @@ def test_interface_edges_never_become_data_predecessors(
 def test_interface_nodes_are_not_scaffolded_as_data_tools(
     macro_path: pathlib.Path,
 ) -> None:
-    # Even when they are parsed in, they carry no rows — a `df_951 = ...`
+    # Even when they are parsed in, they carry no rows — a `df_101 = ...`
     # stub would be noise in the generated script.
     code = scaffold(parse_one(macro_path, filter_ui_tools=False))
-    assert "df_951" not in code
-    assert "df_952" not in code
+    assert "df_101" not in code
+    assert "df_102" not in code
 
 
 def test_unknown_predecessor_tools_are_dropped() -> None:
