@@ -243,18 +243,18 @@ def test_config_map_carries_batch_macro_overrides() -> None:
     config_map = _config_map(parse_one(path, filter_ui_tools=False))
 
     assert config_map["2"]["runtime_overrides"] == [
-        "File ← [#1] 出力ファイル名 — Action 952"
+        "File ← [#1] 出力ファイル名 — Action 102"
     ]
-    assert config_map["952"]["runtime_overrides"] == [
+    assert config_map["102"]["runtime_overrides"] == [
         "rewrites 2/File as [#1] 出力ファイル名"
     ]
-    assert config_map["951"]["runtime_overrides"] == [
-        "[#1] 出力ファイル名 → 2/File via Action 952"
+    assert config_map["101"]["runtime_overrides"] == [
+        "[#1] 出力ファイル名 → 2/File via Action 102"
     ]
     # A Control Parameter's <Configuration/> is empty, so without the
     # annotation the panel would have nothing but the plugin name to show.
-    assert config_map["951"]["annotation"] == "コントロールパラメーター (951)"
-    assert config_map["951"]["config"] == {}
+    assert config_map["101"]["annotation"] == "コントロールパラメーター (101)"
+    assert config_map["101"]["config"] == {}
 
 
 def test_config_map_has_no_overrides_for_a_plain_workflow() -> None:

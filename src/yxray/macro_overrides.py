@@ -29,7 +29,7 @@ class MacroOverrideWarning:
 
 
 def _param_labels(interface: MacroInterface, action: MacroAction) -> str:
-    """ "[#1] 出力ファイル名 (ToolID 951)" for each parameter the action uses."""
+    """ "[#1] 出力ファイル名 (ToolID 101)" for each parameter the action uses."""
     parts: list[str] = []
     for index in action.param_indexes:
         param = interface.param(index)
