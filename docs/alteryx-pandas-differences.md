@@ -697,12 +697,15 @@ DataFrame 列（デフォルト名 `geometry`）として保持するため、�
 
 ```text
 Alteryx の内部ストリーム              pandas（GeoDataFrame）
-├─ EL_ID                              ├─ EL_ID
+├─ ID_A                               ├─ ID_A
 ├─ Longitude                          ├─ Longitude
 ├─ Latitude                           ├─ Latitude
 └─ Centroid ← SpatialObj型。          └─ geometry ← 明示的な列として
     グリッド/CSV に出ない                  常に見える
 ```
+
+`ID_A` は実ワークフロー由来の列を匿名化した仮名。`Longitude` / `Latitude` /
+`Centroid` / `geometry` は Alteryx・geopandas 側の固定名なのでそのまま。
 
 ### golden 比較時の扱い
 
@@ -788,7 +791,7 @@ CRS None 分岐は「4326 と仮定した」ことを `logger.warning` で実行
 
 ### Shapefile のサイドカー — .dbf が無いと属性列が静かに消える（ガード実装済み）
 
-.shp の属性列（MESHCODE 等）は本体ではなく**同名の .dbf サイドカー**に
+.shp の属性列（CODE_A 等）は本体ではなく**同名の .dbf サイドカー**に
 入っている。Alteryx も GeoPandas も、.shp を1個指定すれば同フォルダの
 同名サイドカーを自動で読むので、一式が揃っていれば挙動差はない。
 
@@ -1005,7 +1008,7 @@ Alteryx は数値を文字列として出力する場面で、**整数相当の�
 ```
 1.0     → "1"
 1.5     → "1.5"
-21000.0 → "21000"
+12000.0 → "12000"
 ```
 
 pandas の `astype("string")` は `1.0` を `"1.0"` にするので、Double 列に
@@ -1013,12 +1016,12 @@ pandas の `astype("string")` は `1.0` を `"1.0"` にするので、Double 列
 19章の補充がまさにこの形を作る:
 
 ```python
-# Floor は Double。プレースホルダ "-" を入れると object 列になり、
+# Size は Double。プレースホルダ "-" を入れると object 列になり、
 # 数値はそのまま残る（"1" ではなく 1.0）
-df["Floor"] = fill_empty(df["Floor"], "-")   # → [1.0, '-', 21000.0]
+df["Size"] = fill_empty(df["Size"], "-")   # → [1.0, '-', 12000.0]
 
 # 表記を整えてから埋める
-df["Floor"] = fill_empty(to_display_string(df["Floor"]), "-")  # → ['1', '-', '21000']
+df["Size"] = fill_empty(to_display_string(df["Size"]), "-")  # → ['1', '-', '12000']
 ```
 
 > **未検証**: Alteryx 側のこの挙動は本リポジトリの golden 突合では未確認。
@@ -1043,7 +1046,7 @@ dtype を意図的に捨てる操作なので、組み込むと自分の契約�
 2つは合成して使う。**順序は「文字列化 → 補充」**:
 
 ```python
-fill_empty(to_display_string(df["Floor"]), "-")   # ['1', '-', '21000']
+fill_empty(to_display_string(df["Size"]), "-")   # ['1', '-', '12000']
 ```
 
 値としては逆順でも同じ結果になる（後述のとおり object 列の中の float も拾う）。
@@ -1102,7 +1105,7 @@ Alteryx XML だけでは決まらず実データの型に依存するため、�
 ```python
 "1.0"   → "1"        "001"     → "001"      # 先頭ゼロは有意かもしれない
 "1.5"   → "1.5"      "001.0"   → "001.0"
-"10.00" → "10"       "B1"      → "B1"       # 数値でないテキスト
+"10.00" → "10"       "SM"      → "SM"       # 数値でないテキスト
 "0.0"   → "0"        "1e5"     → "1e5"      # 指数表記は触らない
                      "-0.0"    → "-0.0"     # "-0" を作らない
                      " 1.0"    → " 1.0"     # 空白の除去は呼び出し側の判断
@@ -1110,8 +1113,8 @@ Alteryx XML だけでは決まらず実データの型に依存するため、�
 
 > **列ごと `pd.to_numeric(errors="coerce")` に通してはいけない。** 数値でない
 > テキストが黙って NaN になり、その NaN を直後の `fill_empty()` が
-> プレースホルダで塗り潰すため、**消えたことが出力から分からない**。Floor 列の
-> `"B1"`（地下1階）や `"PH"`（最上階）が `"-"` に化けるのは実際に起こる。
+> プレースホルダで塗り潰すため、**消えたことが出力から分からない**。Size 列の
+> `"SM"`（小)や `"XL"`（特大）のような区分コードが `"-"` に化けるのは実際に起こる。
 > 表記の書き換えなら情報を捨てないので、この心配が要らない。
 
 副作用として、バージョン番号のような「数値ではない `"1.0"`」も `"1"` になる。
@@ -1120,19 +1123,19 @@ Alteryx XML だけでは決まらず実データの型に依存するため、�
 ### `pd.to_numeric()` を前置すべきか — 既定は「しない」
 
 ```python
-fill_empty(to_display_string(df["Floor"]), "-")                          # 既定
-fill_empty(to_display_string(pd.to_numeric(df["Floor"], "coerce")), "-") # 例外扱い
+fill_empty(to_display_string(df["Size"]), "-")                          # 既定
+fill_empty(to_display_string(pd.to_numeric(df["Size"], "coerce")), "-") # 例外扱い
 ```
 
 両者の差はこれだけ。前置すると**壊れる側の差分のほうが多い**:
 
 | 入力 | 前置なし | `to_numeric` 前置 | |
 |---|---|---|---|
-| `"1.0"` / `"21000.0"` | `1` / `21000` | 同じ | — |
+| `"1.0"` / `"12000.0"` | `1` / `12000` | 同じ | — |
 | `"1.50"` | `1.50` | `1.5` | 前置すると正規化される |
 | `"01.0"` / `" 1.0"` / `"1e5"` | そのまま | `1` / `1` / `100000` | 同上 |
 | `"001"` | `001` | `1` | **コードが壊れる** |
-| `"B1"` | `B1` | `-` | **値が消える** |
+| `"SM"` | `SM` | `-` | **値が消える** |
 | `"1,000.0"` | `1,000.0` | `-` | **値が消える** |
 
 消えた値は直後の `fill_empty()` がプレースホルダで塗り潰すので、出力を見ても
@@ -1151,8 +1154,8 @@ fill_empty(to_display_string(pd.to_numeric(df["Floor"], "coerce")), "-") # 例�
 型を見て、どこで落ちているかを確定させる:
 
 ```python
-print(df["Floor"].map(type).value_counts())    # str / float / Decimal のどれか
-print(df["Floor"].head(20).map(repr))          # " 1.0" のような空白混じりが見える
+print(df["Size"].map(type).value_counts())    # str / float / Decimal のどれか
+print(df["Size"].head(20).map(repr))          # " 1.0" のような空白混じりが見える
 ```
 
 `numeric` の **dtype だけ見ても分からない**ことに注意。全セルが非対象で
@@ -1168,16 +1171,16 @@ print(numeric.notna().sum())   # 0 なら「数値オブジェクトとしては
 対して使っているのと同じく、**変換で null が増えていないかを併せて見る**:
 
 ```python
-source = df["Floor"]
+source = df["Size"]
 numeric = pd.to_numeric(source, errors="coerce")
 lost = numeric.isna() & source.notna() & source.ne("")
 if lost.any():
     logger.warning(
-        "Floor: %d 件が数値に変換できず null になった — %r",
+        "Size: %d 件が数値に変換できず null になった — %r",
         int(lost.sum()),
         sorted(source[lost].unique())[:10],
     )
-df["Floor"] = fill_empty(to_display_string(numeric), "-")
+df["Size"] = fill_empty(to_display_string(numeric), "-")
 ```
 
 ---

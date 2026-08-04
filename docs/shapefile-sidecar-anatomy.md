@@ -1,12 +1,16 @@
 # Shapefile のサイドカー構造 — 「geometry しか読めない」問題の調査と対策
 
 `gpd.read_file("xxx.shp")` の結果に geometry 列しかなく、
-Alteryx XML が宣言する属性列(MESHCODE など)が見えない —
+Alteryx XML が宣言する属性列(CODE_A など)が見えない —
 という症状の原因調査と、それを受けて scaffold に入れた対策
 (PR [#67](https://github.com/azu-azu/yxray/pull/67))の記録である。
 
 CRS(座標系)側の設計は [spatial-crs-design.md](spatial-crs-design.md) を参照。
 本ドキュメントは **ファイル構成(サイドカー)** 側を扱う。
+
+> 挙動は実ワークフロー・実ファイルで裏取り済みだが、**列名・ファイル名は
+> 匿名化してある**(`CODE_A` / `ATTR_B` / `areas.shp` などは仮名)。
+> 結論と検証表はそのままで、識別子だけが差し替わっている。
 
 ---
 
@@ -29,12 +33,12 @@ GDAL は .dbf を任意扱いで開き、scaffold が Alteryx パリティのた
 「Shapefile」は実際には、同じベース名を持つ複数ファイルの集合を指す。
 
 ```
-mesh.shp   図形本体(ポリゴン等)── これだけでは属性列は無い
-mesh.dbf   属性テーブル(MESHCODE, BR_Top, … の列と値)
-mesh.shx   図形のインデックス
-mesh.prj   座標参照系(CRS)
-mesh.cpg   文字エンコーディング(あれば)
-mesh.qmd   QGIS のメタデータ(読み込みには不要)
+areas.shp   図形本体(ポリゴン等)── これだけでは属性列は無い
+areas.dbf   属性テーブル(CODE_A, ATTR_B, … の列と値)
+areas.shx   図形のインデックス
+areas.prj   座標参照系(CRS)
+areas.cpg   文字エンコーディング(あれば)
+areas.qmd   QGIS のメタデータ(読み込みには不要)
 ```
 
 読み込みに使うのは `.shp + .dbf + .shx + .prj` の4点セットと考えてよい。
@@ -47,7 +51,7 @@ GeoPandas が一式を正しく読んだときの列は 1:1 に対応する。
 
 | Alteryx | GeoPandas | 実体の在処 |
 | --- | --- | --- |
-| MESHCODE などの属性6列 | 同じ属性6列 | `.dbf` |
+| CODE_A などの属性6列 | 同じ属性6列 | `.dbf` |
 | SpatialObj | geometry | `.shp` |
 
 Alteryx は図形列を `SpatialObj`、GeoPandas は `geometry` と呼ぶだけで、
@@ -107,7 +111,7 @@ geometry 1列だけの GeoDataFrame が警告ゼロで完成
         │
         ▼
 gpd.sjoin(targets, universe, ...)
-universe 側の属性列(MESHCODE 等)が結果に乗らない
+universe 側の属性列(CODE_A 等)が結果に乗らない
         │
         ▼
 「sjoin の結果が想定と違う」
@@ -187,7 +191,7 @@ if df_1.crs is None:
 
 ```python
 from pathlib import Path
-path = Path("mesh.shp")
+path = Path("areas.shp")
 for file in path.parent.glob(f"{path.stem}.*"):
     print(file.name)
 ```

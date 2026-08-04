@@ -405,8 +405,8 @@ EPSG:4326 のままで問題ない。
 
 | 入力パス | 現状の扱い |
 | --- | --- |
-| `C:\data\mesh.shp` | `gpd.read_file` + 正規化 ✅ |
-| `C:\data\master.tab`(MapInfo TAB) | `gpd.read_file` + 正規化 ✅(2026-07-31 追加) |
+| `C:\data\areas.shp` | `gpd.read_file` + 正規化 ✅ |
+| `C:\data\polygons.tab`(MapInfo TAB) | `gpd.read_file` + 正規化 ✅(2026-07-31 追加) |
 | `C:\data\geo.gdb\layer1`(レイヤー名付き gdb) | `pd.read_csv` 扱いになり正規化されない |
 | `C:\data\pts.yxdb`(SpatialObj を含み得る) | 同上 |
 
