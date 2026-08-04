@@ -56,10 +56,13 @@ golden CSV にも現れないため、値がズレても比較を汚さなかっ
 
 ## 確定していること(実ワークフローの XML が根拠)
 
-対象ノードは `ToolID="1106"`、
-`Plugin="AlteryxSpatialPluginsGui.Distance.Distance"`。
+対象ノードは `Plugin="AlteryxSpatialPluginsGui.Distance.Distance"`。
 XML 本体はリポジトリに入っていない(`.gitignore` が `*.yxmd` を除外)ため、
 根拠となる断片だけをここに転記しておく。
+
+> 以下は実ワークフローで裏取り済みだが、**ToolID・ファイル名は匿名化して
+> ある**(この文書では Distance を `ToolID=D`、直前の Spatial Info を
+> `ToolID=S` と呼ぶ)。設定値と MetaInfo の中身はそのままである。
 
 ### 1. `Direction` は Distance ツールが作った列
 
@@ -71,7 +74,7 @@ XML 本体はリポジトリに入っていない(`.gitignore` が `*.yxmd` を�
        type="String"/>
 ```
 
-直前の Spatial Info ノード(`ToolID="1107"`)の MetaInfo は `Centroid` で
+直前の Spatial Info ノード(`ToolID=S`)の MetaInfo は `Centroid` で
 終わっており `Direction` は存在しない。作っているのは Distance で確定。
 
 ### 2. 8方位である
@@ -84,9 +87,9 @@ XML 本体はリポジトリに入っていない(`.gitignore` が `*.yxmd` を�
 `source` 属性のとおり `Source=Centroid`、`Destination=SpatialObj`。
 どちらも **同じレコード内の2列**(2入力ではない)。
 `Centroid` は直前の Spatial Info が作った列、`SpatialObj` は
-`master.tab`(MapInfo TAB)由来の建物ポリゴンである。
+`polygons.tab`(MapInfo TAB)由来のポリゴンである。
 
-つまり **起点は「その建物ポリゴン自身の重心」** であり、
+つまり **起点は「そのポリゴン自身の重心」** であり、
 **起点は常に宛先ポリゴンの内側にある**。この事実が
 [落とし穴 (a)](#a-宛先にポリゴンをそのまま渡すと全行-n-になる)
 の直接の原因になる。
@@ -211,13 +214,13 @@ _src.shortest_line(_dst.boundary)
 
 ## 投影平面の方位か、測地方位か
 
-保留メモは「建物スケールでは無視できる」としていたが、
+保留メモは「数百m スケールでは無視できる」としていたが、
 **8方位に丸めても完全には無視できない**。
 
 UTM の子午線収差(grid north と true north のズレ)は
-γ ≈ Δλ · sin φ。φ = 35.7°、中央子午線から 1.3° 離れで **約 0.76°**。
-8方位は45°幅なので、境界から 0.76° 以内にある行 —
-おおよそ **3〜4%** — が反転しうる。
+γ ≈ Δλ · sin φ。中緯度(φ ≈ 35°)で中央子午線から 1.3° 離れれば
+**0.7° 前後**になる。8方位は45°幅なので、境界から
+その角度以内にある行 — 分布次第だが**数 %** — が反転しうる。
 
 問題は誤差の大きさではなく **切り分けができなくなること** である。
 反転する行は [(b) の丸め規則](#b-round-による8方位の丸めは境界規則が非対称になる)
@@ -236,12 +239,12 @@ UTM の子午線収差(grid north と true north のズレ)は
 
 ## 決着のつけ方(golden 突合)
 
-手元の Alteryx 出力 CSV に `Direction` 列があるので、候補実装を当てて
-一致するか見れば確定する。必要なのは
+`Direction` 列を含む Alteryx 出力 CSV が用意できれば、候補実装を当てて
+一致するか見るだけで確定する。必要なのは
 `Centroid` / `SpatialObj` / `DistanceKilometers` / `Direction` の数行。
 
 **行の選び方が重要**: 方位がバラける行を5〜10行選ぶ
-(南寄りの建物と東寄りの建物が混ざるように)。
+(南寄りのポリゴンと東寄りのポリゴンが混ざるように)。
 全行が同じ方位だと、[落とし穴 (a)](#a-宛先にポリゴンをそのまま渡すと全行-n-になる)
 のバグと正解が区別できない。
 
@@ -251,7 +254,7 @@ UTM の子午線収差(grid north と true north のズレ)は
 - 全部ズレる → 宛先の重心への方位を試す
 - 境界付近だけズレる → 先に (b) を潰してから、丸め規則を調整する
 - **Alteryx 側の `Direction` が全行 `N`** → 仕様ではなく Alteryx 側でも
-  同じ現象が起きている可能性がある。別の建物データで再確認する
+  同じ現象が起きている可能性がある。別のポリゴンデータで再確認する
 
 ---
 
@@ -261,7 +264,7 @@ UTM の子午線収差(grid north と true north のズレ)は
 そのとき Alteryx の `Direction` が何を出すか(空文字 / `N` / 最寄り辺の方位)は
 **未確定**である。
 
-実ワークフローは `True` なので当面の翻訳には影響しないが、
+検証対象の設定は `True` なので当面の翻訳には影響しないが、
 `gen_distance()` は両方を生成し分けるため、
 **`False` 側は TODO に落として部分昇格を維持する** のが
 `_findreplace.py` が確立した規律(検証済みの組み合わせだけ実コードにし、

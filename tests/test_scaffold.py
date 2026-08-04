@@ -131,7 +131,7 @@ def test_scaffold_input_shp_uses_gpd_read_file() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -151,7 +151,7 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -168,7 +168,7 @@ def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
@@ -201,7 +201,7 @@ def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         ),
         AlteryxNode(
             tool_id=ToolID(2),
@@ -225,7 +225,7 @@ def test_scaffold_non_shp_has_no_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     assert "SHAPE_RESTORE_SHX" not in scaffold(doc)
@@ -238,7 +238,7 @@ def test_scaffold_simple_shp_notes_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold_simple(doc)
@@ -256,7 +256,7 @@ def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
@@ -277,7 +277,7 @@ def test_scaffold_shp_read_guards_missing_dbf() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -294,12 +294,12 @@ def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold_simple(doc)
     assert "from pathlib import Path" in code
-    assert '_shp = Path(r"C:\\data\\mesh.shp")' in code
+    assert '_shp = Path(r"C:\\data\\areas.shp")' in code
     assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
 
 
@@ -314,7 +314,7 @@ def test_scaffold_tab_read_guards_missing_dat() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\master.tab"},
+            config={"FileName": r"C:\data\polygons.tab"},
         )
     )
     code = scaffold(doc)
@@ -352,7 +352,7 @@ def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
@@ -1628,11 +1628,11 @@ def test_scaffold_unique_uses_subset() -> None:
             tool_type="Unique",
             x=10,
             y=0,
-            config={"UniqueFields": {"Field": {"@field": "EL_ID"}}},
+            config={"UniqueFields": {"Field": {"@field": "ID_A"}}},
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.drop_duplicates(subset=["EL_ID"])' in code
+    assert 'df_2 = df_1.drop_duplicates(subset=["ID_A"])' in code
 
 
 def test_scaffold_unique_without_fields_keeps_default() -> None:
@@ -1826,8 +1826,8 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
-            "FieldFind": "EL_ID",
-            "FieldSearch": "EL_ID",
+            "FieldFind": "ID_A",
+            "FieldSearch": "ID_A",
             "ReplaceFoundField": "フィールドC",
             "FindMode": "FindWhole",
             "ReplaceMode": "Append",
@@ -1839,13 +1839,13 @@ def test_scaffold_findreplace_append_mode_left_join() -> None:
         "R",
     )
     code = scaffold(doc)
-    assert 'df_2[["EL_ID", "フィールドA", "フィールドB"]]' in code
-    assert 'on="EL_ID"' in code
+    assert 'df_2[["ID_A", "フィールドA", "フィールドB"]]' in code
+    assert 'on="ID_A"' in code
     assert 'how="left"' in code
     assert "unsupported tool type" not in code
     # duplicate lookup keys must not grow the row count: the lookup side is
     # deduplicated before the join and the last duplicate wins
-    assert '.drop_duplicates("EL_ID", keep="last")' in code
+    assert '.drop_duplicates("ID_A", keep="last")' in code
     assert "raise ValueError(" not in code
     # keep="last" is golden-verified (3 duplicate keys with distinct values,
     # identical output for both RMF settings) — no caveat NOTE
@@ -1904,8 +1904,8 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     doc = _two_input_doc(
         "FindReplace",
         {
-            "FieldFind": "EL_ID",
-            "FieldSearch": "EL_ID",
+            "FieldFind": "ID_A",
+            "FieldSearch": "ID_A",
             "FindMode": "FindAny",
             "ReplaceMode": "Append",
             "ReplaceMultipleFound": {"@value": "True"},
@@ -1918,11 +1918,11 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     )
     code = scaffold(doc)
     assert "find_any_append(" in code
-    assert 'find_field="EL_ID"' in code
+    assert 'find_field="ID_A"' in code
     # FieldFind == FieldSearch: the helper output is "Targets columns +
     # append_fields" only — the search value is never added to the output, so
     # the key column is not duplicated and no rename/drop workaround is needed.
-    assert 'search_field="EL_ID"' in code
+    assert 'search_field="ID_A"' in code
     assert ".rename(columns=" not in code
     assert ".drop(columns=" not in code
     assert 'append_fields=["col_a", "col_b"]' in code
