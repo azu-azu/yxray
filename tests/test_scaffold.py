@@ -131,7 +131,7 @@ def test_scaffold_input_shp_uses_gpd_read_file() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -151,7 +151,7 @@ def test_scaffold_spatial_read_normalizes_crs_to_wgs84() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -168,7 +168,7 @@ def test_scaffold_simple_spatial_read_normalizes_crs_to_wgs84() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
@@ -201,7 +201,7 @@ def test_scaffold_shp_restores_shx_once_in_preamble() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         ),
         AlteryxNode(
             tool_id=ToolID(2),
@@ -225,7 +225,7 @@ def test_scaffold_non_shp_has_no_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     assert "SHAPE_RESTORE_SHX" not in scaffold(doc)
@@ -238,7 +238,7 @@ def test_scaffold_simple_shp_notes_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold_simple(doc)
@@ -256,7 +256,7 @@ def test_scaffold_simple_non_shp_spatial_has_no_shx_restore() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
@@ -277,7 +277,7 @@ def test_scaffold_shp_read_guards_missing_dbf() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold(doc)
@@ -294,12 +294,12 @@ def test_scaffold_simple_shp_dbf_guard_imports_pathlib() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.shp"},
+            config={"FileName": r"C:\data\areas.shp"},
         )
     )
     code = scaffold_simple(doc)
     assert "from pathlib import Path" in code
-    assert '_shp = Path(r"C:\\data\\mesh.shp")' in code
+    assert '_shp = Path(r"C:\\data\\areas.shp")' in code
     assert 'raise FileNotFoundError(f"{_shp}: .dbf sidecar not found")' in code
 
 
@@ -352,7 +352,7 @@ def test_scaffold_simple_non_shp_spatial_has_no_dbf_guard() -> None:
             tool_type="DbFileInput",
             x=0,
             y=0,
-            config={"FileName": r"C:\data\mesh.gpkg"},
+            config={"FileName": r"C:\data\areas.gpkg"},
         )
     )
     code = scaffold_simple(doc)
