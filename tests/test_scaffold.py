@@ -2423,7 +2423,7 @@ def _buffer_config(**overrides: object) -> dict:
     # size read from a field, in kilometers, generalized, keeping the object
     # it was built from in the output.
     config: dict = {
-        "SpatialObjField": {"#text": "SpatialObj"},
+        "SpatialObjectField": {"#text": "SpatialObj"},
         "IncludeSourceInOutput": {"@value": "True"},
         "GeneralizeToOnePercent": {"@value": "True"},
         "BufferSizeSource": {"#text": "FromField"},
@@ -2542,9 +2542,42 @@ def test_scaffold_buffer_unknown_unit_is_todo() -> None:
 
 
 def test_scaffold_buffer_without_spatial_field_is_todo() -> None:
-    code = scaffold(_buffer_doc(SpatialObjField={"#text": ""}))
+    code = scaffold(_buffer_doc(SpatialObjectField={"#text": ""}))
     assert "# TODO: Buffer — no input SpatialObj field" in code
     assert "_geom" not in code
+
+
+def test_scaffold_buffer_reads_fields_written_as_attributes() -> None:
+    # Alteryx spells a field selector both ways — Spatial Info writes
+    # <SpatialObj field="…"/>, Distance writes <SpatialObjSource>…</…> — and
+    # reading only the text form turned a fully configured node into
+    # "field not found", i.e. a TODO on a workflow that was fine.
+    code = scaffold(
+        _buffer_doc(
+            SpatialObjectField={"@field": "SpatialObj"},
+            BufferSizeField={"@field": "bufferSize"},
+            Units={"@value": "Kilometers"},
+            BufferSizeSource={"@value": "FromField"},
+        )
+    )
+    assert "TODO: Buffer" not in code
+    assert '_dist_m = pd.to_numeric(df_1["bufferSize"]' in code
+    assert "_dist_m = _dist_m * 1000" in code
+    assert 'if "SpatialObj" in df_2.columns:' in code
+
+
+def test_scaffold_distance_reads_fields_written_as_attributes() -> None:
+    # Same tolerance on the tool whose text form is the verified one, so a
+    # node spelled the other way does not silently degrade to a TODO.
+    code = scaffold(
+        _distance_doc(
+            SpatialObjSource={"@field": "Centroid"},
+            SpatialObjDest={"@field": "SpatialObj"},
+            OutputUnits={"@value": "Kilometers"},
+        )
+    )
+    assert 'df_2["DistanceKilometers"] = (' in code
+    assert "# TODO: Distance — unknown OutputUnits" not in code
 
 
 def test_scaffold_buffer_without_size_field_is_todo() -> None:

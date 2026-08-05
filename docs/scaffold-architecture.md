@@ -232,7 +232,7 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 列名そのものではない。`SpatialObj` は Alteryx 側の既定名なのでそのまま):
 
 ```xml
-<SpatialObjField>SpatialObj</SpatialObjField>
+<SpatialObjectField>SpatialObj</SpatialObjectField>
 <IncludeSourceInOutput value="True"/>
 <GeneralizeToOnePercent value="True"/>
 <BufferSizeSource>FromField</BufferSizeSource>

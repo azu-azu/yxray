@@ -47,6 +47,41 @@ def _flag(config: dict[str, Any], key: str, *, default: bool = False) -> bool:
     return default if value is None else str(value).lower() == "true"
 
 
+def _field_ref(config: dict[str, Any], *keys: str) -> str:
+    """A field name under the first of `keys` that carries one.
+
+    Two things vary between the spatial tools and neither is declared
+    anywhere in the XML, so both are read rather than assumed:
+
+    - the tag: Buffer names its input <SpatialObjectField>, Distance
+      <SpatialObjSource>. Guessing one from the other is what put a
+      "no input SpatialObj field" TODO on a fully configured Buffer node.
+    - the spelling: Spatial Info picks its field with an attribute
+      (<SpatialObj field="…"/>) while Buffer and Distance use element text.
+
+    Pass the tag confirmed by a real node's XML first; later keys are
+    alternates, and a wrong guess costs nothing because a missing tag reads
+    as "" either way.
+    """
+    for key in keys:
+        if text := first_text(config, key):
+            return text
+        node = config.get(key)
+        if isinstance(node, dict) and (name := field_name(node)):
+            return name
+    return ""
+
+
+def _setting(config: dict[str, Any], key: str) -> str:
+    """A setting value, written either as text or as value="…"."""
+    if text := first_text(config, key):
+        return text
+    node = config.get(key)
+    if isinstance(node, dict) and node.get("@value") is not None:
+        return str(node["@value"])
+    return ""
+
+
 def _spatial_field_note(*fields: str) -> str:
     """Why the generated code does not simply index the XML's field name."""
     quoted = " and ".join(repr(comment_safe(f)) for f in fields)
@@ -381,9 +416,9 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     config = ctx.config
-    src_field = first_text(config, "SpatialObjSource")
-    dst_field = first_text(config, "SpatialObjDest")
-    units = first_text(config, "OutputUnits")
+    src_field = _field_ref(config, "SpatialObjSource")
+    dst_field = _field_ref(config, "SpatialObjDest")
+    units = _setting(config, "OutputUnits")
 
     blocker = ""
     if _flag(config, "OutputDriveTimeAndDistance"):
@@ -518,10 +553,12 @@ def gen_buffer(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     config = ctx.config
-    field = first_text(config, "SpatialObjField")
-    size_source = first_text(config, "BufferSizeSource")
-    size_field = first_text(config, "BufferSizeField")
-    units = first_text(config, "Units")
+    # <SpatialObjectField> is the tag the real node uses; the shorter
+    # spelling is accepted as an alternate, not asserted.
+    field = _field_ref(config, "SpatialObjectField", "SpatialObjField")
+    size_source = _setting(config, "BufferSizeSource")
+    size_field = _field_ref(config, "BufferSizeField")
+    units = _setting(config, "Units")
 
     # (headline, extra comment lines) so a long reason wraps in the emitted
     # comment instead of running off the right edge of the generated file.
