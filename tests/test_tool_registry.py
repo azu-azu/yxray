@@ -98,6 +98,19 @@ def test_python_hint_for_buffer_is_partial() -> None:
     assert "buffer" in hint
 
 
+def test_buffer_hint_agrees_with_what_scaffold_generates() -> None:
+    # Same two-code-path trap as Formula (docs/explain-output-anatomy.md):
+    # the hint used to show a bare .buffer(distance) with "reproject first"
+    # as prose, while the generator projects into an estimated UTM zone and
+    # converts the result back — a buffer is geometry, so the excursion has
+    # to end on the invariant CRS. It also refuses fixed sizes.
+    hint, supported = python_hint_for("Buffer")
+    assert supported == "partial"
+    assert "estimate_utm_crs" in hint
+    assert 'to_crs("EPSG:4326")' in hint
+    assert "FromField" in hint
+
+
 def test_python_hint_for_directory_is_partial() -> None:
     hint, supported = python_hint_for("Directory")
     assert supported == "partial"

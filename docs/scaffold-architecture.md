@@ -45,6 +45,7 @@
                    SpatialMatch
                    SpatialInfo
                    Distance
+                   Buffer
 
   （↑ すべての生成モジュールは _common だけに依存する）
                          │
@@ -93,7 +94,7 @@ __init__              ← 外部にはここだけ見せる
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
-| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo, Distance |
+| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo, Distance, Buffer |
 | `_registry` | セグメント→生成関数の対応表(`GENERATORS`) | — |
 | `_assemble` | 全体組み立て・公開API | — |
 
@@ -161,8 +162,10 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
   なしに昇格させない**。`_findreplace.py`(golden 検証済み4モード変換)が
   この規律の実例 — 対応済みの組み合わせだけ実コードにし、それ以外は
   「対応不可」と分かる形の明示的TODOに落とす
-- `Directory`/`Buffer`(`"partial"`)は後者に該当し、2026-07-19 時点で
-  リポジトリ内に検証材料(実ワークフローXML)が無いため未昇格。
+- `Directory`(`"partial"`)は後者に該当し、2026-07-19 時点で
+  リポジトリ内に検証材料(実ワークフローXML)が無いため未昇格
+  (`Buffer` も同じ理由で未昇格だったが、実XMLが出てきたので
+  [2026-08-05 に部分昇格](#buffer-の部分昇格2026-08-05)した)。
   `MultiRowFormula`/`PolySplit`/`DynamicInput`
   (`"no"`)はcommit `56b34d5` で「1つの生成スニペットに還元すると誤ったコードを
   出すリスクの方が高い」と判断され、そもそも昇格候補から意図的に外されている
@@ -215,6 +218,55 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 それでも Double 列なので、生成コードに
 `WARNING: this is a planar UTM distance` を残してある。
 
+### `Buffer` の部分昇格(2026-08-05)
+
+`python_supported` は `"partial"` のままだが、hint だけの状態から
+`GENERATORS` 登録済みの生成器(`gen_buffer()`)になった。
+2026-07-19 時点では「設定次第でコードの形が変わるのに実XMLが無い」ため
+未昇格だったが、実ノードの `<Configuration>` が出てきたので昇格した。
+**`BufferSizeSource=FromField` だけ実コード、それ以外は明示 TODO** という、
+`_findreplace` 型の形である。
+
+根拠にした実XML(ToolID・ファイル名に加えて **サイズ列の名前も匿名化**
+してある。昇格の根拠になるのは `BufferSizeSource` と `Units` の組み合わせで、
+列名そのものではない。`SpatialObj` は Alteryx 側の既定名なのでそのまま):
+
+```xml
+<SpatialObjField>SpatialObj</SpatialObjField>
+<IncludeSourceInOutput value="True"/>
+<GeneralizeToOnePercent value="True"/>
+<BufferSizeSource>FromField</BufferSizeSource>
+<BufferSizeField>bufferSize</BufferSizeField>   <!-- 実際の列名は別 -->
+<Units>Kilometers</Units>
+```
+
+| 設定 | 判断 |
+| --- | --- |
+| `BufferSizeSource=FromField` | 昇格。列を metres に換算して `buffer()` に渡す(`buffer()` は配列サイズを受ける — 実測確認済み) |
+| 固定サイズ(`Fixed` 等) | **未昇格**。サイズを保持するタグ名が実XMLで確認できていない。推測で読むより TODO |
+| `Units` | 昇格。Distance の `<OutputUnits>` と同じ綴りなので `_METRES_PER_UNIT` を共用。未知の綴りは TODO |
+| `GeneralizeToOnePercent` | 昇格。`simplify(サイズの1%)`。負サイズ対策に `.abs()`(GEOS は負の tolerance を例外にする) |
+| `IncludeSourceInOutput=True` | 昇格。ただし **Alteryx 側のフィールド名は未確認** なので、生成コードのコメントで「この名前はこちらが付けたもの」と明言する |
+
+Buffer が「golden 突合なし」で昇格できるのは、Distance の距離とは違う理由で、
+**出力が SpatialObj だから** である(Spatial Info の `CentroidObj` と同じ根拠)。
+バッファ形状は Alteryx と頂点一致しない — shapely の64分割円は真円より
+面積が 0.16% 小さく、1% generalize でさらに 0.5% 減る(いずれも実測)— が、
+SpatialObj は Results grid にも golden CSV にも出ないので比較を汚さない。
+
+CRS の扱い(**メートル系へ出て、必ず EPSG:4326 へ戻る**)は
+[spatial-crs-design.md](spatial-crs-design.md#buffer-はメートル系へ出て戻ってくる)
+にまとめてある。
+
+固定サイズを昇格させるときの依頼文:
+
+```
+docs/scaffold-architecture.md 参照
+ex/Buffer scaffold側: 固定サイズが TODO のまま。実XMLの
+<Configuration> を貼るので昇格して。
+(BufferSizeSource が FromField 以外のノードの Configuration をそのまま貼る)
+```
+
 ---
 
 ## 生成コードにヘルパー関数を出すかどうか
@@ -238,7 +290,8 @@ Spatial Info / Distance で毎ブロック同じ形が出るが、いずれも (
 | 繰り返している部分 | 判断 |
 | --- | --- |
 | `df_out["Centroid"] = _geom.centroid` | (d)。`.centroid` が geopandas 組み込みそのもので、隠す機構が無い。生成ブロック15行のうち11行はコメント（golden CSV に出ない理由・平面centroidの誤差・Area/Length が無い理由）で、それこそがこのブロックの中身。関数にするとコメントの置き場が消える。項目を増やすときの変更点は今も `_SPATIAL_INFO_ITEMS` の1行だけで、重複は既に (a) で潰れている |
-| `_spatial_field_note()` + `_geoseries_expr()`（XML のフィールド名 → 無ければアクティブ geometry、+ `crs="EPSG:4326"` のラベル付け） | 当面 (a)。現時点で SpatialInfo ×1・Distance ×2 の3箇所に出るが、中身は分岐の無い1式で、CRS は 4326 固定の不変条件（[spatial-crs-design.md](spatial-crs-design.md)）に守られている |
+| `_spatial_field_note()` + `_geoseries_expr()`（XML のフィールド名 → 無ければアクティブ geometry、+ `crs="EPSG:4326"` のラベル付け） | 当面 (a)。現時点で SpatialInfo ×1・Distance ×2・Buffer ×1 の4箇所に出るが、中身は分岐の無い1式で、CRS は 4326 固定の不変条件（[spatial-crs-design.md](spatial-crs-design.md)）に守られている |
+| UTM へ投影 → メートルで演算（Distance / Buffer）＋ `total_bounds` ガード | (a)。共有しているのは注釈（`_METRIC_CRS_NOTE` / `_empty_geometry_note()`）と換算表（`_METRES_PER_UNIT`）だけで、演算そのものは1行ずつ違う（測る／描く、戻る／戻らない）。関数化すると「Buffer は 4326 へ戻す」という差が隠れる |
 
 `_geoseries_expr` の昇格条件（どれかが起きたら見直す。回数だけでは動かさない）:
 

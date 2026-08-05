@@ -2418,6 +2418,141 @@ def test_scaffold_distance_two_inputs_is_todo() -> None:
     assert "estimate_utm_crs" not in code
 
 
+def _buffer_config(**overrides: object) -> dict:
+    # The real node's configuration (ToolID anonymized): a per-row buffer
+    # size read from a field, in kilometers, generalized, keeping the object
+    # it was built from in the output.
+    config: dict = {
+        "SpatialObjField": {"#text": "SpatialObj"},
+        "IncludeSourceInOutput": {"@value": "True"},
+        "GeneralizeToOnePercent": {"@value": "True"},
+        "BufferSizeSource": {"#text": "FromField"},
+        "BufferSizeField": {"#text": "bufferSize"},
+        "Units": {"#text": "Kilometers"},
+    }
+    config.update(overrides)
+    return config
+
+
+def _buffer_doc(**overrides: object) -> WorkflowDoc:
+    return _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Buffer",
+            x=10,
+            y=0,
+            config=_buffer_config(**overrides),
+        )
+    )
+
+
+def test_scaffold_buffer_projects_buffers_and_comes_back() -> None:
+    # EPSG:4326 buffers in degrees (a "1" is a ~90 km x 111 km ellipse at
+    # Tokyo), so the buffer is drawn in an estimated UTM zone. Unlike
+    # Distance, the result is geometry that stays in the frame, so the
+    # excursion has to end back on the invariant CRS.
+    code = scaffold(_buffer_doc())
+    assert "import geopandas as gpd" in code
+    assert "_crs_m = _geom.estimate_utm_crs()" in code
+    assert "_buffered = _geom.to_crs(_crs_m).buffer(_dist_m)" in code
+    assert '_buffered = _buffered.to_crs("EPSG:4326")' in code
+    assert "3857" not in code
+
+
+def test_scaffold_buffer_converts_the_size_field_to_metres() -> None:
+    # BufferSizeSource=FromField: one size per row. to_numeric because
+    # buffer() raises TypeError on a string size, and Units scales the
+    # column into the metric CRS's unit.
+    code = scaffold(_buffer_doc())
+    assert (
+        '_dist_m = pd.to_numeric(df_1["bufferSize"], errors="coerce").astype("float64")'
+        in code
+    )
+    assert "_dist_m = _dist_m * 1000" in code
+    miles = scaffold(_buffer_doc(Units={"#text": "Miles"}))
+    assert "_dist_m = _dist_m * 1609.344" in miles
+    # metres need no conversion, so no scaling is emitted
+    meters = scaffold(_buffer_doc(Units={"#text": "Meters"}))
+    assert "_dist_m = _dist_m *" not in meters
+
+
+def test_scaffold_buffer_generalize_is_one_percent_of_the_size() -> None:
+    # GEOS raises on a negative tolerance, and a negative buffer size
+    # (shrinking a polygon) is a legal Alteryx setting, so the tolerance is
+    # taken from the absolute size.
+    code = scaffold(_buffer_doc())
+    assert "_buffered = _buffered.simplify(_dist_m.abs() * 0.01)" in code
+    plain = scaffold(_buffer_doc(GeneralizeToOnePercent={"@value": "False"}))
+    assert "simplify" not in plain
+    assert "_buffered = _geom.to_crs(_crs_m).buffer(_dist_m)" in plain
+
+
+def test_scaffold_buffer_guards_an_unestimatable_crs() -> None:
+    # Same guard as Distance: estimate_utm_crs() raises ValueError when
+    # every geometry is missing or empty, or there are no rows, while
+    # Alteryx just returns null objects there.
+    code = scaffold(_buffer_doc())
+    assert "if pd.notna(_geom.total_bounds).all():" in code
+    assert "no usable SpatialObj geometry — the buffer is null" in code
+    assert "    _buffered = _geom" in code
+
+
+def test_scaffold_simple_buffer_sets_up_a_logger() -> None:
+    code = scaffold_simple(_buffer_doc())
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
+
+
+def test_scaffold_buffer_writes_the_buffer_back_over_the_source() -> None:
+    # Alteryx replaces the object it buffered. The XML's field name is a
+    # real column only when an upstream tool made one, so the write-back
+    # falls back to the active geometry the same way the read does.
+    code = scaffold(_buffer_doc())
+    assert 'if "SpatialObj" in df_2.columns:' in code
+    assert '    df_2["SpatialObj"] = _buffered' in code
+    assert "    df_2 = df_2.set_geometry(_buffered)" in code
+
+
+def test_scaffold_buffer_keeps_the_source_object_when_asked() -> None:
+    # IncludeSourceInOutput=True keeps the buffered object too. No MetaInfo
+    # here names that field, so the generated code says the name is ours —
+    # it is a SpatialObj, which never reaches a golden CSV.
+    code = scaffold(_buffer_doc())
+    assert 'df_2["SpatialObj_Source"] = _geom' in code
+    assert "not confirmed by any MetaInfo" in code
+    dropped = scaffold(_buffer_doc(IncludeSourceInOutput={"@value": "False"}))
+    assert "_Source" not in dropped
+    assert "IncludeSourceInOutput=False" in dropped
+
+
+def test_scaffold_buffer_fixed_size_is_todo() -> None:
+    # Only FromField is confirmed by a real node's XML; the tag holding a
+    # fixed size is not, so it is not guessed at.
+    code = scaffold(_buffer_doc(BufferSizeSource={"#text": "Fixed"}))
+    assert "# TODO: Buffer — BufferSizeSource 'Fixed' is not translated" in code
+    assert "df_2 = df_1" in code
+    assert "estimate_utm_crs" not in code
+    assert "import geopandas as gpd" not in code
+
+
+def test_scaffold_buffer_unknown_unit_is_todo() -> None:
+    code = scaffold(_buffer_doc(Units={"#text": "Leagues"}))
+    assert "# TODO: Buffer — unknown Units 'Leagues'" in code
+    assert "estimate_utm_crs" not in code
+
+
+def test_scaffold_buffer_without_spatial_field_is_todo() -> None:
+    code = scaffold(_buffer_doc(SpatialObjField={"#text": ""}))
+    assert "# TODO: Buffer — no input SpatialObj field" in code
+    assert "_geom" not in code
+
+
+def test_scaffold_buffer_without_size_field_is_todo() -> None:
+    code = scaffold(_buffer_doc(BufferSizeField={"#text": ""}))
+    assert "# TODO: Buffer — BufferSizeSource=FromField, but BufferSizeField" in code
+    assert "estimate_utm_crs" not in code
+
+
 # ── Unsupported ────────────────────────────────────────────────────────────
 
 

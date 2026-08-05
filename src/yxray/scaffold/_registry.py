@@ -19,6 +19,7 @@ from yxray.scaffold._io import gen_input, gen_output
 from yxray.scaffold._select import gen_select
 from yxray.scaffold._source import gen_browse, gen_text_input
 from yxray.scaffold._spatial import (
+    gen_buffer,
     gen_createpoints,
     gen_distance,
     gen_spatialinfo,
@@ -35,6 +36,7 @@ from yxray.scaffold._transform import (
 from yxray.tool_registry import (
     SCAFFOLD_APPENDFIELDS_SEGMENTS,
     SCAFFOLD_BROWSE_SEGMENTS,
+    SCAFFOLD_BUFFER_SEGMENTS,
     SCAFFOLD_COUNTRECORDS_SEGMENTS,
     SCAFFOLD_CREATEPOINTS_SEGMENTS,
     SCAFFOLD_DISTANCE_SEGMENTS,
@@ -80,6 +82,7 @@ GENERATORS: dict[str, Generator] = {
     **dict.fromkeys(SCAFFOLD_SPATIALMATCH_SEGMENTS, gen_spatialmatch),
     **dict.fromkeys(SCAFFOLD_SPATIALINFO_SEGMENTS, gen_spatialinfo),
     **dict.fromkeys(SCAFFOLD_DISTANCE_SEGMENTS, gen_distance),
+    **dict.fromkeys(SCAFFOLD_BUFFER_SEGMENTS, gen_buffer),
 }
 
 # Segments whose scaffold snippet is self-contained enough to show as a

@@ -209,8 +209,9 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "Buffer": ToolInfo(
         "Buffer",
         "transform",
-        "gdf.geometry.buffer(distance)  "
-        "# reproject to a projected CRS first — see Docs/spatial-crs-design.md",
+        'geom.to_crs(geom.estimate_utm_crs()).buffer(m).to_crs("EPSG:4326")  '
+        "# EPSG:4326 buffers in degrees, so project, buffer, come back; "
+        "FromField sizes only",
         "partial",
     ),
     "Distance": ToolInfo(
@@ -303,12 +304,14 @@ SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})
 SCAFFOLD_SPATIALMATCH_SEGMENTS = frozenset({"SpatialMatch"})
 SCAFFOLD_SPATIALINFO_SEGMENTS = frozenset({"SpatialInfo"})
 SCAFFOLD_DISTANCE_SEGMENTS = frozenset({"Distance"})
+SCAFFOLD_BUFFER_SEGMENTS = frozenset({"Buffer"})
 SCAFFOLD_BROWSE_SEGMENTS = frozenset({"Browse", "BrowseV2"})
 SCAFFOLD_SPATIAL_SEGMENTS = (
     SCAFFOLD_CREATEPOINTS_SEGMENTS
     | SCAFFOLD_SPATIALMATCH_SEGMENTS
     | SCAFFOLD_SPATIALINFO_SEGMENTS
     | SCAFFOLD_DISTANCE_SEGMENTS
+    | SCAFFOLD_BUFFER_SEGMENTS
 )
 
 

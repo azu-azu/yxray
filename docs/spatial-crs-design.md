@@ -65,6 +65,7 @@ yxray の空間処理は、
 | `_spatial.py` / Spatial Match | 空間結合に限定される(信頼) |
 | `_spatial.py` / Spatial Info | 重心の算出に限定される(信頼) |
 | `_spatial.py` / Distance | 測るあいだだけメートル系へ投影する(一時離脱) |
+| `_spatial.py` / Buffer | メートル系で描き、**結果を 4326 へ戻す**(一時離脱 + 復帰) |
 
 `_spatial.py` の先頭 docstring にも、この分担が明記されている。
 
@@ -330,6 +331,63 @@ Alteryx の `DistToInsideEdge=True`(ソースがポリゴンの内側なら 0 �
 `.distance(poly)` と `.distance(poly.boundary)` が恒等的に一致するので
 両ケースをこれ1つで満たせる。
 
+### Buffer はメートル系へ出て、戻ってくる
+
+Buffer も EPSG:4326 のままでは翻訳できない。`<Units>Kilometers</Units>` と
+書かれたサイズを `.buffer()` にそのまま渡すと **度** として解釈されるためで、
+ここまでは Distance と同じ話である。
+
+違うのは **戻ってくる必要がある** ことである。Distance が作るのは列に入る
+数値なので、投影は「測るあいだだけ」で済み、フレームの geometry は
+EPSG:4326 のまま触らない。Buffer が作るのは **geometry そのもの** で、
+それがフレームに残って後続ツールへ流れる。投影したまま返すと、その時点で
+不変条件(`crs == EPSG:4326`)が壊れ、後続の Spatial Match が
+「CRS が違う2つを黙って生の座標で比較する」という、
+このドキュメントが最初に潰した状態へ戻ってしまう。
+
+```python
+_geom = gpd.GeoSeries(df_1["SpatialObj"] if ... else df_1.geometry, crs="EPSG:4326")
+_dist_m = pd.to_numeric(df_1["bufferSize"], errors="coerce").astype("float64")
+_dist_m = _dist_m * 1000                       # Units=Kilometers → metres
+if pd.notna(_geom.total_bounds).all():
+    _crs_m = _geom.estimate_utm_crs()
+    _buffered = _geom.to_crs(_crs_m).buffer(_dist_m)
+    _buffered = _buffered.simplify(_dist_m.abs() * 0.01)   # 1% generalize
+    _buffered = _buffered.to_crs("EPSG:4326")   # ← ここが Distance との差
+else:
+    logger.warning("no usable SpatialObj geometry — the buffer is null")
+    _buffered = _geom
+```
+
+**度のまま描くとどうなるか(実測、geopandas 1.1.4 / shapely 2.1.2)。**
+
+`gpd.GeoSeries([Point(139.70, 35.69)], crs="EPSG:4326").buffer(1)` は
+半径1度の図形になる。それを UTM(EPSG:32654)で測り直すと:
+
+| | 半径 |
+| --- | --- |
+| 東西 | 約 90.5 km |
+| 南北 | 約 110.9 km |
+
+つまり **「1」が 1 m でも 1 km でもなく約100 km になる** うえに、
+円ですらない(東京の緯度で東西が南北の 0.82 倍に潰れた楕円)。
+`.buffer()` は geopandas が
+`Geometry is in a geographic CRS. Results from 'buffer' are likely incorrect.`
+と警告を出すが、**例外にはならないので黙って通る**。
+
+なおガード(`total_bounds`)と単位換算表(`_METRES_PER_UNIT`)は Distance と
+共有している。ガードが要る理由も同じで、`estimate_utm_crs()` は
+推定材料が無いと `ValueError` で落ちる。
+
+**バッファ形状は Alteryx と頂点一致しない。** shapely の64分割円は真円より
+面積が 0.16% 小さく、`GeneralizeToOnePercent`(1% の tolerance で
+`simplify`)を掛けるとさらに 0.5% 程度減る(半径1km で 65頂点 → 33頂点、
+いずれも実測)。それでも実コードとして出しているのは、**バッファが
+SpatialObj で golden CSV に出ないから** である
+(Spatial Info の `Centroid` と同じ根拠 —
+[scaffold-architecture.md](scaffold-architecture.md#buffer-の部分昇格2026-08-05))。
+Distance の距離が Double 列で golden 比較に直接乗るのとは立場が違う。
+
 ### 方位(`Direction`)を生成しない理由
 
 同じ Distance ノードは方位も出しているが、こちらは生成しない。
@@ -458,6 +516,11 @@ df_metric["buffer"] = df_metric.geometry.buffer(100)
 df_result = df_metric.to_crs(original_crs)
 ```
 
+生成コードが実際にこの形を取っているのが Buffer である
+([Buffer はメートル系へ出て、戻ってくる](#buffer-はメートル系へ出て戻ってくる))。
+`df.geometry.buffer(100)` を 4326 のまま呼んだ場合に何が起きるかの実測値も
+そこに置いてある(結論: 100 m ではなく約 100 km の楕円になる)。
+
 なお Web メルカトル(EPSG:3857)は Web 地図表示には便利だが、
 場所によって距離・面積の歪みが大きい。正確なメートル計算では、
 地域に合った UTM や日本の平面直角座標系など、
@@ -477,21 +540,28 @@ _crs_m = _src.estimate_utm_crs()          # データから UTM ゾーンを推�
 _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)) / 1000   # m → km
 ```
 
-ルールは3つ。
+ルールは4つ。
 
 1. **投影先はデータから推定した UTM**(`estimate_utm_crs()`)。
    ゾーン内ならスケール誤差は 0.1% 未満で、数百m スケールなら cm オーダー
 2. **オペランドは全部、同じ CRS へ投影する**。
    片方だけ投影すると座標系の違う数値どうしを比べることになる
-3. **測るのはメートル、単位換算は最後**。
-   Alteryx の `OutputUnits`(Kilometers / Miles / …)に応じて割る
+3. **演算はメートルで、単位換算は端で**。
+   Distance は測ったメートルを `OutputUnits`(Kilometers / Miles / …)で割り、
+   Buffer は逆に `Units` 付きのサイズをメートルへ掛けてから渡す
+   (換算表 `_METRES_PER_UNIT` は両者で共有)
+4. **geometry を返すツールは EPSG:4326 へ戻す**。
+   数値を返す Distance は投影したまま終われるが、Buffer の結果は
+   フレームに残るので、`to_crs("EPSG:4326")` で不変条件へ復帰させる
 
 EPSG:3857 は使わない。緯度によって `1/cos(緯度)` 倍に膨らむので、
 東京(北緯35.7°)では距離が約 23% 過大になる。
 
-なお、この投影は **測るあいだだけの一時離脱** であり、
+なお Distance の場合、この投影は **測るあいだだけの一時離脱** であり、
 出力フレームの geometry 列は EPSG:4326 のままである
 (新しい列に数値を入れるだけで、フレームを投影し直さない)。
+Buffer は geometry を差し替えるので、離脱したあと明示的に戻す
+(ルール4)。
 
 Spatial Info の Area/Length にこのルールを適用していないのは、
 CRS の問題が解けても **Alteryx 側の単位設定が XML に現れない** ためで、
