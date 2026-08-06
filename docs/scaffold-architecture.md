@@ -246,7 +246,22 @@ Spatial Info はチェックボックスだけでリネームUIを持たない�
 | 固定サイズ(`Fixed` 等) | **未昇格**。サイズを保持するタグ名が実XMLで確認できていない。推測で読むより TODO |
 | `Units` | 昇格。Distance の `<OutputUnits>` と同じ綴りなので `_METRES_PER_UNIT` を共用。未知の綴りは TODO |
 | `GeneralizeToOnePercent` | 昇格。`simplify(サイズの1%)`。負サイズ対策に `.abs()`(GEOS は負の tolerance を例外にする) |
-| `IncludeSourceInOutput=True` | 昇格。ただし **Alteryx 側のフィールド名は未確認** なので、生成コードのコメントで「この名前はこちらが付けたもの」と明言する |
+| 出力フィールド名 | 昇格。**`<入力フィールド名>_Buffer`** で確定(下記 MetaInfo)。Buffer は入力オブジェクトを上書きせず、**列を1本足す** |
+| `IncludeSourceInOutput=False` | 生成コードは元オブジェクトを残したまま、コメントで「Alteryx 出力にはバッファだけ」と明示する。SpatialObj は golden CSV に出ないので列の有無は比較に影響せず、落とすと上流が作った geometry を失うほうが害が大きい |
+
+出力フィールド名は推測ではなく、Buffer ノードの出力 MetaInfo で裏取りしてある。
+Spatial Info と同じくリネームUIを持たないため、名前は固定である。
+
+```xml
+<Field name="SpatialObj_Buffer" size="2147483647" type="SpatialObj"
+       source="Buffer: Source=SpatialObj SizeField=… Units=Kilometers"/>
+```
+
+**バッファ側をアクティブ geometry にする**のは、`gen_spatialmatch` が
+下流ノードの `SpatialObj=` 属性を読まずアクティブ geometry で `sjoin` するため
+([alteryx-pandas-differences.md 18章](alteryx-pandas-differences.md#設計上の保留--rename_geometrycentroid-は条件付き保留))。
+元オブジェクトをアクティブのままにすると、**バッファする前の形で空間結合される**
+という静かな誤りになる。元オブジェクトはフレームに残るので、名前で引けば取れる。
 
 Buffer が「golden 突合なし」で昇格できるのは、Distance の距離とは違う理由で、
 **出力が SpatialObj だから** である(Spatial Info の `CentroidObj` と同じ根拠)。

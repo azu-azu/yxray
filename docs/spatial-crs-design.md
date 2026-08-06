@@ -357,7 +357,18 @@ if pd.notna(_geom.total_bounds).all():
 else:
     logger.warning("no usable SpatialObj geometry — the buffer is null")
     _buffered = _geom
+df_2["SpatialObj_Buffer"] = _buffered          # 上書きではなく列を1本足す
+df_2 = df_2.set_geometry("SpatialObj_Buffer")  # 後続 sjoin はアクティブを使う
 ```
+
+最後の2行が Buffer の出力の形である。**入力オブジェクトは上書きされない** —
+Alteryx も `<入力フィールド名>_Buffer` という新しいフィールドを足す
+(出力 MetaInfo で確認済み。
+[scaffold-architecture.md](scaffold-architecture.md#buffer-の部分昇格2026-08-05))。
+そのうえで **バッファ側をアクティブ geometry にしている**のは、
+`gen_spatialmatch` がアクティブ geometry で `sjoin` するためで、
+元のままにすると「バッファする前の形で空間結合する」という
+静かな誤りになる。元オブジェクトはフレームに残るので名前で引ける。
 
 **度のまま描くとどうなるか(実測、geopandas 1.1.4 / shapely 2.1.2)。**
 

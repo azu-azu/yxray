@@ -2503,26 +2503,38 @@ def test_scaffold_simple_buffer_sets_up_a_logger() -> None:
     assert "logger = logging.getLogger(__name__)" in code
 
 
-def test_scaffold_buffer_writes_the_buffer_back_over_the_source() -> None:
-    # Alteryx replaces the object it buffered. The XML's field name is a
-    # real column only when an upstream tool made one, so the write-back
-    # falls back to the active geometry the same way the read does.
+def test_scaffold_buffer_adds_a_field_named_after_its_input() -> None:
+    # Buffer does not overwrite the object it buffered — its output MetaInfo
+    # declares <Field name="SpatialObj_Buffer" type="SpatialObj"
+    # source="Buffer: Source=SpatialObj …"/>, and the tool has no rename UI,
+    # so "<input>_Buffer" is fixed.
     code = scaffold(_buffer_doc())
-    assert 'if "SpatialObj" in df_2.columns:' in code
-    assert '    df_2["SpatialObj"] = _buffered' in code
-    assert "    df_2 = df_2.set_geometry(_buffered)" in code
+    assert 'df_2["SpatialObj_Buffer"] = _buffered' in code
+    # the source object is still there, under its own name
+    assert 'df_2["SpatialObj"] = _buffered' not in code
 
 
-def test_scaffold_buffer_keeps_the_source_object_when_asked() -> None:
-    # IncludeSourceInOutput=True keeps the buffered object too. No MetaInfo
-    # here names that field, so the generated code says the name is ours —
-    # it is a SpatialObj, which never reaches a golden CSV.
+def test_scaffold_buffer_makes_the_buffer_the_active_geometry() -> None:
+    # gen_spatialmatch joins on whatever geometry is active and ignores the
+    # downstream node's SpatialObj= attribute, so leaving the source active
+    # would sjoin against the un-buffered object without saying so.
     code = scaffold(_buffer_doc())
-    assert 'df_2["SpatialObj_Source"] = _geom' in code
-    assert "not confirmed by any MetaInfo" in code
+    assert 'df_2 = df_2.set_geometry("SpatialObj_Buffer")' in code
+    assert code.index('df_2["SpatialObj_Buffer"] = _buffered') < code.index(
+        'df_2 = df_2.set_geometry("SpatialObj_Buffer")'
+    )
+
+
+def test_scaffold_buffer_flags_a_dropped_source_object() -> None:
+    # IncludeSourceInOutput=False means Alteryx's output carries only the
+    # buffer. Dropping it here would cost the frame the geometry every
+    # upstream tool built, and a SpatialObj never reaches a golden CSV, so
+    # the block keeps it and says so instead.
+    kept = scaffold(_buffer_doc())
+    assert "IncludeSourceInOutput=False" not in kept
     dropped = scaffold(_buffer_doc(IncludeSourceInOutput={"@value": "False"}))
-    assert "_Source" not in dropped
-    assert "IncludeSourceInOutput=False" in dropped
+    assert "IncludeSourceInOutput=False: Alteryx's output has only the" in dropped
+    assert 'df_2["SpatialObj_Buffer"] = _buffered' in dropped
 
 
 def test_scaffold_buffer_fixed_size_is_todo() -> None:
@@ -2563,7 +2575,7 @@ def test_scaffold_buffer_reads_fields_written_as_attributes() -> None:
     assert "TODO: Buffer" not in code
     assert '_dist_m = pd.to_numeric(df_1["bufferSize"]' in code
     assert "_dist_m = _dist_m * 1000" in code
-    assert 'if "SpatialObj" in df_2.columns:' in code
+    assert 'df_2["SpatialObj_Buffer"] = _buffered' in code
 
 
 def test_scaffold_distance_reads_fields_written_as_attributes() -> None:

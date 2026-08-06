@@ -528,24 +528,43 @@ _BUFFER_GENERALIZE_NOTE = (
     "# legal setting and GEOS rejects a negative tolerance"
 )
 
-# When the option is checked, Alteryx keeps the object that was buffered in
-# the output as well. No MetaInfo in the XML we have names that field, so the
-# generated code says whose name it picked instead of implying Alteryx's.
-_BUFFER_KEEP_SOURCE_NOTE = (
-    "# IncludeSourceInOutput=True: Alteryx also keeps the object that was\n"
-    "# buffered. The field name it uses is not confirmed by any MetaInfo we\n"
-    "# have, so this is our name — it is a SpatialObj either way, so it is\n"
-    "# dropped on the comparison side like geometry and Centroid"
+
+# Buffer does not overwrite the object it buffered: it adds a field named
+# after it, confirmed by the tool's output MetaInfo —
+#   <Field name="SpatialObj_Buffer" type="SpatialObj"
+#          source="Buffer: Source=SpatialObj SizeField=… Units=…"/>
+# — on a node whose input field is SpatialObj. The tool has no rename UI, so
+# the "<input>_Buffer" name is fixed.
+def _buffer_field(field: str) -> str:
+    return f"{field}_Buffer"
+
+
+_BUFFER_OUTPUT_NOTE = (
+    "# Buffer adds a field, it does not overwrite the one it buffered: the\n"
+    '# name is the input field + "_Buffer", confirmed by the tool\'s output\n'
+    '# MetaInfo (source="Buffer: Source=… SizeField=… Units=…")'
 )
 
+# The buffer, not the source, is what the rest of the workflow is about, and
+# gen_spatialmatch joins on whichever geometry is active (it does not read
+# the downstream node's SpatialObj= attribute — see
+# docs/alteryx-pandas-differences.md 18). Leaving the source active would
+# quietly sjoin against the un-buffered object.
+_BUFFER_ACTIVE_GEOMETRY_NOTE = (
+    "# the buffer becomes the frame's active geometry: a later Spatial Match\n"
+    "# joins on whatever is active, and that has to be the buffer. The source\n"
+    "# object stays in the frame under its own name, reachable by name"
+)
+
+# IncludeSourceInOutput=False means Alteryx's output carries only the buffer.
+# Dropping the source here would leave the frame without the geometry column
+# every upstream tool built, and it cannot show up in a comparison anyway
+# (SpatialObj columns never reach a golden CSV), so it is kept and flagged.
 _BUFFER_DROP_SOURCE_NOTE = (
-    "# IncludeSourceInOutput=False: the object that was buffered is not kept\n"
-    "# — the buffer replaces it, which is what the write-back below does"
-)
-
-_BUFFER_WRITE_BACK_NOTE = (
-    "# the buffer replaces the object it was built from: the XML's field when\n"
-    "# that really is a column, otherwise the frame's active geometry"
+    "# IncludeSourceInOutput=False: Alteryx's output has only the buffer. The\n"
+    "# source object is left in the frame here — it is a SpatialObj, so no\n"
+    "# golden CSV sees it; drop it on the comparison side if the column set\n"
+    "# matters"
 )
 
 
@@ -619,21 +638,15 @@ def gen_buffer(ctx: ToolContext) -> GeneratedCode:
         "    # already all missing/empty, so it is its own null buffer",
         "    _buffered = _geom",
     ]
-    if _flag(config, "IncludeSourceInOutput"):
-        source_field = f"{field}_Source"
-        body += [
-            _BUFFER_KEEP_SOURCE_NOTE,
-            f"{df_out}[{py_str(source_field)}] = _geom",
-        ]
-    else:
-        body.append(_BUFFER_DROP_SOURCE_NOTE)
+    out_field = _buffer_field(field)
     body += [
-        _BUFFER_WRITE_BACK_NOTE,
-        f"if {py_str(field)} in {df_out}.columns:",
-        f"    {df_out}[{py_str(field)}] = _buffered",
-        "else:",
-        f"    {df_out} = {df_out}.set_geometry(_buffered)",
+        _BUFFER_OUTPUT_NOTE,
+        f"{df_out}[{py_str(out_field)}] = _buffered",
+        _BUFFER_ACTIVE_GEOMETRY_NOTE,
+        f"{df_out} = {df_out}.set_geometry({py_str(out_field)})",
     ]
+    if not _flag(config, "IncludeSourceInOutput"):
+        body.append(_BUFFER_DROP_SOURCE_NOTE)
     return GeneratedCode(
         "\n".join(body),
         requirements=_GEOPANDAS | {Requirement.LOGGING},
