@@ -728,8 +728,8 @@ scaffold が生成する Create Points コードには、この旨の NOTE コ�
 
 ### 設計上の保留 — 繰り返しパターンを関数にまとめない
 
-Spatial Info / Distance の生成ブロックには毎回同じ形（空間フィールドの解決 →
-`crs="EPSG:4326"` のラベル付け → 属性アクセス）が出るが、`apply_select_edits` の
+Spatial Info / Distance / Buffer の生成ブロックには毎回同じ形（空間フィールドの
+解決 → `crs="EPSG:4326"` のラベル付け → 属性アクセス）が出るが、`apply_select_edits` の
 ような関数にはまとめず**ベタ書きのまま**にしてある。基準は19章
 「生成コード側の関数化はいつ許されるか」、個別の判断と昇格条件は
 `docs/scaffold-architecture.md`「空間ツールの繰り返しパターンを関数化しない判断」。
@@ -788,6 +788,25 @@ scaffold はこの不変条件を読み込み側で写す: 空間ファイルの
 CRS None 分岐は「4326 と仮定した」ことを `logger.warning` で実行ログに残す
 （元データが別座標系だった場合に結果が静かに狂う仮定のため）。
 設計全体は [spatial-crs-design.md](spatial-crs-design.md) を参照。
+
+### メートル指定のツール（Distance / Buffer）— 4326 のままでは黙って外れる
+
+EPSG:4326 の単位は度なので、`<Units>Kilometers</Units>` のような設定を
+そのまま `.distance()` / `.buffer()` に渡すと**度で計算される**。例外は出ず、
+`.buffer()` は geopandas の UserWarning が出るだけで通ってしまう
+（実測: 東京で `.buffer(1)` は東西 90.5 km・南北 110.9 km の楕円）。
+
+生成コードは両ツールとも `estimate_utm_crs()` で推定した UTM へ投影して
+演算する。違いは戻り方で、**Distance は数値を列に入れて終わり、Buffer は
+geometry を差し替えるので `to_crs("EPSG:4326")` で戻す**
+（[spatial-crs-design.md](spatial-crs-design.md#buffer-はメートル系へ出て戻ってくる)）。
+
+Buffer の出力は SpatialObj なので、Alteryx と頂点一致しなくても
+golden CSV を汚さない（形状差は shapely の64分割円で 0.16%、
+`GeneralizeToOnePercent` の 1% simplify でさらに 0.5% ほど — いずれも実測）。
+一方 Distance の出力は Double 列で golden に出るため、生成コードに
+`WARNING: this is a planar UTM distance` を残してある。この非対称が、
+「golden 突合なしにどこまで実コードを出すか」の判断根拠になっている。
 
 ### Shapefile のサイドカー — .dbf が無いと属性列が静かに消える（ガード実装済み）
 

@@ -1,15 +1,18 @@
-"""Spatial tools (Create Points, Spatial Match, Spatial Info, Distance)
-for the scaffold generator.
+"""Spatial tools (Create Points, Spatial Match, Spatial Info, Distance,
+Buffer) for the scaffold generator.
 
 All emit geopandas code; the CRS story that makes them safe (everything
 normalized to WGS84, matching Alteryx's SpatialObj convention) is split
 with _io: file reads normalize on load there, Create Points hard-codes
 EPSG:4326 here.
 
-Distance is the one tool that cannot just trust that invariant — it
-outputs a metric number, and EPSG:4326 measures in degrees — so it
-projects into an estimated UTM zone for the measurement alone. That rule
-is shared, not per-tool: see _METRIC_CRS_NOTE.
+Distance and Buffer are the two tools that cannot just trust that
+invariant, because EPSG:4326 measures in degrees and both are configured
+in metres: they project into an estimated UTM zone to do the metric work.
+That rule is shared, not per-tool: see _METRIC_CRS_NOTE. They differ in
+what comes back — Distance produces a number and leaves the frame's
+geometry alone, while Buffer produces geometry, so its excursion has to
+end with a to_crs("EPSG:4326") that restores the invariant.
 """
 
 from __future__ import annotations
@@ -42,6 +45,41 @@ def _flag(config: dict[str, Any], key: str, *, default: bool = False) -> bool:
         return default
     value = node.get("@value")
     return default if value is None else str(value).lower() == "true"
+
+
+def _field_ref(config: dict[str, Any], *keys: str) -> str:
+    """A field name under the first of `keys` that carries one.
+
+    Two things vary between the spatial tools and neither is declared
+    anywhere in the XML, so both are read rather than assumed:
+
+    - the tag: Buffer names its input <SpatialObjectField>, Distance
+      <SpatialObjSource>. Guessing one from the other is what put a
+      "no input SpatialObj field" TODO on a fully configured Buffer node.
+    - the spelling: Spatial Info picks its field with an attribute
+      (<SpatialObj field="…"/>) while Buffer and Distance use element text.
+
+    Pass the tag confirmed by a real node's XML first; later keys are
+    alternates, and a wrong guess costs nothing because a missing tag reads
+    as "" either way.
+    """
+    for key in keys:
+        if text := first_text(config, key):
+            return text
+        node = config.get(key)
+        if isinstance(node, dict) and (name := field_name(node)):
+            return name
+    return ""
+
+
+def _setting(config: dict[str, Any], key: str) -> str:
+    """A setting value, written either as text or as value="…"."""
+    if text := first_text(config, key):
+        return text
+    node = config.get(key)
+    if isinstance(node, dict) and node.get("@value") is not None:
+        return str(node["@value"])
+    return ""
 
 
 def _spatial_field_note(*fields: str) -> str:
@@ -296,12 +334,16 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
 
 
-# Metres per unit, keyed by Alteryx's OutputUnits spelling. The output field
-# is named "Distance" + that spelling, confirmed by the tool's output
-# MetaInfo: source="Distance: Distance Source=Centroid Destination=SpatialObj
-# Units=Kilometers" on a field named DistanceKilometers. An unlisted spelling
-# falls through to a TODO rather than guessing a conversion factor.
-_DISTANCE_UNITS: dict[str, float] = {
+# Metres per unit, keyed by Alteryx's unit spelling — Distance's
+# <OutputUnits> and Buffer's <Units> use the same vocabulary, so the table is
+# shared and the tools differ only in direction (Distance divides metres into
+# the unit, Buffer multiplies the configured size into metres). The Distance
+# output field is named "Distance" + that spelling, confirmed by the tool's
+# output MetaInfo: source="Distance: Distance Source=Centroid
+# Destination=SpatialObj Units=Kilometers" on a field named
+# DistanceKilometers. An unlisted spelling falls through to a TODO rather
+# than guessing a conversion factor.
+_METRES_PER_UNIT: dict[str, float] = {
     "Kilometers": 1000.0,
     "Meters": 1.0,
     "Miles": 1609.344,
@@ -329,15 +371,16 @@ _DISTANCE_WARNING = (
 # estimate_utm_crs() derives the zone from total_bounds, so it raises
 # ValueError("NaN or None values are not allowed.") when there is nothing to
 # derive from: every geometry missing, every geometry empty, or no rows at
-# all. Alteryx returns null distances in that case rather than failing, so
-# the generated code matches it — and logs, because an all-null spatial
-# field usually means an upstream read or join lost the geometry. Rows that
-# are individually missing need no guard: the estimate ignores them and
-# their distance comes out NaN, which is the null Alteryx writes.
-_EMPTY_GEOMETRY_NOTE = (
-    "# no geometry to estimate a UTM zone from (all missing/empty, or no\n"
-    "# rows) is not an error in Alteryx — it just yields null distances"
-)
+# all. Alteryx returns nulls in that case rather than failing, so the
+# generated code matches it — and logs, because an all-null spatial field
+# usually means an upstream read or join lost the geometry. Rows that are
+# individually missing need no guard: the estimate ignores them and their
+# result comes out NaN/None, which is the null Alteryx writes.
+def _empty_geometry_note(result: str) -> str:
+    return (
+        "# no geometry to estimate a UTM zone from (all missing/empty, or no\n"
+        f"# rows) is not an error in Alteryx — it just yields {result}"
+    )
 
 
 def _distance_todo(reason: str) -> str:
@@ -373,9 +416,9 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
     config = ctx.config
-    src_field = first_text(config, "SpatialObjSource")
-    dst_field = first_text(config, "SpatialObjDest")
-    units = first_text(config, "OutputUnits")
+    src_field = _field_ref(config, "SpatialObjSource")
+    dst_field = _field_ref(config, "SpatialObjDest")
+    units = _setting(config, "OutputUnits")
 
     blocker = ""
     if _flag(config, "OutputDriveTimeAndDistance"):
@@ -392,7 +435,7 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         blocker = "the distance output is switched off"
     elif not src_field or not dst_field:
         blocker = "Source/Destination spatial fields not found"
-    elif units not in _DISTANCE_UNITS:
+    elif units not in _METRES_PER_UNIT:
         blocker = f"unknown OutputUnits {units!r} — no conversion from metres"
 
     lines = _direction_todos(config, src_field, dst_field)
@@ -405,7 +448,7 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
     if _flag(config, "DistToInsideEdge"):
         dst_expr += ".boundary"
     measure = f"_src.to_crs(_crs_m).distance({dst_expr})"
-    per_unit = _DISTANCE_UNITS[units]
+    per_unit = _METRES_PER_UNIT[units]
     if per_unit != 1.0:
         # .10g keeps every digit of the factors (%g's default 6 would emit
         # 1609.34 for a mile) while dropping the trailing .0 from round ones.
@@ -427,7 +470,7 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
     body += [
         _DISTANCE_WARNING,
         f"{df_out} = {df_in}.copy()",
-        _EMPTY_GEOMETRY_NOTE,
+        _empty_geometry_note("null distances"),
         "if pd.notna(_src.total_bounds).all():",
         "    _crs_m = _src.estimate_utm_crs()",
         f"    {df_out}[{out_field}] = (\n        {measure}\n    )",
@@ -440,5 +483,171 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
     ]
     return GeneratedCode(
         "\n".join([*body, *lines]),
+        requirements=_GEOPANDAS | {Requirement.LOGGING},
+    )
+
+
+# Buffer is the second tool that leaves EPSG:4326 for a metric CRS, but
+# unlike Distance it brings geometry back, so the excursion has to close: the
+# buffer replaces the frame's spatial object and every frame downstream is
+# assumed to be EPSG:4326 (docs/spatial-crs-design.md).
+_BUFFER_METRIC_CRS_NOTE = (
+    "# EPSG:4326 measures in degrees — .buffer(1) here means a one-DEGREE\n"
+    "# radius (90 km east-west by 111 km north-south at Tokyo: an ellipse,\n"
+    "# not a circle), so project into a metric CRS (UTM estimated from the\n"
+    "# data), buffer there, and convert the result back — unlike Distance's\n"
+    "# number, a buffer is geometry that stays in the frame, and every frame\n"
+    "# here is EPSG:4326"
+)
+
+# The buffer is a SpatialObj, so — like Spatial Info's Centroid and unlike
+# Distance's Double column — it never reaches a golden CSV; the shape
+# differences below cannot pollute a comparison, which is what lets this be
+# real code without golden verification (docs/scaffold-architecture.md).
+_BUFFER_SHAPE_NOTE = (
+    "# NOTE: a planar UTM buffer drawn as shapely's 64-segment circle, which\n"
+    "# is 0.16% short of a true circle in area — not vertex-identical to\n"
+    "# Alteryx's object, but a SpatialObj never reaches a golden CSV"
+)
+
+_BUFFER_SIZE_NOTES = (
+    "# BufferSizeSource=FromField: one size per row, read from the column\n"
+    "# to_numeric first: buffer() raises TypeError on strings, while a\n"
+    "# coerced NaN (and pd.NA) buffers to a null object — Alteryx's null"
+)
+
+# Alteryx's generalization is described only as "generalize to 1% of the
+# buffer size", so the tolerance is that 1%, in the metric CRS the buffer was
+# drawn in. .abs() because a negative size is a legal Alteryx setting (it
+# shrinks polygons) and GEOS raises IllegalArgumentException on a negative
+# tolerance.
+_BUFFER_GENERALIZE_NOTE = (
+    "# GeneralizeToOnePercent=True: Alteryx thins the buffer to a tolerance\n"
+    "# of 1% of the buffer size (a 1 km buffer: 65 vertices -> 33, and 0.5%\n"
+    "# of its area) — .abs() because a negative size (shrink a polygon) is a\n"
+    "# legal setting and GEOS rejects a negative tolerance"
+)
+
+
+# Buffer does not overwrite the object it buffered: it adds a field named
+# after it, confirmed by the tool's output MetaInfo —
+#   <Field name="SpatialObj_Buffer" type="SpatialObj"
+#          source="Buffer: Source=SpatialObj SizeField=… Units=…"/>
+# — on a node whose input field is SpatialObj. The tool has no rename UI, so
+# the "<input>_Buffer" name is fixed.
+def _buffer_field(field: str) -> str:
+    return f"{field}_Buffer"
+
+
+_BUFFER_OUTPUT_NOTE = (
+    "# Buffer adds a field, it does not overwrite the one it buffered: the\n"
+    '# name is the input field + "_Buffer", confirmed by the tool\'s output\n'
+    '# MetaInfo (source="Buffer: Source=… SizeField=… Units=…")'
+)
+
+# The buffer, not the source, is what the rest of the workflow is about, and
+# gen_spatialmatch joins on whichever geometry is active (it does not read
+# the downstream node's SpatialObj= attribute — see
+# docs/alteryx-pandas-differences.md 18). Leaving the source active would
+# quietly sjoin against the un-buffered object.
+_BUFFER_ACTIVE_GEOMETRY_NOTE = (
+    "# the buffer becomes the frame's active geometry: a later Spatial Match\n"
+    "# joins on whatever is active, and that has to be the buffer. The source\n"
+    "# object stays in the frame under its own name, reachable by name"
+)
+
+# IncludeSourceInOutput=False means Alteryx's output carries only the buffer.
+# Dropping the source here would leave the frame without the geometry column
+# every upstream tool built, and it cannot show up in a comparison anyway
+# (SpatialObj columns never reach a golden CSV), so it is kept and flagged.
+_BUFFER_DROP_SOURCE_NOTE = (
+    "# IncludeSourceInOutput=False: Alteryx's output has only the buffer. The\n"
+    "# source object is left in the frame here — it is a SpatialObj, so no\n"
+    "# golden CSV sees it; drop it on the comparison side if the column set\n"
+    "# matters"
+)
+
+
+def gen_buffer(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    config = ctx.config
+    # <SpatialObjectField> is the tag the real node uses; the shorter
+    # spelling is accepted as an alternate, not asserted.
+    field = _field_ref(config, "SpatialObjectField", "SpatialObjField")
+    size_source = _setting(config, "BufferSizeSource")
+    size_field = _field_ref(config, "BufferSizeField")
+    units = _setting(config, "Units")
+
+    # (headline, extra comment lines) so a long reason wraps in the emitted
+    # comment instead of running off the right edge of the generated file.
+    blocker: tuple[str, ...] = ()
+    if not field:
+        blocker = ("no input SpatialObj field",)
+    elif size_source.lower() != "fromfield":
+        blocker = (
+            f"BufferSizeSource {size_source!r} is not translated",
+            "only FromField is confirmed by a real node's XML — a fixed",
+            "size's tag name is not, so reading one would be a guess",
+        )
+    elif not size_field:
+        blocker = ("BufferSizeSource=FromField, but BufferSizeField is empty",)
+    elif units not in _METRES_PER_UNIT:
+        blocker = (f"unknown Units {units!r} — no conversion to metres",)
+    if blocker:
+        head, *detail = (comment_safe(line) for line in blocker)
+        lines = [f"# TODO: Buffer — {head}", *(f"#   {line}" for line in detail)]
+        return GeneratedCode("\n".join([*lines, f"{df_out} = {df_in}"]))
+
+    body = [
+        "# spatial tool — requires geopandas",
+        _spatial_field_note(field),
+        f"_geom = {_geoseries_expr(df_in, field)}",
+        _BUFFER_SIZE_NOTES,
+        f"_dist_m = pd.to_numeric({df_in}[{py_str(size_field)}],"
+        ' errors="coerce").astype("float64")',
+    ]
+    per_unit = _METRES_PER_UNIT[units]
+    if per_unit != 1.0:
+        # .10g for the same reason as Distance: %g's default 6 digits would
+        # turn a mile into 1609.34.
+        body.append(
+            f"# Units={comment_safe(units)} — the projected CRS below is"
+            " metric\n"
+            f"_dist_m = _dist_m * {per_unit:.10g}"
+        )
+    body += [
+        _BUFFER_METRIC_CRS_NOTE,
+        _BUFFER_SHAPE_NOTE,
+        f"{df_out} = {df_in}.copy()",
+        _empty_geometry_note("null objects"),
+        "if pd.notna(_geom.total_bounds).all():",
+        "    _crs_m = _geom.estimate_utm_crs()",
+        "    _buffered = _geom.to_crs(_crs_m).buffer(_dist_m)",
+    ]
+    if _flag(config, "GeneralizeToOnePercent"):
+        body += [
+            "    " + _BUFFER_GENERALIZE_NOTE.replace("\n# ", "\n    # "),
+            "    _buffered = _buffered.simplify(_dist_m.abs() * 0.01)",
+        ]
+    body += [
+        '    _buffered = _buffered.to_crs("EPSG:4326")',
+        "else:",
+        f'    logger.warning("no usable {comment_safe(field)} geometry —'
+        ' the buffer is null")',
+        "    # already all missing/empty, so it is its own null buffer",
+        "    _buffered = _geom",
+    ]
+    out_field = _buffer_field(field)
+    body += [
+        _BUFFER_OUTPUT_NOTE,
+        f"{df_out}[{py_str(out_field)}] = _buffered",
+        _BUFFER_ACTIVE_GEOMETRY_NOTE,
+        f"{df_out} = {df_out}.set_geometry({py_str(out_field)})",
+    ]
+    if not _flag(config, "IncludeSourceInOutput"):
+        body.append(_BUFFER_DROP_SOURCE_NOTE)
+    return GeneratedCode(
+        "\n".join(body),
         requirements=_GEOPANDAS | {Requirement.LOGGING},
     )
