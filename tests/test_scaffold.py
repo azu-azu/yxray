@@ -1590,14 +1590,14 @@ def test_scaffold_sort_reads_nested_field_rows() -> None:
             y=0,
             config={
                 "SortInfo": {
-                    "@locale": "2631851",
-                    "Field": {"@field": "工事完了予定日(p)", "@order": "Descending"},
+                    "@locale": "0",
+                    "Field": {"@field": "日付列C(p)", "@order": "Descending"},
                 }
             },
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.sort_values(["工事完了予定日(p)"], ascending=[False])' in code
+    assert 'df_2 = df_1.sort_values(["日付列C(p)"], ascending=[False])' in code
 
 
 def test_scaffold_sort_multiple_fields() -> None:
@@ -1695,9 +1695,9 @@ def test_scaffold_text_input_builds_dataframe() -> None:
                 "Fields": {"Field": {"@name": "進捗"}},
                 "Data": {
                     "r": [
-                        {"c": {"#text": "No Progress-Initial Design"}},
-                        {"c": "TSS-TI Ready"},
-                        {"c": "On Air"},
+                        {"c": {"#text": "Not Started"}},
+                        {"c": "In Progress"},
+                        {"c": "Done"},
                     ]
                 },
             },
@@ -1708,7 +1708,7 @@ def test_scaffold_text_input_builds_dataframe() -> None:
     assert "def build_text_input_df_1() -> pd.DataFrame:" in code
     assert "    df = pd.DataFrame({" in code
     assert (
-        '        "進捗": ["No Progress-Initial Design", "TSS-TI Ready", "On Air"],'
+        '        "進捗": ["Not Started", "In Progress", "Done"],'
         in code
     )
     assert "    return df" in code
