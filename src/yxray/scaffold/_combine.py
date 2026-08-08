@@ -36,8 +36,8 @@ def gen_join(ctx: ToolContext) -> GeneratedCode:
         if isinstance(join_info, list):
             join_info = join_info[0] if join_info else {}
         if isinstance(join_info, dict):
-            lk = join_info.get("@left", "") or join_info.get("@Left", "")
-            rk = join_info.get("@right", "") or join_info.get("@Right", "")
+            lk = first_text(join_info, "@left", "@Left")
+            rk = first_text(join_info, "@right", "@Right")
             if lk and rk:
                 matches = [(lk, rk)]
 

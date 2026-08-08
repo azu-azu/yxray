@@ -17,6 +17,7 @@ from typing import Any
 
 from jinja2 import Environment
 
+from yxray.config_utils import first_text
 from yxray.explain import explain as _explain_workflow
 from yxray.models.workflow import AlteryxNode, WorkflowDoc
 from yxray.renderers._graph_builder import _safe_json, load_vis_js
@@ -373,13 +374,8 @@ class SingleGraphRenderer:
                 return result
 
         # FillColor: top-level hex string (some versions)
-        fill_entry = config.get("FillColor") or config.get("fillColor")
-        if fill_entry:
-            raw = (
-                fill_entry.get("#text", "")
-                if isinstance(fill_entry, dict)
-                else str(fill_entry)
-            )
+        raw = first_text(config, "FillColor", "fillColor")
+        if raw:
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result

@@ -323,8 +323,8 @@ def _describe_join(config: dict[str, Any], _members: list[Any] | None) -> str:
     if isinstance(join_info, list):
         join_info = join_info[0] if join_info else {}
     if isinstance(join_info, dict):
-        left = join_info.get("@left", "") or join_info.get("@Left", "")
-        right = join_info.get("@right", "") or join_info.get("@Right", "")
+        left = first_text(join_info, "@left", "@Left")
+        right = first_text(join_info, "@right", "@Right")
         if left and right:
             return f"{left} = {right}"
     return ""
