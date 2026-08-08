@@ -160,6 +160,52 @@ def summarize(
     return steps
 
 
+def _build_successors(
+    doc: WorkflowDoc, node_ids: set[int]
+) -> dict[int, list[int]]:
+    successors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
+    for c in doc.connections:
+        src_tool = int(c.src_tool)
+        if src_tool in node_ids:
+            successors[src_tool].append(int(c.dst_tool))
+    return successors
+
+
+def _downstream_reach(
+    order: list[int], successors: dict[int, list[int]]
+) -> dict[int, int]:
+    """Downstream node count per tool_id, via a reverse-topo O(n + e) pass.
+
+    May overcount in diamond (converging) patterns, but that is acceptable
+    for the trunk detection heuristic.
+    """
+    downstream: dict[int, int] = {nid: 0 for nid in order}
+    for tid in reversed(order):
+        for s in successors.get(tid, []):
+            downstream[tid] += 1 + downstream.get(s, 0)
+    return downstream
+
+
+def _summary_insight(
+    input_count: int, join_count: int, output_count: int
+) -> KeyInsight | None:
+    parts = []
+    if input_count:
+        parts.append(f"Input × {input_count}")
+    if join_count:
+        parts.append(f"Join × {join_count}")
+    if output_count:
+        parts.append(f"Output × {output_count}")
+    if not parts:
+        return None
+    return KeyInsight(
+        tool_id=-1,
+        short_type="",
+        role="summary",
+        description="  ·  ".join(parts),
+    )
+
+
 def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
     """Return the most structurally important nodes as human-readable insights.
 
@@ -170,29 +216,14 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
     - Select: only when they rename >= 2 or drop >= 3 fields
     """
     node_ids = {int(n.tool_id) for n in doc.nodes}
-    successors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
-    predecessors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
-    for c in doc.connections:
-        src_tool = int(c.src_tool)
-        dst_tool = int(c.dst_tool)
-        if src_tool in node_ids:
-            successors[src_tool].append(dst_tool)
-        if dst_tool in node_ids:
-            predecessors[dst_tool].append(src_tool)
+    successors = _build_successors(doc, node_ids)
 
     total = max(len(doc.nodes), 1)
     trunk_threshold = max(_TRUNK_MIN_DOWNSTREAM, total // _TRUNK_RATIO_DIVISOR)
 
     node_map = {int(n.tool_id): n for n in doc.nodes}
     order = topo_order(doc)
-
-    # Pre-compute downstream reach in O(n + e) using sum approximation.
-    # May overcount in diamond (converging) patterns, but that is acceptable
-    # for the trunk detection heuristic.
-    downstream: dict[int, int] = {nid: 0 for nid in order}
-    for _tid in reversed(order):
-        for _s in successors.get(_tid, []):
-            downstream[_tid] += 1 + downstream.get(_s, 0)
+    downstream = _downstream_reach(order, successors)
 
     insights: list[KeyInsight] = []
     input_count = 0
@@ -238,23 +269,8 @@ def extract_key_insights(doc: WorkflowDoc) -> list[KeyInsight]:
         )
 
     # Summary count row at the top
-    parts = []
-    if input_count:
-        parts.append(f"Input × {input_count}")
-    if join_count:
-        parts.append(f"Join × {join_count}")
-    if output_count:
-        parts.append(f"Output × {output_count}")
-    if parts:
-        insights.insert(
-            0,
-            KeyInsight(
-                tool_id=-1,
-                short_type="",
-                role="summary",
-                description="  ·  ".join(parts),
-            ),
-        )
+    if summary := _summary_insight(input_count, join_count, output_count):
+        insights.insert(0, summary)
 
     return insights
 

@@ -362,13 +362,8 @@ class SingleGraphRenderer:
                 pass
 
         # Tint: Qt ARGB32 packed integer
-        tint_entry = config.get("Tint")
-        if tint_entry:
-            raw = (
-                tint_entry.get("#text", "")
-                if isinstance(tint_entry, dict)
-                else str(tint_entry)
-            )
+        raw = first_text(config, "Tint")
+        if raw:
             result = _hex_or_int_to_rgb(raw)
             if result:
                 return result
