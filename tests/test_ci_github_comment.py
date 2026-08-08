@@ -21,7 +21,9 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-_GITHUB_SCRIPTS = "/Users/laxmikantmukkawar/alteryx/.github/scripts"
+_GITHUB_SCRIPTS = os.environ.get(
+    "ALTERYX_CI_GITHUB_SCRIPTS", "/path/to/alteryx/.github/scripts"
+)
 if not os.path.isdir(_GITHUB_SCRIPTS):
     import pytest
 

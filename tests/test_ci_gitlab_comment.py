@@ -14,8 +14,9 @@ from unittest.mock import patch
 # Load the GitLab script under an isolated module name to avoid colliding with
 # test_ci_github_comment.py, which imports a module with the same name from a
 # different path. importlib prevents sys.modules cross-contamination.
-_GITLAB_SCRIPT = (
-    "/Users/laxmikantmukkawar/alteryx/.gitlab/scripts/generate_diff_comment.py"
+_GITLAB_SCRIPT = os.environ.get(
+    "ALTERYX_CI_GITLAB_SCRIPT",
+    "/path/to/alteryx/.gitlab/scripts/generate_diff_comment.py",
 )
 if not os.path.isfile(_GITLAB_SCRIPT):
     import pytest
