@@ -43,6 +43,39 @@ def _join_info_fields(config: dict[str, Any], connection: str) -> list[str]:
     return []
 
 
+def _resolve_join_matches(config: dict[str, Any]) -> list[tuple[str, str]]:
+    """(left, right) key pairs for a Join, trying each known XML shape in turn.
+
+    1. JoinExpression text ([L:x] = [R:y]) — never seen in a real .yxmc so
+       far, kept in case an older Alteryx version emits it.
+    2. JoinInfo/Field children — the shape every real Join has actually
+       used (see _join_info_fields).
+    3. JoinInfo @left/@right attributes — likewise never confirmed against
+       real data; kept only as a last-resort defensive fallback. Drop this
+       branch if it's still unreached after a few more real workflows.
+    """
+    expr = first_text(config, "JoinExpression") or ""
+    matches = _JOIN_COND_RE.findall(expr)
+
+    if not matches:
+        left_fields = _join_info_fields(config, "Left")
+        right_fields = _join_info_fields(config, "Right")
+        if left_fields and len(left_fields) == len(right_fields):
+            matches = list(zip(left_fields, right_fields, strict=True))
+
+    if not matches:
+        join_info = config.get("JoinInfo", {})
+        if isinstance(join_info, list):
+            join_info = join_info[0] if join_info else {}
+        if isinstance(join_info, dict):
+            lk = first_text(join_info, "@left", "@Left")
+            rk = first_text(join_info, "@right", "@Right")
+            if lk and rk:
+                matches = [(lk, rk)]
+
+    return matches
+
+
 def gen_join(ctx: ToolContext) -> GeneratedCode:
     names = ctx.names
     df_out = ctx.df_out
@@ -52,23 +85,7 @@ def gen_join(ctx: ToolContext) -> GeneratedCode:
     df_right = frame_name(names, right_id, "df_right")
 
     expr = first_text(ctx.config, "JoinExpression") or ""
-    matches = _JOIN_COND_RE.findall(expr)
-
-    if not matches:
-        left_fields = _join_info_fields(ctx.config, "Left")
-        right_fields = _join_info_fields(ctx.config, "Right")
-        if left_fields and len(left_fields) == len(right_fields):
-            matches = list(zip(left_fields, right_fields))
-
-    if not matches:
-        join_info = ctx.config.get("JoinInfo", {})
-        if isinstance(join_info, list):
-            join_info = join_info[0] if join_info else {}
-        if isinstance(join_info, dict):
-            lk = first_text(join_info, "@left", "@Left")
-            rk = first_text(join_info, "@right", "@Right")
-            if lk and rk:
-                matches = [(lk, rk)]
+    matches = _resolve_join_matches(ctx.config)
 
     if matches:
         if all(lk == rk for lk, rk in matches):
