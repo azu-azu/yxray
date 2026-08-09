@@ -34,6 +34,7 @@ from yxray.scaffold._common import (
     anchor_src,
     frame_name,
 )
+from yxray.tool_registry import tool_segment
 
 _GEOPANDAS = frozenset({Requirement.GEOPANDAS})
 
@@ -278,12 +279,7 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
         "# on the comparison side, not here\n"
         "# .centroid on EPSG:4326 is a planar centroid in degrees (geopandas"
         "\n# warns); the offset from a geodesic one is negligible at"
-        " building scale\n"
-        "# WARNING: Alteryx renames the field to avoid a collision — if this\n"
-        '# frame already carries a "Centroid" column (e.g. from an earlier\n'
-        "# Spatial Info in the same chain), the real output field here is\n"
-        '# "Centroid2" (confirmed in real MetaInfo), not "Centroid" — rename'
-        "\n# the line below manually when that's the case",
+        " building scale",
     ),
 }
 
@@ -304,6 +300,42 @@ def _selected_items(config: dict[str, Any]) -> list[str]:
         if isinstance(item, dict)
     )
     return [name for name in names if name]
+
+
+def _upstream_centroid_count(ctx: ToolContext) -> int:
+    """How many ancestor Spatial Info nodes already select CentroidObj.
+
+    Alteryx renames a colliding CentroidObj output to "Centroid2",
+    "Centroid3", etc. (confirmed in real MetaInfo for the 2-deep case).
+    ToolContext only carries this tool's immediate preds, so answering
+    "did an earlier Spatial Info in this chain already emit Centroid?"
+    means walking the full predecessor closure via node_map/pred_map —
+    a visited set keeps a diamond-shaped graph (a join merging two
+    branches) from double-counting the same ancestor.
+
+    Best-effort, not a guarantee: a Select that dropped an earlier
+    Centroid column downstream of it would still be counted here, and
+    Alteryx's exact numbering rule (gaps, case, whether a dropped column
+    still "counts") is confirmed only for the one straight chain this
+    was built from.
+    """
+    seen: set[int] = set()
+    stack = list(ctx.preds)
+    count = 0
+    while stack:
+        tool_id = stack.pop()
+        if tool_id in seen:
+            continue
+        seen.add(tool_id)
+        node = ctx.node_map.get(tool_id)
+        if node is None:
+            continue
+        if tool_segment(node.tool_type) == "SpatialInfo" and "CentroidObj" in (
+            _selected_items(node.config)
+        ):
+            count += 1
+        stack.extend(ctx.pred_map.get(tool_id, []))
+    return count
 
 
 def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
@@ -335,6 +367,17 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
     )
     for item in translated:
         out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
+        if item == "CentroidObj" and (n := _upstream_centroid_count(ctx)):
+            renamed = f"{out_field}{n + 1}"
+            note = (
+                f"{note}\n"
+                f"# NOTE: renamed to {py_str(renamed)} — {n} earlier Spatial"
+                " Info node(s) selecting CentroidObj found upstream"
+                " (best-effort; a branch/join this walk can't fully account"
+                " for could still be miscounted — verify against Alteryx if"
+                " unsure)"
+            )
+            out_field = renamed
         lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = _geom.{attr}")
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
 

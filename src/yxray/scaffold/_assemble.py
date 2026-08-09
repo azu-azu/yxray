@@ -128,6 +128,8 @@ def _make_context(
         anchors=plan.anchor_map.get(tool_id, {}),
         names=plan.names,
         paths=paths,
+        node_map=plan.node_map,
+        pred_map=plan.pred_map,
     )
 
 

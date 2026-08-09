@@ -2411,6 +2411,142 @@ def test_scaffold_spatialinfo_centroid() -> None:
     # a Centroid column never reaches a golden CSV, same as geometry
     assert "drop it" in code
     assert "TODO: Spatial Info" not in code
+    # the first Spatial Info in a chain has nothing to collide with
+    assert "NOTE: renamed" not in code
+
+
+def _spatialinfo_node(tool_id: int, x: int, field: str = "SpatialObj") -> AlteryxNode:
+    return AlteryxNode(
+        tool_id=ToolID(tool_id),
+        tool_type="SpatialInfo",
+        x=x,
+        y=0,
+        config={
+            "SpatialObj": {"@field": field},
+            "SelectedItems": {"Item": {"@name": "CentroidObj"}},
+        },
+    )
+
+
+def test_scaffold_spatialinfo_second_in_chain_renames_to_centroid2() -> None:
+    # A real workflow chains Spatial Info twice (once directly, once after
+    # a Buffer); Alteryx renames the second CentroidObj output to avoid a
+    # collision with the first — confirmed in real MetaInfo.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        _spatialinfo_node(2, x=10),
+        _spatialinfo_node(3, x=20, field="Centroid"),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df_2["Centroid"] = _geom.centroid' in code
+    assert 'df_3["Centroid2"] = _geom.centroid' in code
+    assert 'NOTE: renamed to "Centroid2" — 1 earlier Spatial Info' in code
+
+
+def test_scaffold_spatialinfo_third_in_chain_renames_to_centroid3() -> None:
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        _spatialinfo_node(2, x=10),
+        _spatialinfo_node(3, x=20, field="Centroid"),
+        _spatialinfo_node(4, x=30, field="Centroid2"),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(3),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(4),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df_4["Centroid3"] = _geom.centroid' in code
+
+
+def test_scaffold_spatialinfo_diamond_counts_shared_ancestor_once() -> None:
+    # Two branches both descending from the same Spatial Info, rejoined
+    # before a second Spatial Info: the visited-set walk must count that
+    # one shared ancestor once, not twice (Centroid2, not Centroid3).
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        _spatialinfo_node(2, x=10),
+        AlteryxNode(tool_id=ToolID(3), tool_type="Filter", x=20, y=-20, config={}),
+        AlteryxNode(tool_id=ToolID(4), tool_type="Filter", x=20, y=20, config={}),
+        AlteryxNode(
+            tool_id=ToolID(5),
+            tool_type="Union",
+            x=30,
+            y=0,
+            config={},
+        ),
+        _spatialinfo_node(6, x=40, field="Centroid"),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(4),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(3),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(5),
+                dst_anchor=AnchorName("Input1"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(4),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(5),
+                dst_anchor=AnchorName("Input2"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(5),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(6),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df_6["Centroid2"] = _geom.centroid' in code
+    assert "Centroid3" not in code
 
 
 def test_scaffold_spatialinfo_untranslated_items_stay_todo() -> None:

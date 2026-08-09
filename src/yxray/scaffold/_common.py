@@ -148,6 +148,12 @@ class ToolContext:
     Uniform across every generator (Input/Output included), so the registry
     can dispatch on segment alone and the assembly loop carries no per-tool
     special cases. `paths` is only consulted by the Input/Output generators.
+
+    `preds` is this tool's immediate predecessors; `node_map`/`pred_map` are
+    the whole workflow's tool_id -> node and tool_id -> predecessors maps,
+    for the rare generator that needs to look further upstream than one
+    hop (e.g. Spatial Info walking the full predecessor closure to detect
+    an earlier Spatial Info in the same chain — see _spatial.py).
     """
 
     tool_id: int
@@ -157,6 +163,8 @@ class ToolContext:
     anchors: dict[str, int]
     names: dict[int, str]
     paths: PathStyle
+    node_map: dict[int, Any]
+    pred_map: dict[int, list[int]]
 
     @property
     def df_out(self) -> str:

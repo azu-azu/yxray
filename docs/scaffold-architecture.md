@@ -113,7 +113,11 @@ def gen_xxx(ctx: ToolContext) -> str: ...
 ```
 
 `ToolContext`(`_common.py`)は `tool_id / segment / config / preds / anchors /
-names / paths` を束ね、`df_in` / `df_out` を computed property で提供する。
+names / paths / node_map / pred_map` を束ね、`df_in` / `df_out` を computed
+property で提供する。`node_map`/`pred_map`(ワークフロー全体の
+tool_id → ノード/predecessors)は、1ホップ先の `preds` では足りない
+まれなケース向け(祖先を遡る必要がある `gen_spatialinfo()` の列名衝突検知が
+実例、2026-08-09 追加)。
 
 これにより:
 
@@ -191,14 +195,23 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
 Spatial Info はチェックボックスだけでリネームUIを持たないため、名前は固定。
 
 **ただし同じチェーンに Spatial Info が2回出てくると、この固定名が崩れる
-(2026-08-09)**。名前衝突を避けるため、Alteryx は2回目の出力を自動的に
-`Centroid2` にリネームする(実ワークフローの MetaInfo で確認済み)。
-`gen_spatialinfo()` は列名を `"Centroid"` に固定したままなので、この
-ケースでは実際の Alteryx 出力とズレる。golden CSV には出ない型なので
-自動テストは通ってしまう。列の存在有無をパイプライン全体で追跡する
-仕組みが無いと自動リネームは実装できないため、当面は生成コードに
-WARNING コメントを出すに留めている(`_SPATIAL_INFO_ITEMS["CentroidObj"]`)。
-2回目以降が出た場合は手動でリネームすること。
+(2026-08-09 発見、同日中に対応)**。名前衝突を避けるため、Alteryx は2回目の
+出力を自動的に `Centroid2` にリネームする(実ワークフローの MetaInfo で確認済み)。
+
+`gen_spatialinfo()` は `ToolContext` に足した `node_map`/`pred_map`(ワークフロー
+全体の tool_id → ノード/predecessors マップ)を使って、**このノードの祖先を
+遡り、`CentroidObj` を選択済みの Spatial Info が何個あるかを数える**
+(`_upstream_centroid_count()`)。1個見つかれば `Centroid2`、2個なら `Centroid3`
+と出し分け、根拠を示す NOTE コメントも添える。訪問済みノードを set で管理して
+いるので、Join/Union で分岐が合流するダイアモンド型のグラフでも同じ祖先を
+二重カウントしない。
+
+**ベストエフォートであり保証ではない**: 判定は「祖先に Spatial Info があるか」
+の実在チェックだけで、途中の Select がその `Centroid` 列を落としていた場合は
+判定に使えない(落とされていても「存在した」とカウントしてしまう)。Alteryx
+自身の命名規則(欠番の扱い・大文字小文字・列が落とされていてもカウント対象か)
+も、実際に確認できた一直線のチェーン1本の範囲でしか裏取りできていない。
+それでも「常に固定名」よりは確実に正しい。
 
 項目を増やすときは `_spatial.py` の `_SPATIAL_INFO_ITEMS` に1行足す。
 ただし数値を返す項目は、投影CRSの選択と Alteryx の単位設定を決めるまで
