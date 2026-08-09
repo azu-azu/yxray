@@ -22,6 +22,7 @@ from yxray.config_utils import (
 )
 from yxray.scaffold._common import (
     FILL_EMPTY_NOTE_LINES,
+    TOSTRING_FORMAT_WARNING_LINES,
     GeneratedCode,
     Requirement,
     ToolContext,
@@ -70,10 +71,12 @@ def gen_formula(ctx: ToolContext) -> GeneratedCode:
     body: list[str] = []
     uses_numpy = False
     uses_fill_empty = False
+    uses_tostring_format = False
     for fname, expr in formulas:
         translation, ok = _translate_expr(expr, df_out)
         uses_numpy = uses_numpy or translation.uses_numpy
         uses_fill_empty = uses_fill_empty or translation.uses_fill_empty
+        uses_tostring_format = uses_tostring_format or translation.uses_tostring_format
         if not ok:
             body.append(
                 f'# TODO: could not translate expression for "{comment_safe(fname)}"'
@@ -85,6 +88,8 @@ def gen_formula(ctx: ToolContext) -> GeneratedCode:
     lines = ["# Alteryx Formula — applied top to bottom; review translation"]
     if uses_fill_empty:
         lines += FILL_EMPTY_NOTE_LINES
+    if uses_tostring_format:
+        lines += TOSTRING_FORMAT_WARNING_LINES
     lines.append(f"{df_out} = {df_in}.copy()")
     lines += body
     return GeneratedCode(

@@ -263,11 +263,47 @@ def test_tostring_uses_string_dtype() -> None:
     assert t("ToString([x])") == 'df["x"].astype("string")'
 
 
-def test_tostring_with_format_args_raises() -> None:
-    # Format arguments (decimals, separators) can't be reproduced by a
-    # plain cast — fall back so the expression stays visible verbatim.
+def test_tostring_decimal_places() -> None:
+    assert t("ToString([x], 2)") == (
+        'df["x"].map(lambda v: format(v, ".2f") if pd.notna(v) else pd.NA)'
+        '.astype("string")'
+    )
+
+
+def test_tostring_decimal_places_and_grouping() -> None:
+    assert t("ToString([x], 0, 1)") == (
+        'df["x"].map(lambda v: format(v, ",.0f") if pd.notna(v) else pd.NA)'
+        '.astype("string")'
+    )
+    result = translate_expr("ToString([x], 0, 1)", "df")
+    assert result.uses_tostring_format is True
+
+
+def test_tostring_grouping_zero_is_no_grouping() -> None:
+    assert t("ToString([x], 1, 0)") == (
+        'df["x"].map(lambda v: format(v, ".1f") if pd.notna(v) else pd.NA)'
+        '.astype("string")'
+    )
+
+
+def test_tostring_without_format_args_does_not_set_flag() -> None:
+    assert translate_expr("ToString([x])", "df").uses_tostring_format is False
+
+
+def test_tostring_with_non_literal_decimal_places_raises() -> None:
+    # A per-row decimal count has no simple vectorized equivalent.
     with pytest.raises(ExprTranslationError):
-        t("ToString([x], 0, 1)")
+        t("ToString([x], [Decimals], 1)")
+
+
+def test_tostring_with_non_literal_grouping_raises() -> None:
+    with pytest.raises(ExprTranslationError):
+        t("ToString([x], 2, [Grouping])")
+
+
+def test_tostring_with_too_many_args_raises() -> None:
+    with pytest.raises(ExprTranslationError):
+        t("ToString([x], 2, 1, 1)")
 
 
 def test_in_list() -> None:

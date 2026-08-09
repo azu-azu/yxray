@@ -927,6 +927,21 @@ def test_scaffold_formula_without_fill_omits_the_helper_note() -> None:
     assert "fill_empty" not in code
 
 
+def test_scaffold_formula_tostring_format_args_warns_and_translates() -> None:
+    code = scaffold(_formula_doc("Area", "ToString([Area], 0, 1)"))
+    assert "could not translate expression" not in code
+    assert "# WARNING: ToString's rounding mode is not confirmed" in code
+    assert (
+        'df_2["Area"] = df_2["Area"].map(lambda v: format(v, ",.0f")'
+        ' if pd.notna(v) else pd.NA).astype("string")' in code
+    )
+
+
+def test_scaffold_formula_tostring_without_format_args_omits_warning() -> None:
+    code = scaffold(_formula_doc("Name", "ToString([Name])"))
+    assert "WARNING: ToString" not in code
+
+
 def test_scaffold_formula_new_field_from_fill_is_valid_python() -> None:
     # Alteryx Formula can create a field, so the fill has to be an
     # expression assigned to the new column — an in-place

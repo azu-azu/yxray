@@ -232,15 +232,37 @@ def _emit_right(args: list[_Emitted]) -> str:
     return f"{_series(args[0])}.str[-{length}:]"
 
 
+_INT_LITERAL_RE = re.compile(r"-?\d+")
+_TOSTRING_GROUPING_LITERALS = {"0": False, "0.0": False, "1": True, "1.0": True}
+
+
 def _emit_tostring(args: list[_Emitted]) -> str:
     # .astype("string") keeps missing values as <NA> instead of the
     # literal string "nan" that .astype(str) would produce.
     _check_args("ToString", args, 1)
-    if len(args) > 1:
-        # Alteryx format arguments (decimal places, separators) have no
-        # astype equivalent; fall back so the reviewer ports it manually.
-        raise ExprTranslationError("ToString with format arguments")
-    return f'{_series(args[0])}.astype("string")'
+    s = _series(args[0])
+    if len(args) == 1:
+        return f'{s}.astype("string")'
+    if len(args) > 3:
+        raise ExprTranslationError("ToString with more than 3 arguments")
+    # DecimalPlaces/Grouping must be literal numbers, not a per-row
+    # expression: there is no simple vectorized equivalent for a decimal
+    # count that varies by row, so only a compile-time-known literal is
+    # supported. Alteryx's own rounding mode (half-up vs. half-even) is
+    # unconfirmed either way — the caller surfaces that as a WARNING.
+    decimals_code = args[1][0]
+    if not _INT_LITERAL_RE.fullmatch(decimals_code):
+        raise ExprTranslationError("ToString with a non-literal DecimalPlaces")
+    decimals = int(decimals_code)
+    grouping_code = args[2][0] if len(args) == 3 else "0"
+    if grouping_code not in _TOSTRING_GROUPING_LITERALS:
+        raise ExprTranslationError("ToString with a non-literal Grouping")
+    comma = "," if _TOSTRING_GROUPING_LITERALS[grouping_code] else ""
+    spec = f"{comma}.{decimals}f"
+    return (
+        f'{s}.map(lambda v: format(v, "{spec}") if pd.notna(v) else pd.NA)'
+        '.astype("string")'
+    )
 
 
 def _str_method(name: str, template: str, argc: int) -> Callable[..., str]:
@@ -332,6 +354,10 @@ class _Parser:
         # name that is not pandas/numpy, so callers must point at
         # reference_impl/fill_empty.py.
         self.uses_fill_empty = False
+        # Whether any emission so far is a ToString() call with format
+        # arguments (DecimalPlaces/Grouping) — Alteryx's own rounding mode
+        # is unconfirmed, so callers surface a WARNING pointing at it.
+        self.uses_tostring_format = False
 
     def peek(self) -> _Token:
         return self.tokens[self.pos]
@@ -562,6 +588,8 @@ class _Parser:
                 return code, _ATOM
             if name.lower() in _NUMPY_FUNCTIONS:
                 self.uses_numpy = True
+            if name.lower() == "tostring" and len(args) > 1:
+                self.uses_tostring_format = True
             return emitter(args), _ATOM
         # Unknown function: keep it verbatim so the reviewer sees what to port.
         arg_codes = ", ".join(a[0] for a in args)
@@ -577,11 +605,15 @@ class ExprTranslation:
     emit `import numpy as np` exactly when needed. uses_fill_empty is the
     same idea for the one emitted name that is neither pandas nor numpy:
     callers point the reader at reference_impl/fill_empty.py.
+    uses_tostring_format is set when a ToString() call used its
+    DecimalPlaces/Grouping arguments — Alteryx's own rounding mode is
+    unconfirmed, so callers should surface a WARNING pointing at it.
     """
 
     code: str
     uses_numpy: bool
     uses_fill_empty: bool = False
+    uses_tostring_format: bool = False
 
 
 def translate_expr(expr: str, df_var: str) -> ExprTranslation:
@@ -598,6 +630,7 @@ def translate_expr(expr: str, df_var: str) -> ExprTranslation:
         code=parser.parse(),
         uses_numpy=parser.uses_numpy,
         uses_fill_empty=parser.uses_fill_empty,
+        uses_tostring_format=parser.uses_tostring_format,
     )
 
 
@@ -634,6 +667,7 @@ class FilterTranslation:
     joiner: str  # "&" or "|" ("&" when there is only one mask)
     uses_numpy: bool
     uses_fill_empty: bool = False
+    uses_tostring_format: bool = False
 
 
 def _fragment(tokens: list[_Token], start: int, stop: int) -> str:
@@ -679,4 +713,5 @@ def translate_filter_masks(expr: str, df_var: str) -> FilterTranslation:
         joiner=joiner,
         uses_numpy=parser.uses_numpy,
         uses_fill_empty=parser.uses_fill_empty,
+        uses_tostring_format=parser.uses_tostring_format,
     )

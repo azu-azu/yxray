@@ -1204,6 +1204,42 @@ df["Size"] = fill_empty(to_display_string(numeric), "-")
 
 ---
 
+## 21. `ToString` の書式引数(小数桁数・桁区切り)
+
+20章の `to_display_string()` とは別物。こちらは Formula 式に明示的に書かれた
+`ToString(値, 小数桁数, [桁区切り])` の翻訳で、Alteryx 公式仕様どおり
+小数桁数への丸めと桁区切りをそのまま反映する。
+
+| | 挙動 |
+|---|---|
+| **Alteryx** `ToString(値)` | `.astype("string")`(欠損は `<NA>`。`.astype(str)` だと文字列 `"nan"` になる) |
+| **Alteryx** `ToString(値, 小数桁数)` | 指定した小数桁数に丸めて文字列化 |
+| **Alteryx** `ToString(値, 小数桁数, 桁区切り)` | 桁区切り(1)なら3桁ごとにカンマを挿入 |
+
+```python
+# Alteryx: ToString([Area], 0, 1)
+df["Area"].map(lambda v: format(v, ",.0f") if pd.notna(v) else pd.NA).astype("string")
+
+# Alteryx: ToString([Price], 2)
+df["Price"].map(lambda v: format(v, ".2f") if pd.notna(v) else pd.NA).astype("string")
+```
+
+> **未検証**: 丸めの方式(四捨五入 か 銀行丸め か)は Alteryx 側で確認できて
+> いない。Python の `format()` は銀行丸め(round-half-to-even)。生成コードは
+> `# WARNING: ToString's rounding mode is not confirmed against Alteryx`
+> を出すので、golden と diff してから信用すること(Distance の `_DISTANCE_WARNING`
+> と同じ立て付け)。
+
+### 小数桁数・桁区切りが**リテラルでない**場合は翻訳しない
+
+`ToString([値], [小数桁数フィールド], 1)` のように、桁数そのものが式や
+フィールド参照だと行ごとに違う値になり得るため、単純なベクトル化ができない。
+このケースは(3引数以上でも)`ExprTranslationError` に落ちて手動ポート行きの
+`# TODO` になる — 20章までと同じ「対応済みの形だけ翻訳し、それ以外は明示 TODO」
+という規律に沿っている。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -1227,6 +1263,7 @@ df["Size"] = fill_empty(to_display_string(numeric), "-")
 | `IF` の分岐が別列・加工済み・ELSE 無し、または ELSEIF 付き | 補充ではなく分岐。`np.where` / `np.select` のまま（19章の適用条件表） |
 | 式の途中・フィルタ条件の `IsEmpty` / `!IsEmpty` | 関数化せず `(df[col].isna() \| (df[col] == ""))` を直書き — 関数を使うのは補充の場合だけ（19章） |
 | Double 列に文字列プレースホルダを入れて出力する | Alteryx は `1.0` を `"1"` と書く。出力直前に `to_display_string()` を通す（`fill_empty(to_display_string(df[col]), "-")` の順）。scaffold は生成しないのでレビュー時に人間が入れる（20章） |
+| `ToString(値, 小数桁数, [桁区切り])` | `.map(lambda v: format(v, ",.0f") if pd.notna(v) else pd.NA).astype("string")`(桁区切りありの例。無しなら `".0f"`)。丸め方式は未検証、生成コードに WARNING（21章） |
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
@@ -1247,5 +1284,5 @@ df["Size"] = fill_empty(to_display_string(numeric), "-")
 - `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
 - `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin` + `index_right` drop + 埋め込み Select 逸脱の WARNING）
-- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。肯定形・否定形の両方を判定し、`if_expr` と `IIF` の両方から呼ばれる）
+- `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。肯定形・否定形の両方を判定し、`if_expr` と `IIF` の両方から呼ばれる）/ `_emit_tostring`（21章。小数桁数・桁区切りがリテラルのときだけ翻訳し、`uses_tostring_format` フラグで呼び出し元に WARNING を出させる）
 - `src/yxray/static/single_graph.js` — inspect パネルの Filter python_hint

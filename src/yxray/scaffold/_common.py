@@ -18,6 +18,7 @@ from yxray.config_utils import py_str
 __all__ = [
     "FIELD_RE",
     "FILL_EMPTY_NOTE_LINES",
+    "TOSTRING_FORMAT_WARNING_LINES",
     "GeneratedCode",
     "PathStyle",
     "Requirement",
@@ -37,6 +38,17 @@ FIELD_RE = re.compile(r"\[([^\]]+)\]")
 FILL_EMPTY_NOTE_LINES = (
     "# NOTE: fill_empty() is not generated — copy it from",
     "# reference_impl/fill_empty.py",
+)
+
+# Emitted by any block whose translation calls ToString() with
+# DecimalPlaces/Grouping. The shape (round to N places, optionally add a
+# thousands separator) is confirmed against Alteryx's documented ToString
+# signature; the exact rounding mode (half-up vs. Python's half-even) is
+# not, same caveat as _DISTANCE_WARNING in _spatial.py.
+TOSTRING_FORMAT_WARNING_LINES = (
+    "# WARNING: ToString's rounding mode is not confirmed against Alteryx",
+    "# (Python formats half-to-even) — diff this column against golden",
+    "# output before trusting it",
 )
 
 
