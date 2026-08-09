@@ -269,6 +269,15 @@ Buffer が「golden 突合なし」で昇格できるのは、Distance の距離
 面積が 0.16% 小さく、1% generalize でさらに 0.5% 減る(いずれも実測)— が、
 SpatialObj は Results grid にも golden CSV にも出ないので比較を汚さない。
 
+**Distance の 0.19% 残差は Buffer まで追わない(2026-08-05)**。
+バッファサイズ列が上流の `DistanceKilometers` から作られている場合、
+Distance 側の残差(実測1行で半径 107.6 m に対し約 0.19%、原因未特定)は
+バッファ半径にもそのまま乗る。ただし影響は数 cm 相当で、既存の形状近似
+(64分割円 0.16%、1% generalize で追加 0.5%)より一桁小さく、しかも
+Buffer の出力は SpatialObj なので golden CSV の比較結果は変わらない。
+これ以上の追及は Distance 側の残差調査(未解決)に一本化し、
+Buffer 側では扱わない。
+
 CRS の扱い(**メートル系へ出て、必ず EPSG:4326 へ戻る**)は
 [spatial-crs-design.md](spatial-crs-design.md#buffer-はメートル系へ出て戻ってくる)
 にまとめてある。

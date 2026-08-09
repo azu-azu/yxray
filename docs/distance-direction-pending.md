@@ -133,6 +133,15 @@ XML 本体はリポジトリに入っていない(`.gitignore` が `*.yxmd` を�
 一方 **方位も同じ点を使うとはどこにも書かれていない**。
 したがって推論の格は変わらず、golden 突合は依然として必要である。
 
+### 進捗(2026-08-05)
+
+実ワークフローの golden 行を1件入手できたが、含まれていたのは
+`Centroid` / `SpatialObj` / `DistanceKilometers` のみで `Direction` は
+無かった。Centroid の平面重心確認と Distance の投影誤差検証には使えた
+([spatial-crs-design.md](spatial-crs-design.md#spatial-info-は不変条件を宣言し直す))
+が、**この文書が保留している論点(方位の基準点、丸め規則)には
+1ミリも進んでいない**。決着には依然として `Direction` 列を含む行が要る。
+
 ---
 
 ## 候補実装の落とし穴(実測で確認)
