@@ -190,6 +190,16 @@ names / paths` を束ね、`df_in` / `df_out` を computed property で提供す
 (`source="SpatialInfo: CentroidObj Source=SpatialObj"`)で裏取りしてある。
 Spatial Info はチェックボックスだけでリネームUIを持たないため、名前は固定。
 
+**ただし同じチェーンに Spatial Info が2回出てくると、この固定名が崩れる
+(2026-08-09)**。名前衝突を避けるため、Alteryx は2回目の出力を自動的に
+`Centroid2` にリネームする(実ワークフローの MetaInfo で確認済み)。
+`gen_spatialinfo()` は列名を `"Centroid"` に固定したままなので、この
+ケースでは実際の Alteryx 出力とズレる。golden CSV には出ない型なので
+自動テストは通ってしまう。列の存在有無をパイプライン全体で追跡する
+仕組みが無いと自動リネームは実装できないため、当面は生成コードに
+WARNING コメントを出すに留めている(`_SPATIAL_INFO_ITEMS["CentroidObj"]`)。
+2回目以降が出た場合は手動でリネームすること。
+
 項目を増やすときは `_spatial.py` の `_SPATIAL_INFO_ITEMS` に1行足す。
 ただし数値を返す項目は、投影CRSの選択と Alteryx の単位設定を決めるまで
 足してはいけない(投影CRSの方は

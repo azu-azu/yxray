@@ -278,7 +278,12 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
         "# on the comparison side, not here\n"
         "# .centroid on EPSG:4326 is a planar centroid in degrees (geopandas"
         "\n# warns); the offset from a geodesic one is negligible at"
-        " building scale",
+        " building scale\n"
+        "# WARNING: Alteryx renames the field to avoid a collision — if this\n"
+        "# frame already carries a \"Centroid\" column (e.g. from an earlier\n"
+        "# Spatial Info in the same chain), the real output field here is\n"
+        '# "Centroid2" (confirmed in real MetaInfo), not "Centroid" — rename'
+        "\n# the line below manually when that's the case",
     ),
 }
 
