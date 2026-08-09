@@ -8,8 +8,9 @@ stream.
 from __future__ import annotations
 
 import re
+from typing import Any
 
-from yxray.config_utils import comment_safe, first_text, py_str
+from yxray.config_utils import as_list, comment_safe, field_name, first_text, py_str
 from yxray.scaffold._common import (
     GeneratedCode,
     ToolContext,
@@ -18,6 +19,28 @@ from yxray.scaffold._common import (
 )
 
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
+
+
+def _join_info_fields(config: dict[str, Any], connection: str) -> list[str]:
+    """Ordered join-key field names for one side of a Join's <JoinInfo>.
+
+    Real workflow XML nests one or more <Field field="..."/> children per
+    <JoinInfo connection="Left"|"Right"> (one per join key, in order)
+    rather than putting the key in a left/right attribute on <JoinInfo>
+    itself — every Join tool observed in a real .yxmc used this shape,
+    none used the @left/@right form below.
+    """
+    for info in as_list(config.get("JoinInfo")):
+        if not isinstance(info, dict):
+            continue
+        if first_text(info, "@connection", "@Connection") != connection:
+            continue
+        return [
+            name
+            for field in as_list(info.get("Field"))
+            if isinstance(field, dict) and (name := field_name(field))
+        ]
+    return []
 
 
 def gen_join(ctx: ToolContext) -> GeneratedCode:
@@ -30,6 +53,12 @@ def gen_join(ctx: ToolContext) -> GeneratedCode:
 
     expr = first_text(ctx.config, "JoinExpression") or ""
     matches = _JOIN_COND_RE.findall(expr)
+
+    if not matches:
+        left_fields = _join_info_fields(ctx.config, "Left")
+        right_fields = _join_info_fields(ctx.config, "Right")
+        if left_fields and len(left_fields) == len(right_fields):
+            matches = list(zip(left_fields, right_fields))
 
     if not matches:
         join_info = ctx.config.get("JoinInfo", {})

@@ -1500,6 +1500,149 @@ def test_scaffold_join_unparseable_expr_with_newline_stays_in_comment() -> None:
     compile(code, "<scaffold>", "exec")
 
 
+def test_scaffold_join_info_field_children_same_key() -> None:
+    # Real .yxmc Join tools carry the key as <JoinInfo connection="Left">
+    # <Field field="..."/></JoinInfo> children, not a JoinExpression string
+    # or a left/right attribute — no JoinExpression is present here.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
+        AlteryxNode(
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
+            config={
+                "JoinInfo": [
+                    {
+                        "@connection": "Left",
+                        "Field": {"@field": "CustomerID"},
+                    },
+                    {
+                        "@connection": "Right",
+                        "Field": {"@field": "CustomerID"},
+                    },
+                ]
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "pd.merge" in code
+    assert '"CustomerID"' in code
+    assert "# TODO: parse join condition" not in code
+
+
+def test_scaffold_join_info_field_children_multi_key() -> None:
+    # Multiple <Field> children per side — a composite-key join, the
+    # shape every Join tool in a real workflow has actually used so far.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
+        AlteryxNode(
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
+            config={
+                "JoinInfo": [
+                    {
+                        "@connection": "Left",
+                        "Field": [
+                            {"@field": "OrdID"},
+                            {"@field": "LineNo"},
+                        ],
+                    },
+                    {
+                        "@connection": "Right",
+                        "Field": [
+                            {"@field": "OrderID"},
+                            {"@field": "LineNumber"},
+                        ],
+                    },
+                ]
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "left_on" in code
+    assert "right_on" in code
+    assert '"OrdID"' in code and '"LineNo"' in code
+    assert '"OrderID"' in code and '"LineNumber"' in code
+    assert "# TODO: parse join condition" not in code
+
+
+def test_scaffold_join_info_field_children_mismatched_key_count_stays_todo() -> None:
+    # Left/right key counts must line up 1:1 to zip safely; a mismatch
+    # (malformed or partially-edited config) falls through to the TODO
+    # stub instead of silently pairing the wrong columns.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(tool_id=ToolID(2), tool_type="InputData", x=0, y=100),
+        AlteryxNode(
+            tool_id=ToolID(3),
+            tool_type="Join",
+            x=100,
+            y=50,
+            config={
+                "JoinInfo": [
+                    {
+                        "@connection": "Left",
+                        "Field": [{"@field": "OrdID"}, {"@field": "LineNo"}],
+                    },
+                    {
+                        "@connection": "Right",
+                        "Field": {"@field": "OrderID"},
+                    },
+                ]
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Left"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Right"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "# TODO: parse join condition: (none)" in code
+
+
 # ── Summarize ──────────────────────────────────────────────────────────────
 
 
