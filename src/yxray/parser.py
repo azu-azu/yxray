@@ -39,6 +39,7 @@ from yxray.models import (
     ControlParam,
     MacroAction,
     MacroInterface,
+    MetaField,
     ToolID,
     WorkflowDoc,
 )
@@ -176,6 +177,39 @@ def _element_text(parent: etree._Element | None, tag: str) -> str:
         return ""
     child = parent.find(tag)
     return (child.text or "").strip() if child is not None else ""
+
+
+def _meta_fields(node_elem: etree._Element) -> dict[str, tuple[MetaField, ...]]:
+    """A node's cached output schema per anchor, from its <MetaInfo> blocks.
+
+    The shape Alteryx writes is
+    ``<MetaInfo connection="Output"><RecordInfo><Field name=… /></RecordInfo>``
+    under <Properties>, with @connection absent on single-output tools. Two
+    variants are accepted rather than asserted, because the exact layout is
+    confirmed only for the files this was built from: <MetaInfo> is looked
+    for both inside and directly under <Node>, and <Field> both inside
+    <RecordInfo> and directly under <MetaInfo>. A layout that matches
+    neither yields {} — the same as a file the Designer never resolved,
+    which every caller already has to handle.
+    """
+    result: dict[str, tuple[MetaField, ...]] = {}
+    metas = [*node_elem.findall("Properties/MetaInfo"), *node_elem.findall("MetaInfo")]
+    for meta in metas:
+        record: etree._Element | None = meta.find("RecordInfo")
+        container = meta if record is None else record
+        fields = tuple(
+            MetaField(
+                name=field_elem.get("name", ""),
+                type=field_elem.get("type", ""),
+                size=field_elem.get("size", ""),
+                source=field_elem.get("source", ""),
+            )
+            for field_elem in container.findall("Field")
+            if field_elem.get("name")
+        )
+        if fields:
+            result.setdefault(meta.get("connection", "Output"), fields)
+    return result
 
 
 def _parse_control_params(root: etree._Element) -> tuple[list[ControlParam], list[str]]:
@@ -355,6 +389,7 @@ def _collect_node(
                 config=config,
                 container_id=container_id,
                 raw_xml=_node_raw_xml(node_elem),
+                meta_fields=_meta_fields(node_elem),
                 annotation=annotation,
             )
         )

@@ -18,6 +18,7 @@ from yxray.models.types import AnchorName, ConfigHash, ToolID
 from yxray.models.workflow import (
     AlteryxConnection,
     AlteryxNode,
+    MetaField,
     WorkflowDoc,
 )
 
@@ -30,6 +31,7 @@ __all__ = [
     "WorkflowDoc",
     "AlteryxNode",
     "AlteryxConnection",
+    "MetaField",
     # Batch-macro interface models
     "MacroInterface",
     "ControlParam",

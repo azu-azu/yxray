@@ -31,6 +31,7 @@ from tests.fixtures import (
     EMPTY_FILE,
     EMPTY_WORKFLOW_YXMD,
     MALFORMED_XML,
+    META_INFO_YXMD,
     MINIMAL_YXMD,
     REPEATED_FIELDS_YXMD,
     TWO_NODE_YXMD,
@@ -369,3 +370,65 @@ def test_programmatic_node_has_empty_raw_xml() -> None:
 
     node = AlteryxNode(tool_id=ToolID(1), tool_type="Filter", x=0.0, y=0.0)
     assert node.raw_xml == ""
+
+
+# ---------------------------------------------------------------------------
+# MetaInfo (cached output schema)
+# ---------------------------------------------------------------------------
+
+
+def test_meta_info_is_parsed_into_meta_fields(tmp_path: pathlib.Path) -> None:
+    """Properties/MetaInfo becomes meta_fields, keyed by the anchor name.
+
+    The source attribute is what later tells an inherited column from one
+    the node created, so it has to survive parsing intact.
+    """
+    path_a = write_fixture(tmp_path, "workflow_a.yxmd", META_INFO_YXMD)
+    path_b = write_fixture(tmp_path, "workflow_b.yxmd", META_INFO_YXMD)
+
+    doc_a, _ = parse(path_a, path_b)
+
+    node1 = next(n for n in doc_a.nodes if int(n.tool_id) == 1)
+    fields = node1.meta_fields["Output"]
+    assert [f.name for f in fields] == [
+        "SpatialObj",
+        "Centroid",
+        "SpatialObj_Buffer",
+        "Centroid2",
+    ]
+    centroid2 = fields[-1]
+    assert centroid2.source == "SpatialInfo: CentroidObj Source=SpatialObj_Buffer"
+    assert centroid2.type == "SpatialObj"
+    assert centroid2.size == "2147483647"
+    # A field Alteryx did not attribute to a tool carries an empty source
+    assert fields[0].source == ""
+
+
+def test_node_without_meta_info_gets_empty_meta_fields(
+    tmp_path: pathlib.Path,
+) -> None:
+    """MetaInfo is a Designer-written cache, absent from a workflow it never
+    resolved — that is the normal state, not an error."""
+    path_a = write_fixture(tmp_path, "workflow_a.yxmd", META_INFO_YXMD)
+    path_b = write_fixture(tmp_path, "workflow_b.yxmd", META_INFO_YXMD)
+
+    doc_a, _ = parse(path_a, path_b)
+
+    node2 = next(n for n in doc_a.nodes if int(n.tool_id) == 2)
+    assert node2.meta_fields == {}
+    # ... and so is every node of a workflow that carries no MetaInfo at all
+    path_c = write_fixture(tmp_path, "plain.yxmd", MINIMAL_YXMD)
+    doc_c, _ = parse(path_c, path_c)
+    assert all(n.meta_fields == {} for n in doc_c.nodes)
+
+
+def test_meta_info_stays_out_of_config(tmp_path: pathlib.Path) -> None:
+    """meta_fields must not leak into config: the normalizer hashes config to
+    produce ConfigHash, so a workflow re-saved after a run — which is when
+    Alteryx rewrites MetaInfo — would otherwise read as a real diff."""
+    path_a = write_fixture(tmp_path, "workflow_a.yxmd", META_INFO_YXMD)
+    doc_a, _ = parse(path_a, path_a)
+
+    node1 = next(n for n in doc_a.nodes if int(n.tool_id) == 1)
+    assert "MetaInfo" not in node1.config
+    assert node1.config == {"SpatialObj": {"@field": "SpatialObj_Buffer"}}
