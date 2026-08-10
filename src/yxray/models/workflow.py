@@ -10,6 +10,22 @@ from yxray.models.types import AnchorName, ToolID
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
+class MetaField:
+    """One <Field> of a node's cached output schema (Properties/MetaInfo).
+
+    `source` is Alteryx's own record of which tool produced the field, e.g.
+    "SpatialInfo: CentroidObj Source=SpatialObj". It carries no ToolID, so
+    two nodes of the same type reading the same input field produce
+    identical strings — it identifies a field's origin only as far as that.
+    """
+
+    name: str
+    type: str = ""
+    size: str = ""
+    source: str = ""
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class AlteryxNode:
     """A single tool on the Alteryx canvas."""
 
@@ -34,6 +50,21 @@ class AlteryxNode:
     Used for side-by-side display next to generated Python (explain .md,
     inspect report panel). Empty for programmatically-built nodes.
     Not part of diff/normalization — those operate on `config` only.
+    """
+    meta_fields: dict[str, tuple[MetaField, ...]] = field(default_factory=dict)
+    """Properties/MetaInfo — Alteryx's cached output schema, keyed by anchor
+    (<MetaInfo connection="..."/>, "Output" when the attribute is absent).
+
+    A cache, not a specification: the Designer writes it when it last
+    resolved the workflow's metadata, so it is absent from a file never
+    opened or run and can lag the Configuration it describes. Generators
+    therefore use it to VERIFY what they inferred from the config, never as
+    the thing they generate from — see gen_spatialinfo() in scaffold/.
+
+    Carries inherited columns too, not just the ones this tool created;
+    `MetaField.source` is what separates them.
+    Not part of diff/normalization — those operate on `config` only, so a
+    workflow re-saved after a run does not read as changed.
     """
     annotation: str = ""
     """Properties/Annotation/AnnotationText — the caption Alteryx draws under

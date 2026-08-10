@@ -18,6 +18,7 @@ __all__ = [
     "REPEATED_FIELDS_YXMD",
     "CONTAINER_YXMD",
     "CHILDNODES_CONTAINER_YXMD",
+    "META_INFO_YXMD",
     "MALFORMED_XML",
     "EMPTY_FILE",
     "BINARY_CONTENT",
@@ -347,6 +348,52 @@ BATCH_MACRO_YXMC: bytes = """\
   </BatchMacro>
 </AlteryxDocument>
 """.encode()
+
+
+# META_INFO_YXMD: two Spatial Info nodes, the first carrying the cached output
+# schema Alteryx writes under Properties/MetaInfo and the second carrying none
+# (the state of a node the Designer has not resolved).  Every field name here
+# is one Alteryx itself generates — SpatialObj is the default name of a
+# spatial input's geometry, "<field>_Buffer" is the Buffer tool's naming, and
+# Centroid/Centroid2 are Spatial Info's CentroidObj output before and after
+# Alteryx's collision rename.
+META_INFO_YXMD: bytes = b"""\
+<?xml version="1.0" encoding="utf-8"?>
+<AlteryxDocument yxmdVer="2022.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxSpatialPluginsGui.SpatialInfo.SpatialInfo">
+        <Position x="54" y="54"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <SpatialObj field="SpatialObj_Buffer"/>
+        </Configuration>
+        <MetaInfo connection="Output">
+          <RecordInfo>
+            <Field name="SpatialObj" size="2147483647" type="SpatialObj"/>
+            <Field name="Centroid" size="2147483647" type="SpatialObj"
+                   source="SpatialInfo: CentroidObj Source=SpatialObj"/>
+            <Field name="SpatialObj_Buffer" size="2147483647" type="SpatialObj"
+                   source="Buffer: Source=SpatialObj SizeField=size Units=Kilometers"/>
+            <Field name="Centroid2" size="2147483647" type="SpatialObj"
+                   source="SpatialInfo: CentroidObj Source=SpatialObj_Buffer"/>
+          </RecordInfo>
+        </MetaInfo>
+      </Properties>
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxSpatialPluginsGui.SpatialInfo.SpatialInfo">
+        <Position x="162" y="54"/>
+      </GuiSettings>
+      <Properties>
+        <Configuration/>
+      </Properties>
+    </Node>
+  </Nodes>
+  <Connections/>
+</AlteryxDocument>
+"""
 
 
 # ---------------------------------------------------------------------------

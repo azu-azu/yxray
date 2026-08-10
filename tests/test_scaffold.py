@@ -1,7 +1,12 @@
 from typing import Any
 
 from yxray.models.types import AnchorName, ToolID
-from yxray.models.workflow import AlteryxConnection, AlteryxNode, WorkflowDoc
+from yxray.models.workflow import (
+    AlteryxConnection,
+    AlteryxNode,
+    MetaField,
+    WorkflowDoc,
+)
 from yxray.scaffold import (
     node_code_snippets,
     scaffold,
@@ -3085,3 +3090,134 @@ def test_scaffold_simple_no_numpy_import_without_numpy_emission() -> None:
     )
     code = scaffold_simple(doc)
     assert "import numpy as np" not in code
+
+
+def _centroid_meta(*sources: str, name: str = "Centroid2") -> dict:
+    """An Output MetaInfo whose CentroidObj entries carry *sources*.
+
+    Names after the first are suffixed so the fields stay distinct; the
+    check under test keys off `source`, not the name.
+    """
+    return {
+        "Output": tuple(
+            MetaField(
+                name=name if i == 0 else f"{name}_{i}",
+                type="SpatialObj",
+                source=source,
+            )
+            for i, source in enumerate(sources)
+        )
+    }
+
+
+def _si_chain(meta: dict) -> str:
+    """Input -> Spatial Info(SpatialObj) -> Spatial Info(SpatialObj_Buffer),
+    the second node carrying *meta* as its cached output schema."""
+    second = AlteryxNode(
+        tool_id=ToolID(3),
+        tool_type="SpatialInfo",
+        x=20,
+        y=0,
+        config={
+            "SpatialObj": {"@field": "SpatialObj_Buffer"},
+            "SelectedItems": {"Item": {"@name": "CentroidObj"}},
+        },
+        meta_fields=meta,
+    )
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        _spatialinfo_node(2, x=10),
+        second,
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+            AlteryxConnection(
+                src_tool=ToolID(2),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(3),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    return scaffold(doc)
+
+
+def test_scaffold_spatialinfo_metainfo_confirms_inferred_rename() -> None:
+    # MetaInfo agreeing with the upstream walk turns the best-effort caveat
+    # into a statement of fact — the name came from Alteryx's own schema.
+    code = _si_chain(
+        _centroid_meta("SpatialInfo: CentroidObj Source=SpatialObj_Buffer")
+    )
+    assert 'df_3["Centroid2"] = _geom.centroid' in code
+    assert "confirmed by this node's own output MetaInfo" in code
+    assert "best-effort" not in code
+    assert "WARNING: this node's output MetaInfo" not in code
+
+
+def test_scaffold_spatialinfo_metainfo_disagreeing_warns() -> None:
+    # The walk counts one upstream Centroid and picks "Centroid2", but
+    # Alteryx's cached schema says "Centroid3" — the case the walk cannot
+    # see, e.g. a Select that dropped an earlier Centroid column. Generation
+    # still emits the inferred name; the WARNING is what flags the gap.
+    code = _si_chain(
+        _centroid_meta(
+            "SpatialInfo: CentroidObj Source=SpatialObj_Buffer", name="Centroid3"
+        )
+    )
+    assert 'df_3["Centroid2"] = _geom.centroid' in code
+    assert '# WARNING: this node\'s output MetaInfo names the field "Centroid3"' in code
+    assert 'not "Centroid2"' in code
+
+
+def test_scaffold_spatialinfo_ambiguous_metainfo_is_not_used() -> None:
+    # Two Spatial Info nodes reading the same input field produce identical
+    # source strings, so neither entry identifies this node. Claiming
+    # confirmation from a coin flip would be worse than staying best-effort.
+    code = _si_chain(
+        _centroid_meta(
+            "SpatialInfo: CentroidObj Source=SpatialObj_Buffer",
+            "SpatialInfo: CentroidObj Source=SpatialObj_Buffer",
+        )
+    )
+    assert 'df_3["Centroid2"] = _geom.centroid' in code
+    assert "best-effort" in code
+    assert "confirmed by this node's own output MetaInfo" not in code
+    assert "WARNING: this node's output MetaInfo" not in code
+
+
+def test_scaffold_spatialinfo_metainfo_confirms_unrenamed_first_node() -> None:
+    # Nothing upstream to collide with, so the walk keeps "Centroid" and says
+    # nothing. MetaInfo can still confirm that, and a disagreement here is
+    # exactly the miscount the walk is blind to.
+    node = AlteryxNode(
+        tool_id=ToolID(2),
+        tool_type="SpatialInfo",
+        x=10,
+        y=0,
+        config={
+            "SpatialObj": {"@field": "SpatialObj"},
+            "SelectedItems": {"Item": {"@name": "CentroidObj"}},
+        },
+        meta_fields=_centroid_meta(
+            "SpatialInfo: CentroidObj Source=SpatialObj", name="Centroid"
+        ),
+    )
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        node,
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert 'df_2["Centroid"] = _geom.centroid' in code
+    assert 'the field is "Centroid" — confirmed by this node\'s own' in code

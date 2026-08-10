@@ -277,9 +277,10 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
         "# Alteryx's Map tab, never in the Results grid or golden CSVs;"
         " drop it\n"
         "# on the comparison side, not here\n"
-        "# .centroid on EPSG:4326 is a planar centroid in degrees (geopandas"
-        "\n# warns); the offset from a geodesic one is negligible at"
-        " building scale",
+        "# .centroid on EPSG:4326 is a planar centroid in degrees, which is"
+        "\n# what Alteryx computes too — a golden row matched it to all 14"
+        "\n# decimals, so geopandas' warning marks agreement here, not an"
+        "\n# approximation being tolerated",
     ),
 }
 
@@ -338,6 +339,64 @@ def _upstream_centroid_count(ctx: ToolContext) -> int:
     return count
 
 
+def _metainfo_centroid_field(ctx: ToolContext, source_field: str) -> str | None:
+    """The CentroidObj field name this node's own output MetaInfo records.
+
+    Read through node_map rather than a ToolContext field of its own: the
+    map already carries every node, and this is the only generator that
+    wants its own cached schema.
+
+    A node's output MetaInfo lists inherited columns too, so an earlier
+    Spatial Info's "Centroid" also appears here — the source attribute's
+    "Source=<input field>" is what tells them apart. Only an unambiguous
+    single match counts: two Spatial Info nodes reading the same input
+    field produce byte-identical source strings, and picking one of those
+    would be a guess dressed up as confirmation.
+    """
+    node = ctx.node_map.get(ctx.tool_id)
+    fields = node.meta_fields.get("Output", ()) if node is not None else ()
+    want = f"SpatialInfo: CentroidObj Source={source_field}"
+    matches = [meta.name for meta in fields if meta.source == want]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _centroid_field(ctx: ToolContext, source_field: str, base: str) -> tuple[str, str]:
+    """The Centroid output field name, and the comment that justifies it.
+
+    The name always comes from the upstream walk, never from MetaInfo, so
+    there stays exactly one way this column gets named. MetaInfo only says
+    whether that walk agreed with Alteryx: it is a cache that can be absent
+    or stale, so generating from it would trade a guess that is always
+    available for one that is sometimes better and sometimes missing.
+    """
+    count = _upstream_centroid_count(ctx)
+    name = f"{base}{count + 1}" if count else base
+    recorded = _metainfo_centroid_field(ctx, source_field)
+    if recorded is None:
+        if not count:
+            return name, ""
+        return name, (
+            f"# NOTE: renamed to {py_str(name)} — {count} earlier Spatial"
+            " Info node(s) selecting CentroidObj found upstream"
+            " (best-effort; a branch/join this walk can't fully account"
+            " for could still be miscounted — verify against Alteryx if"
+            " unsure)"
+        )
+    if recorded == name:
+        return name, (
+            f"# NOTE: the field is {py_str(name)} — confirmed by this node's"
+            " own output MetaInfo, not inferred. Alteryx renames a colliding"
+            " CentroidObj output to Centroid2, Centroid3, and so on"
+        )
+    return name, (
+        f"# WARNING: this node's output MetaInfo names the field"
+        f" {py_str(recorded)}, not {py_str(name)} — rename the line below to"
+        " match it. MetaInfo is Alteryx's own cached schema; the upstream"
+        " walk that named it here is best-effort and miscounts when, say, a"
+        " Select dropped an earlier Centroid column"
+    )
+
+
 def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
@@ -367,17 +426,10 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
     )
     for item in translated:
         out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
-        if item == "CentroidObj" and (n := _upstream_centroid_count(ctx)):
-            renamed = f"{out_field}{n + 1}"
-            note = (
-                f"{note}\n"
-                f"# NOTE: renamed to {py_str(renamed)} — {n} earlier Spatial"
-                " Info node(s) selecting CentroidObj found upstream"
-                " (best-effort; a branch/join this walk can't fully account"
-                " for could still be miscounted — verify against Alteryx if"
-                " unsure)"
-            )
-            out_field = renamed
+        if item == "CentroidObj":
+            out_field, why = _centroid_field(ctx, field, out_field)
+            if why:
+                note = f"{note}\n{why}"
         lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = _geom.{attr}")
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
 

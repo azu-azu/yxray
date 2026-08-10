@@ -327,3 +327,32 @@ def test_connections_preserved_unchanged() -> None:
     assert result.source is ROUND_TRIP_WORKFLOW, (
         "NormalizedWorkflowDoc.source must reference the original WorkflowDoc."
     )
+
+
+def test_meta_fields_excluded_from_config_hash() -> None:
+    """Alteryx rewrites Properties/MetaInfo whenever the Designer resolves a
+    workflow's metadata, so a file opened and re-saved carries a different
+    cached schema with an identical configuration. Hashing it would report
+    that as a real change, which is why meta_fields sits outside `config`
+    the same way raw_xml and position do."""
+    from yxray.models.workflow import MetaField
+
+    config = {"SpatialObj": {"@field": "SpatialObj"}}
+    bare = AlteryxNode(
+        tool_id=ToolID(1), tool_type="SpatialInfo", x=0.0, y=0.0, config=config
+    )
+    cached = dataclasses.replace(
+        bare,
+        meta_fields={
+            "Output": (
+                MetaField(
+                    name="Centroid",
+                    type="SpatialObj",
+                    source="SpatialInfo: CentroidObj Source=SpatialObj",
+                ),
+            )
+        },
+    )
+
+    assert cached.meta_fields != bare.meta_fields
+    assert _hash_of(cached) == _hash_of(bare)

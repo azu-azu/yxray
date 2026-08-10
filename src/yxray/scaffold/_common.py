@@ -153,7 +153,11 @@ class ToolContext:
     the whole workflow's tool_id -> node and tool_id -> predecessors maps,
     for the rare generator that needs to look further upstream than one
     hop (e.g. Spatial Info walking the full predecessor closure to detect
-    an earlier Spatial Info in the same chain — see _spatial.py).
+    an earlier Spatial Info in the same chain — see _spatial.py). Since
+    `node_map` holds every node, a generator also reaches its OWN node
+    through it (`node_map[tool_id]`) for anything the fields above do not
+    carry — Spatial Info reads `meta_fields` that way to check the column
+    name it generated against Alteryx's cached schema.
     """
 
     tool_id: int
