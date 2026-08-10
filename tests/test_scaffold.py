@@ -1865,10 +1865,7 @@ def test_scaffold_text_input_builds_dataframe() -> None:
     # The rows live in a module-level builder; main() just calls it.
     assert "def build_text_input_df_1() -> pd.DataFrame:" in code
     assert "    df = pd.DataFrame({" in code
-    assert (
-        '        "進捗": ["Not Started", "In Progress", "Done"],'
-        in code
-    )
+    assert '        "進捗": ["Not Started", "In Progress", "Done"],' in code
     assert "    return df" in code
     assert "    df_1 = build_text_input_df_1()" in code
     compile(code, "<scaffold>", "exec")
