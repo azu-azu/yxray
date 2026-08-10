@@ -277,9 +277,10 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
         "# Alteryx's Map tab, never in the Results grid or golden CSVs;"
         " drop it\n"
         "# on the comparison side, not here\n"
-        "# .centroid on EPSG:4326 is a planar centroid in degrees (geopandas"
-        "\n# warns); the offset from a geodesic one is negligible at"
-        " building scale",
+        "# .centroid on EPSG:4326 is a planar centroid in degrees, which is"
+        "\n# what Alteryx computes too — a golden row matched it to all 14"
+        "\n# decimals, so geopandas' warning marks agreement here, not an"
+        "\n# approximation being tolerated",
     ),
 }
 
