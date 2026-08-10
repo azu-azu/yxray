@@ -160,9 +160,7 @@ def summarize(
     return steps
 
 
-def _build_successors(
-    doc: WorkflowDoc, node_ids: set[int]
-) -> dict[int, list[int]]:
+def _build_successors(doc: WorkflowDoc, node_ids: set[int]) -> dict[int, list[int]]:
     successors: dict[int, list[int]] = {int(n.tool_id): [] for n in doc.nodes}
     for c in doc.connections:
         src_tool = int(c.src_tool)

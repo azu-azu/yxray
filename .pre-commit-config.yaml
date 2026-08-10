@@ -3,3 +3,8 @@ repos:
     rev: v0.15.8
     hooks:
       - id: ruff-check
+      # Mirrors CI's `ruff format --check .` step. Without it, hand-wrapped
+      # lines that fit under the limit land on main and break CI. The hook
+      # passes --force-exclude, so [tool.ruff.format] exclude still applies
+      # to the explicit paths pre-commit hands it.
+      - id: ruff-format
