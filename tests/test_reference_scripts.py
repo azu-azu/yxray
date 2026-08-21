@@ -8,6 +8,7 @@ to it, so its tests pin what a reviewer gets when they add one by hand.
 
 import importlib.util
 import inspect
+import logging
 import random
 import sys
 import time
@@ -1116,6 +1117,76 @@ def test_find_any_diagnostics_off_summary_drops_only_the_ambiguity_table(
     # the ambiguity table is gone, and says why rather than reading as zero
     assert "collect_match_diagnostics=False" in printed
     assert "== top 10 ==" not in printed
+
+
+def test_find_any_logger_routes_the_summary_away_from_stdout(caplog, capsys) -> None:
+    # Generated scaffolds hand the helper their module logger so its output
+    # shares one path with every other tool's logger.info/logger.warning
+    # instead of splitting across stdout.
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    logger = logging.getLogger("find_any_append_test")
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        find_any.find_any_append(
+            targets,
+            lookup,
+            find_field="text",
+            search_field="kw",
+            append_fields=["label"],
+            case_sensitive=True,
+            log_label="ToolID_7",
+            logger=logger,
+            verbose=True,
+            collect_match_diagnostics=True,
+        )
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "ToolID_7" in logged
+    assert "rows          : 2" in logged
+    assert "== top 10 ==" in logged
+    # nothing printed: the whole point of passing a logger
+    assert capsys.readouterr().out == ""
+    # the blank lines that space the printed summary carry nothing as log
+    # records, so they are dropped rather than emitted as empty INFO lines
+    assert all(record.getMessage().strip() for record in caplog.records)
+
+
+def test_find_any_without_logger_still_prints(capsys) -> None:
+    # The default stays print: this file gets copied into notebooks and
+    # ad-hoc scripts that never call logging.basicConfig, where logger.info
+    # would fall under the root WARNING level and show nothing at all.
+    targets = pd.DataFrame({"text": ["cherry apple pie"]})
+    lookup = pd.DataFrame({"kw": ["cherry"], "label": ["CHR"]})
+    find_any.find_any_append(
+        targets,
+        lookup,
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=True,
+    )
+    assert "rows          : 1" in capsys.readouterr().out
+
+
+def test_find_any_logger_is_silent_when_verbose_is_off(caplog) -> None:
+    # logger decides where the output goes; verbose still decides whether
+    # there is any.
+    targets = pd.DataFrame({"text": ["cherry apple pie"]})
+    lookup = pd.DataFrame({"kw": ["cherry"], "label": ["CHR"]})
+    logger = logging.getLogger("find_any_append_quiet_test")
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        find_any.find_any_append(
+            targets,
+            lookup,
+            find_field="text",
+            search_field="kw",
+            append_fields=["label"],
+            case_sensitive=True,
+            logger=logger,
+            verbose=False,
+        )
+    assert caplog.records == []
 
 
 def test_find_any_diagnostics_are_off_by_default(capsys) -> None:

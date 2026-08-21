@@ -53,12 +53,20 @@ Alteryx の挙動そのものではなく、「翻訳結果を人間がレビュ
   「入力の型を壊さない」であって、Alteryx 出力との突合ではない
 - 戻り値は常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で空間演算に
   使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で包み直すこと
+- ログの出力先は呼び出し側が決める（logger 引数）。既定の None は print で、
+  ノートブックや `python find_any_append.py` のように logging を設定していない
+  場所へこのファイルをコピーしてもそのまま読める。logger を渡すと logger.info
+  へ流れ、yxray の生成スクリプト（logging.basicConfig 済み・Browse などが
+  logger.warning を出す）と経路が1本にそろう。出す・出さないの判断は従来どおり
+  verbose が持ち、logger はあくまで「どこへ出すか」だけを決める
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -119,6 +127,34 @@ def _prepare_append_value(value: object) -> object:
     return _stringify(value) if pd.notna(cast(Any, value)) else pd.NA
 
 
+def _make_log(logger: logging.Logger | None) -> Callable[[str], None]:
+    """1行ぶんのログ出力口を作る（呼ばれるのは verbose=True のときだけ）。
+
+    logger=None（既定）は print。このファイルはコピーして使う参照実装で、
+    ノートブックや `python find_any_append.py` のように logging を設定して
+    いない場所から呼ばれることが多く、そこで logger.info にすると既定の
+    ルートレベル（WARNING）に落ちて何も出なくなる。
+
+    logger を渡すと logger.info へ流す。yxray の生成スクリプトは
+    logging.basicConfig 済みで logger を持ち、Browse の logger.info や CRS の
+    logger.warning と同じ経路・同じフォーマットにそろう（print のままだと
+    stdout と stderr にログが二分され、まとめてリダイレクトも抑制もできない）。
+
+    見出しの前後に置いてある空行は print で読むときの間隔調整なので、
+    logger 経由では落とす（空の INFO レコードを出しても意味がない）。
+    """
+    if logger is None:
+        return print
+
+    def log(message: str) -> None:
+        text = message.strip("\n")
+        if not text:
+            return
+        logger.info("%s", text)
+
+    return log
+
+
 def find_any_append(
     targets_df: pd.DataFrame,   # 残したい元データ
     lookup_df: pd.DataFrame,    # ルックアップ表（探す値と追加列を持つ。Alteryx XML では Source）
@@ -128,6 +164,7 @@ def find_any_append(
     append_fields: list[str],
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID_7"）。空なら見出しだけ出す
+    logger: logging.Logger | None = None,  # ログの出力先。None は print（下記）
     verbose: bool = True,
     collect_match_diagnostics: bool = False,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:
@@ -143,6 +180,12 @@ def find_any_append(
       戻り値には残さない
     - append_fields と同名の列が targets_df に既にあると ValueError。
       必要な列が無いときは KeyError
+
+    verbose がログを出すかどうか、logger がそれをどこへ出すかを決める。
+    logger=None（既定）なら print で、コピー先が logging 未設定でもそのまま
+    読める。logger を渡すと logger.info へ流れ、yxray の生成スクリプトのように
+    既に logger を持つ呼び出し元では他のツールのログと同じ経路にそろう
+    （レベルでの抑制もリダイレクトもまとめて効くようになる）。
 
     collect_match_diagnostics は verbose とは別の軸で、**表示量ではなく計算量**を
     決める。「その target が何行の lookup にマッチしたか」を出すには全 needle を
@@ -169,15 +212,16 @@ def find_any_append(
     """
 
     start = time.perf_counter()
+    log = _make_log(logger)
 
     if verbose:
         # log_label は省略可なので、空のときは飾りごと落とす（"- 🍒  -" を出さない）
         label = f" - 🍒 {log_label} -" if log_label else ""
-        print(f"\n🐷 [Find Replace] find any append{label}")
-        print(f"    haystack: '{find_field}' ← この中を 🌲")
-        print(f"    needle  : '{search_field}' ← これで探す 🪡")
-        print(f"    append  : {append_fields}")
-        print("    部分文字列として含まれるか 判定中 ...\n")
+        log(f"\n🐷 [Find Replace] find any append{label}")
+        log(f"    haystack: '{find_field}' ← この中を 🌲")
+        log(f"    needle  : '{search_field}' ← これで探す 🪡")
+        log(f"    append  : {append_fields}")
+        log("    部分文字列として含まれるか 判定中 ...\n")
 
     # ── 入力チェック ──────────────────────────────────────────────
     if find_field not in targets_df.columns:
@@ -274,7 +318,7 @@ def find_any_append(
         # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
         # （戻り値の result には混ぜない）。
         # 診断を集めていないときは診断由来の列を持たない debug 表になる
-        # （_print_summary はその2列の有無で曖昧マッチ節を出し分ける）。
+        # （_log_summary はその2列の有無で曖昧マッチ節を出し分ける）。
         columns: dict[str, object] = {
             TARGET_ROW_ID: range(len(targets_df)),
             find_field: targets[find_field].to_numpy(),
@@ -289,7 +333,8 @@ def find_any_append(
         debug = pd.DataFrame(columns)
         for field in append_fields:
             debug[field] = winner.appended[field].to_numpy()
-        _print_summary(
+        _log_summary(
+            log=log,
             start=start,
             result=result,
             debug=debug,
@@ -508,8 +553,9 @@ def _all_col(search_field: str) -> str:
     return f"all_matched_{search_field}"
 
 
-def _print_summary(
+def _log_summary(
     *,
+    log: Callable[[str], None],
     start: float,
     result: pd.DataFrame,
     debug: pd.DataFrame,
@@ -518,6 +564,9 @@ def _print_summary(
     append_fields: list[str],
 ) -> None:
     """処理時間・行数・複数マッチ（曖昧マッチ）の確認用サマリを出す。
+
+    出力先は呼び出し側が決めた log（print か logger.info）。この関数は
+    どちらに出しているかを知らない。
 
     debug は出力（result）には含めない観測列（行 ID・採用 lookup 行・採用/全
     マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
@@ -535,13 +584,13 @@ def _print_summary(
     # 1行以上にマッチしたこと）。診断 OFF でも同じ値が出せる。
     matched_rows = int(debug[LOOKUP_ROW_ID].notna().sum())
 
-    print(f"runtime == {elapsed:.3f} 秒 ==")
-    print(f"rows          : {len(result):,}")
-    print(f"matched rows  : {matched_rows:,}")
+    log(f"runtime == {elapsed:.3f} 秒 ==")
+    log(f"rows          : {len(result):,}")
+    log(f"matched rows  : {matched_rows:,}")
 
     if "matched_lookup_rows" not in debug.columns:
-        print("ambiguous rows: 未集計（collect_match_diagnostics=False）")
-        print()
+        log("ambiguous rows: 未集計（collect_match_diagnostics=False）")
+        log("")
         return
 
     # 1 target が複数 lookup 行にマッチした（＝採用値が lookup 表の並び順に依存する）
@@ -561,11 +610,11 @@ def _print_summary(
         _needle_col(search_field),  # lookup: 採用された検索値
         *append_fields,       # lookup: 付与された値
     ]
-    print(f"ambiguous rows: {len(ambiguous):,}（複数 lookup にマッチ）")
+    log(f"ambiguous rows: {len(ambiguous):,}（複数 lookup にマッチ）")
     if not ambiguous.empty:
-        print("== top 10 ==")
-        print(ambiguous[show_cols].head(10).to_string(index=False))
-    print()
+        log("== top 10 ==")
+        log(ambiguous[show_cols].head(10).to_string(index=False))
+    log("")
 
 
 def main() -> None:

@@ -442,8 +442,18 @@ df_3 = find_any_append(
     case_sensitive=True,              # Alteryx の NoCase=False に対応
     collect_match_diagnostics=False,  # レビュー時だけ True にする（重い）
     log_label="ToolID_3",             # 実行ログにどのツールか表示される
+    logger=logger,                    # preamble の logger（下記）へ流す
 )
 ```
+
+`logger` を渡すのは、helper が logger 無しだと `print` するため。生成
+スクリプトの他のツール（Browse の `logger.info`、CRS/shapefile の
+`logger.warning`）は stderr のロガーへ出るので、helper だけ stdout に出ると
+実行ログが2経路に割れ、レベルでの抑制もリダイレクトもまとめて効かなくなる。
+なお helper 側の既定が `print` なのはコピー先の都合で、ノートブックのように
+`logging.basicConfig` を呼んでいない場所では `logger.info` が既定レベル
+（WARNING）に落ちて何も出なくなるため。出す・出さないの判断は従来どおり
+`verbose` が持つ。
 
 `ReplaceMultipleFound` は生成コードに**出力しない**: Append モードでは
 出力に影響しないことが golden で実測済みで、引数として出すと意味がある
@@ -537,6 +547,7 @@ df_3 = find_any_append(
     case_sensitive=True,
     collect_match_diagnostics=False,
     log_label="ToolID_3",
+    logger=logger,
 )
 ```
 
