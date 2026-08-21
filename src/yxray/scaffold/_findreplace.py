@@ -66,7 +66,10 @@ def _findreplace_any_append(
     # split this script's output across stdout (the helper) and stderr (every
     # other tool's logger.info/logger.warning) — two streams that cannot be
     # redirected or silenced together. Handing it the preamble's logger keeps
-    # one path. The helper still decides whether to log at all (verbose).
+    # one path, and puts the helper's review output at DEBUG, below the
+    # INFO default main() configures: a normal run stays quiet and a reviewer
+    # lowers the level to read it. The emitted comment says so, because the
+    # output otherwise looks like it disappeared.
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
@@ -78,6 +81,9 @@ def _findreplace_any_append(
         "# matching several Source rows) while reviewing this translation —"
         " it costs\n"
         "# one pandas pass per Source row, so leave it False for normal runs\n"
+        "# the helper logs at DEBUG, so this run prints nothing at the"
+        " INFO default:\n"
+        "# use logging.basicConfig(level=logging.DEBUG) to read the summary\n"
     )
     return (
         header + f"{df_out} = find_any_append(\n"

@@ -55,10 +55,17 @@ Alteryx の挙動そのものではなく、「翻訳結果を人間がレビュ
   使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で包み直すこと
 - ログの出力先は呼び出し側が決める（logger 引数）。既定の None は print で、
   ノートブックや `python find_any_append.py` のように logging を設定していない
-  場所へこのファイルをコピーしてもそのまま読める。logger を渡すと logger.info
-  へ流れ、yxray の生成スクリプト（logging.basicConfig 済み・Browse などが
-  logger.warning を出す）と経路が1本にそろう。出す・出さないの判断は従来どおり
-  verbose が持ち、logger はあくまで「どこへ出すか」だけを決める
+  場所へこのファイルをコピーしてもそのまま読める。logger を渡すと
+  logger.debug へ流れ、yxray の生成スクリプト（logging.basicConfig 済み・
+  Browse などが logger.info / logger.warning を出す）と経路が1本にそろう
+- logger 経由の出力を INFO ではなく **DEBUG** にしているのは、ここの出力が
+  進行報告ではなく「翻訳が正しいか人間が確かめる」ための調査用だから。
+  INFO だと通常実行のたびに Find Replace 1個につき数行〜表が混ざり、Browse の
+  件数や CRS の警告が埋もれる。見たい人が logging.basicConfig(level=DEBUG)
+  にしたときだけ出る、という切り分けにしてある
+- DEBUG が通らない logger を渡されたときは、出力だけでなく**その材料を作る
+  計算も省く**（isEnabledFor で先に判定する）。曖昧マッチ走査は lookup 行数に
+  比例して重く、ハンドラ側で捨てられても走査コストは戻ってこないため
 """
 
 from __future__ import annotations
@@ -128,20 +135,22 @@ def _prepare_append_value(value: object) -> object:
 
 
 def _make_log(logger: logging.Logger | None) -> Callable[[str], None]:
-    """1行ぶんのログ出力口を作る（呼ばれるのは verbose=True のときだけ）。
+    """1行ぶんのログ出力口を作る（呼ばれるのは _should_log が True のときだけ）。
 
     logger=None（既定）は print。このファイルはコピーして使う参照実装で、
     ノートブックや `python find_any_append.py` のように logging を設定して
-    いない場所から呼ばれることが多く、そこで logger.info にすると既定の
+    いない場所から呼ばれることが多く、そこで logger 経由にすると既定の
     ルートレベル（WARNING）に落ちて何も出なくなる。
 
-    logger を渡すと logger.info へ流す。yxray の生成スクリプトは
-    logging.basicConfig 済みで logger を持ち、Browse の logger.info や CRS の
-    logger.warning と同じ経路・同じフォーマットにそろう（print のままだと
-    stdout と stderr にログが二分され、まとめてリダイレクトも抑制もできない）。
+    logger を渡すと **DEBUG** で出す。ここの出力（見出し・件数・曖昧マッチ表）は
+    「翻訳が正しいか人間が確かめる」ための調査用で、動いている処理の進行報告では
+    ない。INFO で出すと、生成スクリプトを普通に実行するたび（＝
+    logging.basicConfig(level=logging.INFO) の既定のまま）Find Replace ツール1個
+    につき数行〜表がログに混ざり、Browse の件数や CRS の警告が埋もれる。
+    DEBUG にしておけば、見たい人だけがレベルを下げて取り出せる。
 
     見出しの前後に置いてある空行は print で読むときの間隔調整なので、
-    logger 経由では落とす（空の INFO レコードを出しても意味がない）。
+    logger 経由では落とす（空の DEBUG レコードを出しても意味がない）。
     """
     if logger is None:
         return print
@@ -150,9 +159,24 @@ def _make_log(logger: logging.Logger | None) -> Callable[[str], None]:
         text = message.strip("\n")
         if not text:
             return
-        logger.info("%s", text)
+        logger.debug("%s", text)
 
     return log
+
+
+def _should_log(logger: logging.Logger | None, *, verbose: bool) -> bool:
+    """ログを出すか（＝そのための計算をするか）。
+
+    verbose は呼び出し側の明示的な意思表示なので最優先で効く。そのうえで
+    logger を渡された場合は、その logger が DEBUG を通すときだけ True にする。
+    「出さないと分かっているのに材料を作る」のを避けるためで、この判定は
+    debug 表の組み立てと曖昧マッチ走査（lookup 行数に比例する重い処理）の
+    手前で使う。logging はハンドラ側でも捨てられるが、それはメッセージを
+    作ってから捨てる形になるので、走査コストは減らない。
+    """
+    if not verbose:
+        return False
+    return logger is None or logger.isEnabledFor(logging.DEBUG)
 
 
 def find_any_append(
@@ -164,7 +188,7 @@ def find_any_append(
     append_fields: list[str],
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID_7"）。空なら見出しだけ出す
-    logger: logging.Logger | None = None,  # ログの出力先。None は print（下記）
+    logger: logging.Logger | None = None,  # ログの出力先。None は print、渡すと DEBUG で出す（下記）
     verbose: bool = True,
     collect_match_diagnostics: bool = False,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:
@@ -181,11 +205,16 @@ def find_any_append(
     - append_fields と同名の列が targets_df に既にあると ValueError。
       必要な列が無いときは KeyError
 
-    verbose がログを出すかどうか、logger がそれをどこへ出すかを決める。
-    logger=None（既定）なら print で、コピー先が logging 未設定でもそのまま
-    読める。logger を渡すと logger.info へ流れ、yxray の生成スクリプトのように
-    既に logger を持つ呼び出し元では他のツールのログと同じ経路にそろう
-    （レベルでの抑制もリダイレクトもまとめて効くようになる）。
+    ログの出し先は logger が決める。logger=None（既定）なら print で、コピー先が
+    logging 未設定でもそのまま読める。logger を渡すと **DEBUG** で出るので、
+    通常実行（basicConfig(level=INFO)）では出ず、調べたいときにレベルを DEBUG
+    へ下げると出る。ここの出力は進行報告ではなく翻訳のレビュー材料なので、
+    Browse の件数（INFO）や CRS の警告（WARNING）と同じ棚に置かない。
+
+    verbose=False は「出さない」を明示する指定で、logger のレベルに関係なく
+    効く。逆に verbose=True でも、DEBUG を通さない logger を渡されたときは
+    出さない — そしてその場合は debug 表の組み立ても曖昧マッチ走査も行わない
+    （誰も読まないものに lookup 行数ぶんのコストを払わない）。
 
     collect_match_diagnostics は verbose とは別の軸で、**表示量ではなく計算量**を
     決める。「その target が何行の lookup にマッチしたか」を出すには全 needle を
@@ -193,10 +222,11 @@ def find_any_append(
     桁が違うコストになる。False にすると曖昧マッチの集計と表示だけが消え、
     戻り値は完全に同一。verbose にこの計算を暗黙に背負わせないため引数を分けた。
 
-    ただし診断を読むのは verbose サマリだけなので、実際に集めるのは
-    collect_match_diagnostics と verbose が**両方 True のとき**。verbose=False で
-    集めても誰も読めない（戻り値には出ない）ため、走査ごと省く。つまり verbose は
-    コストを増やす方向には効かず、減らす方向にだけ効く。
+    ただし診断を読むのはサマリ表示だけなので、実際に集めるのは
+    collect_match_diagnostics が True で、**かつ実際にログを出すとき**
+    （verbose=True かつ logger が DEBUG を通す、または logger 無し）。出さない
+    のに集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く。つまり表示の
+    設定はコストを増やす方向には効かず、減らす方向にだけ効く。
 
     既定は False。曖昧マッチ表は「翻訳が正しいか人間が確かめる」段階で価値が
     あるもので、毎回払うには重すぎる。コストは lookup 1行につき pandas 呼び出し
@@ -213,8 +243,11 @@ def find_any_append(
 
     start = time.perf_counter()
     log = _make_log(logger)
+    # 以降 verbose ではなくこれを見る（logger を渡された場合は DEBUG が
+    # 通るかどうかも条件に入るため）。
+    show_log = _should_log(logger, verbose=verbose)
 
-    if verbose:
+    if show_log:
         # log_label は省略可なので、空のときは飾りごと落とす（"- 🍒  -" を出さない）
         label = f" - 🍒 {log_label} -" if log_label else ""
         log(f"\n🐷 [Find Replace] find any append{label}")
@@ -289,10 +322,11 @@ def find_any_append(
         needles=needles,
         append_fields=append_fields,
     )
-    # 集めるのは「集めろと言われた」かつ「読み手が居る」ときだけ。verbose=False で
-    # 集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く。
+    # 集めるのは「集めろと言われた」かつ「読み手が居る」ときだけ。表示しない
+    # のに集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く（読み手が
+    # 居るかの判定 = show_log には logger のレベルも入っている）。
     diagnostics: _Diagnostics | None = None
-    if collect_match_diagnostics and verbose:
+    if collect_match_diagnostics and show_log:
         diagnostics = _Diagnostics(
             match_count=pd.Series(0, index=targets.index, dtype="int64"),
             # 各 target にマッチした検索値をすべて集める（確認表示用）。lookup 表の
@@ -313,7 +347,7 @@ def find_any_append(
     for field in append_fields:
         result[field] = winner.appended[field]
 
-    if verbose:
+    if show_log:
         # matched_needle / _lookup_row_id はデバッグにかなり有用なので、計算は
         # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
         # （戻り値の result には混ぜない）。

@@ -1126,7 +1126,7 @@ def test_find_any_logger_routes_the_summary_away_from_stdout(caplog, capsys) -> 
     targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
     lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
     logger = logging.getLogger("find_any_append_test")
-    with caplog.at_level(logging.INFO, logger=logger.name):
+    with caplog.at_level(logging.DEBUG, logger=logger.name):
         find_any.find_any_append(
             targets,
             lookup,
@@ -1147,8 +1147,73 @@ def test_find_any_logger_routes_the_summary_away_from_stdout(caplog, capsys) -> 
     # nothing printed: the whole point of passing a logger
     assert capsys.readouterr().out == ""
     # the blank lines that space the printed summary carry nothing as log
-    # records, so they are dropped rather than emitted as empty INFO lines
+    # records, so they are dropped rather than emitted as empty records
     assert all(record.getMessage().strip() for record in caplog.records)
+    # every line is DEBUG: this is review material, not a progress report, so
+    # it must not land next to Browse's row counts (INFO) on a normal run
+    assert {record.levelno for record in caplog.records} == {logging.DEBUG}
+
+
+def test_find_any_logger_at_info_level_stays_silent(caplog, capsys) -> None:
+    # The generated script's main() configures INFO. At that level the helper
+    # says nothing — the reviewer lowers the level to DEBUG to read it.
+    targets = pd.DataFrame({"text": ["cherry apple pie", "no hit"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    logger = logging.getLogger("find_any_append_info_test")
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        out = find_any.find_any_append(
+            targets,
+            lookup,
+            find_field="text",
+            search_field="kw",
+            append_fields=["label"],
+            case_sensitive=True,
+            logger=logger,
+            verbose=True,
+            collect_match_diagnostics=True,
+        )
+    assert caplog.records == []
+    assert capsys.readouterr().out == ""
+    # silencing the log must not change the result
+    assert list(out["label"]) == ["CHR", pd.NA]
+
+
+def test_find_any_skips_the_ambiguity_scan_when_the_log_is_not_read(
+    monkeypatch,
+) -> None:
+    # The ambiguity scan costs one pandas pass per lookup row and only ever
+    # feeds the summary. If the summary will not be emitted — here because the
+    # logger drops DEBUG — the scan must not run at all: a handler filtering
+    # the record later would still have paid for it.
+    scans = 0
+    original = find_any._collect_diagnostics
+
+    def counting_collect(*args, **kwargs):
+        nonlocal scans
+        scans += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(find_any, "_collect_diagnostics", counting_collect)
+
+    targets = pd.DataFrame({"text": ["cherry apple pie"]})
+    lookup = pd.DataFrame({"kw": ["cherry", "apple"], "label": ["CHR", "APL"]})
+    quiet = logging.getLogger("find_any_append_scan_test")
+    quiet.setLevel(logging.INFO)
+    kwargs = dict(
+        find_field="text",
+        search_field="kw",
+        append_fields=["label"],
+        case_sensitive=True,
+        verbose=True,
+        collect_match_diagnostics=True,
+    )
+
+    find_any.find_any_append(targets, lookup, logger=quiet, **kwargs)
+    assert scans == 0
+
+    quiet.setLevel(logging.DEBUG)
+    find_any.find_any_append(targets, lookup, logger=quiet, **kwargs)
+    assert scans > 0
 
 
 def test_find_any_without_logger_still_prints(capsys) -> None:
