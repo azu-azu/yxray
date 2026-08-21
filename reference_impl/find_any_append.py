@@ -60,6 +60,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
+from typing import Any, cast
 
 import pandas as pd
 
@@ -111,7 +112,11 @@ def _prepare_append_value(value: object) -> object:
     """
     if _is_geometry(value):
         return value
-    return _stringify(value) if pd.notna(value) else pd.NA
+    # cast は型検査を通すためだけのもの（実行時の挙動は変わらない）。
+    # pd.notna は実行時なら任意の object を受け取れるが、pandas-stubs の
+    # overload は Scalar 系（str/int/float/datetime…）しか受けないため、
+    # object のまま渡すと「no overloads match」で型検査が落ちる。
+    return _stringify(value) if pd.notna(cast(Any, value)) else pd.NA
 
 
 def find_any_append(
