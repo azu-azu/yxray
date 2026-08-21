@@ -442,8 +442,26 @@ df_3 = find_any_append(
     case_sensitive=True,              # Alteryx の NoCase=False に対応
     collect_match_diagnostics=False,  # レビュー時だけ True にする（重い）
     log_label="ToolID_3",             # 実行ログにどのツールか表示される
+    logger=logger,                    # preamble の logger へ流す（DEBUG。下記）
 )
 ```
+
+`logger` を渡すのは、helper が logger 無しだと `print` するため。生成
+スクリプトの他のツール（Browse の `logger.info`、CRS/shapefile の
+`logger.warning`）は stderr のロガーへ出るので、helper だけ stdout に出ると
+実行ログが2経路に割れ、レベルでの抑制もリダイレクトもまとめて効かなくなる。
+
+**helper の出力は DEBUG**。見出し・件数・曖昧マッチ表は進行報告ではなく
+「翻訳が正しいか人間が確かめる」ための調査用で、INFO に出すと Find Replace
+1個につき数行〜表が毎回のログに混ざり、Browse の件数や CRS の警告が埋もれる。
+生成される `main()` は `logging.basicConfig(level=logging.INFO)` なので通常
+実行では出ず、レビューしたいときだけ `level=logging.DEBUG` に下げて読む
+（生成コードのコメントにもそう書いてある — 黙って消えたように見えるため）。
+DEBUG が通らない logger を渡された helper は、表示だけでなく**その材料を作る
+計算も省く**（`isEnabledFor` で先に判定する）。なお helper 側の既定が `print`
+なのはコピー先の都合で、`logging.basicConfig` を呼んでいないノートブックでは
+どのレベルで出しても既定（WARNING）に落ちて何も見えなくなるため。
+`verbose=False` は「出さない」の明示指定で、レベルに関係なく効く。
 
 `ReplaceMultipleFound` は生成コードに**出力しない**: Append モードでは
 出力に影響しないことが golden で実測済みで、引数として出すと意味がある
@@ -537,6 +555,7 @@ df_3 = find_any_append(
     case_sensitive=True,
     collect_match_diagnostics=False,
     log_label="ToolID_3",
+    logger=logger,
 )
 ```
 

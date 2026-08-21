@@ -53,12 +53,27 @@ Alteryx の挙動そのものではなく、「翻訳結果を人間がレビュ
   「入力の型を壊さない」であって、Alteryx 出力との突合ではない
 - 戻り値は常に pd.DataFrame（GeoDataFrame ではない）。呼び出し側で空間演算に
   使う場合は gpd.GeoDataFrame(result, geometry=..., crs=...) で包み直すこと
+- ログの出力先は呼び出し側が決める（logger 引数）。既定の None は print で、
+  ノートブックや `python find_any_append.py` のように logging を設定していない
+  場所へこのファイルをコピーしてもそのまま読める。logger を渡すと
+  logger.debug へ流れ、yxray の生成スクリプト（logging.basicConfig 済み・
+  Browse などが logger.info / logger.warning を出す）と経路が1本にそろう
+- logger 経由の出力を INFO ではなく **DEBUG** にしているのは、ここの出力が
+  進行報告ではなく「翻訳が正しいか人間が確かめる」ための調査用だから。
+  INFO だと通常実行のたびに Find Replace 1個につき数行〜表が混ざり、Browse の
+  件数や CRS の警告が埋もれる。見たい人が logging.basicConfig(level=DEBUG)
+  にしたときだけ出る、という切り分けにしてある
+- DEBUG が通らない logger を渡されたときは、出力だけでなく**その材料を作る
+  計算も省く**（isEnabledFor で先に判定する）。曖昧マッチ走査は lookup 行数に
+  比例して重く、ハンドラ側で捨てられても走査コストは戻ってこないため
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -119,6 +134,51 @@ def _prepare_append_value(value: object) -> object:
     return _stringify(value) if pd.notna(cast(Any, value)) else pd.NA
 
 
+def _make_log(logger: logging.Logger | None) -> Callable[[str], None]:
+    """1行ぶんのログ出力口を作る（呼ばれるのは _should_log が True のときだけ）。
+
+    logger=None（既定）は print。このファイルはコピーして使う参照実装で、
+    ノートブックや `python find_any_append.py` のように logging を設定して
+    いない場所から呼ばれることが多く、そこで logger 経由にすると既定の
+    ルートレベル（WARNING）に落ちて何も出なくなる。
+
+    logger を渡すと **DEBUG** で出す。ここの出力（見出し・件数・曖昧マッチ表）は
+    「翻訳が正しいか人間が確かめる」ための調査用で、動いている処理の進行報告では
+    ない。INFO で出すと、生成スクリプトを普通に実行するたび（＝
+    logging.basicConfig(level=logging.INFO) の既定のまま）Find Replace ツール1個
+    につき数行〜表がログに混ざり、Browse の件数や CRS の警告が埋もれる。
+    DEBUG にしておけば、見たい人だけがレベルを下げて取り出せる。
+
+    見出しの前後に置いてある空行は print で読むときの間隔調整なので、
+    logger 経由では落とす（空の DEBUG レコードを出しても意味がない）。
+    """
+    if logger is None:
+        return print
+
+    def log(message: str) -> None:
+        text = message.strip("\n")
+        if not text:
+            return
+        logger.debug("%s", text)
+
+    return log
+
+
+def _should_log(logger: logging.Logger | None, *, verbose: bool) -> bool:
+    """ログを出すか（＝そのための計算をするか）。
+
+    verbose は呼び出し側の明示的な意思表示なので最優先で効く。そのうえで
+    logger を渡された場合は、その logger が DEBUG を通すときだけ True にする。
+    「出さないと分かっているのに材料を作る」のを避けるためで、この判定は
+    debug 表の組み立てと曖昧マッチ走査（lookup 行数に比例する重い処理）の
+    手前で使う。logging はハンドラ側でも捨てられるが、それはメッセージを
+    作ってから捨てる形になるので、走査コストは減らない。
+    """
+    if not verbose:
+        return False
+    return logger is None or logger.isEnabledFor(logging.DEBUG)
+
+
 def find_any_append(
     targets_df: pd.DataFrame,   # 残したい元データ
     lookup_df: pd.DataFrame,    # ルックアップ表（探す値と追加列を持つ。Alteryx XML では Source）
@@ -128,6 +188,7 @@ def find_any_append(
     append_fields: list[str],
     case_sensitive: bool,  # Alteryx の NoCase=False（大小を区別）に対応。既定値は置かず呼び出し側に必ず書かせる
     log_label: str = "",  # ログ見出しに添える識別ラベル（例: "ToolID_7"）。空なら見出しだけ出す
+    logger: logging.Logger | None = None,  # ログの出力先。None は print、渡すと DEBUG で出す（下記）
     verbose: bool = True,
     collect_match_diagnostics: bool = False,  # 曖昧マッチの集計。表示量ではなく計算量が変わる（下記）
 ) -> pd.DataFrame:
@@ -144,16 +205,28 @@ def find_any_append(
     - append_fields と同名の列が targets_df に既にあると ValueError。
       必要な列が無いときは KeyError
 
+    ログの出し先は logger が決める。logger=None（既定）なら print で、コピー先が
+    logging 未設定でもそのまま読める。logger を渡すと **DEBUG** で出るので、
+    通常実行（basicConfig(level=INFO)）では出ず、調べたいときにレベルを DEBUG
+    へ下げると出る。ここの出力は進行報告ではなく翻訳のレビュー材料なので、
+    Browse の件数（INFO）や CRS の警告（WARNING）と同じ棚に置かない。
+
+    verbose=False は「出さない」を明示する指定で、logger のレベルに関係なく
+    効く。逆に verbose=True でも、DEBUG を通さない logger を渡されたときは
+    出さない — そしてその場合は debug 表の組み立ても曖昧マッチ走査も行わない
+    （誰も読まないものに lookup 行数ぶんのコストを払わない）。
+
     collect_match_diagnostics は verbose とは別の軸で、**表示量ではなく計算量**を
     決める。「その target が何行の lookup にマッチしたか」を出すには全 needle を
     全 target に当てる必要があり、勝者を決める処理（target ごとに1回の検索）とは
     桁が違うコストになる。False にすると曖昧マッチの集計と表示だけが消え、
     戻り値は完全に同一。verbose にこの計算を暗黙に背負わせないため引数を分けた。
 
-    ただし診断を読むのは verbose サマリだけなので、実際に集めるのは
-    collect_match_diagnostics と verbose が**両方 True のとき**。verbose=False で
-    集めても誰も読めない（戻り値には出ない）ため、走査ごと省く。つまり verbose は
-    コストを増やす方向には効かず、減らす方向にだけ効く。
+    ただし診断を読むのはサマリ表示だけなので、実際に集めるのは
+    collect_match_diagnostics が True で、**かつ実際にログを出すとき**
+    （verbose=True かつ logger が DEBUG を通す、または logger 無し）。出さない
+    のに集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く。つまり表示の
+    設定はコストを増やす方向には効かず、減らす方向にだけ効く。
 
     既定は False。曖昧マッチ表は「翻訳が正しいか人間が確かめる」段階で価値が
     あるもので、毎回払うには重すぎる。コストは lookup 1行につき pandas 呼び出し
@@ -169,15 +242,19 @@ def find_any_append(
     """
 
     start = time.perf_counter()
+    log = _make_log(logger)
+    # 以降 verbose ではなくこれを見る（logger を渡された場合は DEBUG が
+    # 通るかどうかも条件に入るため）。
+    show_log = _should_log(logger, verbose=verbose)
 
-    if verbose:
+    if show_log:
         # log_label は省略可なので、空のときは飾りごと落とす（"- 🍒  -" を出さない）
         label = f" - 🍒 {log_label} -" if log_label else ""
-        print(f"\n🐷 [Find Replace] find any append{label}")
-        print(f"    haystack: '{find_field}' ← この中を 🌲")
-        print(f"    needle  : '{search_field}' ← これで探す 🪡")
-        print(f"    append  : {append_fields}")
-        print("    部分文字列として含まれるか 判定中 ...\n")
+        log(f"\n🐷 [Find Replace] find any append{label}")
+        log(f"    haystack: '{find_field}' ← この中を 🌲")
+        log(f"    needle  : '{search_field}' ← これで探す 🪡")
+        log(f"    append  : {append_fields}")
+        log("    部分文字列として含まれるか 判定中 ...\n")
 
     # ── 入力チェック ──────────────────────────────────────────────
     if find_field not in targets_df.columns:
@@ -245,10 +322,11 @@ def find_any_append(
         needles=needles,
         append_fields=append_fields,
     )
-    # 集めるのは「集めろと言われた」かつ「読み手が居る」ときだけ。verbose=False で
-    # 集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く。
+    # 集めるのは「集めろと言われた」かつ「読み手が居る」ときだけ。表示しない
+    # のに集めた診断は戻り値にも出ず誰も読めないので、走査ごと省く（読み手が
+    # 居るかの判定 = show_log には logger のレベルも入っている）。
     diagnostics: _Diagnostics | None = None
-    if collect_match_diagnostics and verbose:
+    if collect_match_diagnostics and show_log:
         diagnostics = _Diagnostics(
             match_count=pd.Series(0, index=targets.index, dtype="int64"),
             # 各 target にマッチした検索値をすべて集める（確認表示用）。lookup 表の
@@ -269,12 +347,12 @@ def find_any_append(
     for field in append_fields:
         result[field] = winner.appended[field]
 
-    if verbose:
+    if show_log:
         # matched_needle / _lookup_row_id はデバッグにかなり有用なので、計算は
         # 残したまま、出力とは別の DataFrame にまとめて verbose 表示だけで使う
         # （戻り値の result には混ぜない）。
         # 診断を集めていないときは診断由来の列を持たない debug 表になる
-        # （_print_summary はその2列の有無で曖昧マッチ節を出し分ける）。
+        # （_log_summary はその2列の有無で曖昧マッチ節を出し分ける）。
         columns: dict[str, object] = {
             TARGET_ROW_ID: range(len(targets_df)),
             find_field: targets[find_field].to_numpy(),
@@ -289,7 +367,8 @@ def find_any_append(
         debug = pd.DataFrame(columns)
         for field in append_fields:
             debug[field] = winner.appended[field].to_numpy()
-        _print_summary(
+        _log_summary(
+            log=log,
             start=start,
             result=result,
             debug=debug,
@@ -508,8 +587,9 @@ def _all_col(search_field: str) -> str:
     return f"all_matched_{search_field}"
 
 
-def _print_summary(
+def _log_summary(
     *,
+    log: Callable[[str], None],
     start: float,
     result: pd.DataFrame,
     debug: pd.DataFrame,
@@ -518,6 +598,9 @@ def _print_summary(
     append_fields: list[str],
 ) -> None:
     """処理時間・行数・複数マッチ（曖昧マッチ）の確認用サマリを出す。
+
+    出力先は呼び出し側が決めた log（print か logger.info）。この関数は
+    どちらに出しているかを知らない。
 
     debug は出力（result）には含めない観測列（行 ID・採用 lookup 行・採用/全
     マッチ検索値）をまとめた DataFrame。ここでの表示専用で、戻り値には残さない。
@@ -535,13 +618,13 @@ def _print_summary(
     # 1行以上にマッチしたこと）。診断 OFF でも同じ値が出せる。
     matched_rows = int(debug[LOOKUP_ROW_ID].notna().sum())
 
-    print(f"runtime == {elapsed:.3f} 秒 ==")
-    print(f"rows          : {len(result):,}")
-    print(f"matched rows  : {matched_rows:,}")
+    log(f"runtime == {elapsed:.3f} 秒 ==")
+    log(f"rows          : {len(result):,}")
+    log(f"matched rows  : {matched_rows:,}")
 
     if "matched_lookup_rows" not in debug.columns:
-        print("ambiguous rows: 未集計（collect_match_diagnostics=False）")
-        print()
+        log("ambiguous rows: 未集計（collect_match_diagnostics=False）")
+        log("")
         return
 
     # 1 target が複数 lookup 行にマッチした（＝採用値が lookup 表の並び順に依存する）
@@ -561,11 +644,11 @@ def _print_summary(
         _needle_col(search_field),  # lookup: 採用された検索値
         *append_fields,       # lookup: 付与された値
     ]
-    print(f"ambiguous rows: {len(ambiguous):,}（複数 lookup にマッチ）")
+    log(f"ambiguous rows: {len(ambiguous):,}（複数 lookup にマッチ）")
     if not ambiguous.empty:
-        print("== top 10 ==")
-        print(ambiguous[show_cols].head(10).to_string(index=False))
-    print()
+        log("== top 10 ==")
+        log(ambiguous[show_cols].head(10).to_string(index=False))
+    log("")
 
 
 def main() -> None:

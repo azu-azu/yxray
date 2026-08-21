@@ -26,6 +26,7 @@ from yxray.config_utils import (
 )
 from yxray.scaffold._common import (
     GeneratedCode,
+    Requirement,
     ToolContext,
     anchor_src,
     frame_name,
@@ -61,6 +62,14 @@ def _findreplace_any_append(
     # made every generated script pay that before anyone asked for the table.
     # It is still emitted rather than omitted, so the line to flip when
     # reviewing a translation stays visible in the generated code.
+    # logger IS passed: the helper prints when it gets no logger, which would
+    # split this script's output across stdout (the helper) and stderr (every
+    # other tool's logger.info/logger.warning) — two streams that cannot be
+    # redirected or silenced together. Handing it the preamble's logger keeps
+    # one path, and puts the helper's review output at DEBUG, below the
+    # INFO default main() configures: a normal run stays quiet and a reviewer
+    # lowers the level to read it. The emitted comment says so, because the
+    # output otherwise looks like it disappeared.
     header = (
         "# Find Replace (FindAny) — substring lookup: each Source"
         " search value\n"
@@ -72,6 +81,9 @@ def _findreplace_any_append(
         "# matching several Source rows) while reviewing this translation —"
         " it costs\n"
         "# one pandas pass per Source row, so leave it False for normal runs\n"
+        "# the helper logs at DEBUG, so this run prints nothing at the"
+        " INFO default:\n"
+        "# use logging.basicConfig(level=logging.DEBUG) to read the summary\n"
     )
     return (
         header + f"{df_out} = find_any_append(\n"
@@ -83,6 +95,7 @@ def _findreplace_any_append(
         f"    case_sensitive={case_sensitive},\n"
         f"    collect_match_diagnostics=False,\n"
         f"    log_label={py_str(f'ToolID_{tool_id}')},\n"
+        f"    logger=logger,\n"
         f")"
     )
 
@@ -209,7 +222,8 @@ def gen_findreplace(ctx: ToolContext) -> GeneratedCode:
                 field_search,
                 append_names,
                 case_sensitive,
-            )
+            ),
+            requirements=frozenset({Requirement.LOGGING}),
         )
     if whole_match and replace_mode == "Append" and append_names:
         return GeneratedCode(

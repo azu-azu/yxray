@@ -2105,6 +2105,12 @@ def test_scaffold_findreplace_findany_append_helper_call() -> None:
     assert "pd.merge" not in code
     assert "TODO: Find Replace" not in code
     assert "# NOTE: find_any_append() is not generated" in code
+    # The helper prints when it gets no logger, which would put its output on
+    # stdout while every other tool logs to stderr. Passing the preamble's
+    # logger keeps one output path, so the preamble must define it.
+    assert "    logger=logger,\n" in code
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
 
 
 def test_scaffold_findreplace_findany_rmf_not_emitted() -> None:
