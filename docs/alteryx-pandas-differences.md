@@ -1259,6 +1259,49 @@ df["Price"].map(lambda v: format(v, ".2f") if pd.notna(v) else pd.NA).astype("st
 
 ---
 
+## 22. Unique — 出力順
+
+Alteryx 公式ヘルプで確認済み（[Unique Tool](https://help.alteryx.com/current/en/designer/tools/preparation/unique-tool.html)）:
+
+> The data is sorted based on the Unique columns. ... The first record of
+> each group is shown [in the U output]. If you want a specific sort order,
+> use the Sort tool to assign the specific sort order of the file prior to
+> using the Unique tool.
+
+| | 出力順 |
+|---|---|
+| **Alteryx** Unique | Unique 列でソートしてから、各グループの先頭行を出力 |
+| **pandas** `drop_duplicates()` | 入力順を維持したまま重複行を除去。ソートはしない |
+
+残るレコードの値が一致していても、出力順は異なり得る。後続に `RecordID`
+など行順に依存する処理があると、この差が実処理結果に影響する。
+
+```python
+df_unique = (
+    df
+    .sort_values(by=unique_columns, kind="stable", na_position="first")
+    .drop_duplicates(subset=unique_columns)
+    .reset_index(drop=True)
+)
+```
+
+`kind="stable"` が要る理由: 安定ソートは同じキー値を持つ行同士の**元の
+相対順序を保つ**。そのため `drop_duplicates()` を先にやった場合と比べても
+**残る行(値)は変わらない** — 変わるのは最終的な行の並び順だけ。
+`na_position="first"` は[9章](#9-sort--null-の位置)で確認済みの Alteryx の
+Sort デフォルト(NULL は先頭)に合わせたもの。
+
+> **注意**: これは出力**順序**の話であって、「複数の重複候補のうちどの
+> 値が残るか」という話ではない。特定の重複レコードを優先して残したい
+> 場合は、その優先条件で Unique の前に明示的な Sort を挟む必要がある
+> (公式ヘルプにも同じ推奨がある)。
+
+golden 突合は比較前に全列ソートを掛けるのが通例のため、この順序差は
+通常の golden 比較だけでは検出されにくい。それでも直す価値があるのは、
+行順に依存する後続ツールとの整合性のため。
+
+---
+
 ## まとめ: 変換レビューのチェックポイント
 
 | Alteryx の挙動 | 移植時に確認すること |
@@ -1292,6 +1335,7 @@ df["Price"].map(lambda v: format(v, ".2f") if pd.notna(v) else pd.NA).astype("st
 | 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
 | Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx では Map タブのみ、通常グリッド/CSV に出ない）。golden 比較前に比較側で drop — 生成コード側では消さない |
 | Spatial Match の出力列 | `index_right`（sjoin の人工列）は生成コードが drop 済み。埋め込み Select の逸脱（deselected / rename / type）は WARNING コメントで列挙のみ — 列名の食い違い（XML は `Target_`/`Universe_` プレフィックス、sjoin は `_left`/`_right` サフィックス）を前提に手動で整合させる |
+| Unique の出力順 | Alteryx は Unique 列でソートしてから先頭行を出力。`drop_duplicates()` は入力順を維持するだけ。`.sort_values(by=keys, kind="stable", na_position="first").drop_duplicates(subset=keys)` で順序も一致させる（残る行の値自体は変わらない）。特定の重複を優先したいなら Unique 前に明示的な Sort が要る（22章） |
 
 ---
 

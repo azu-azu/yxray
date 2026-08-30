@@ -160,5 +160,20 @@ def gen_unique(ctx: ToolContext) -> GeneratedCode:
         ]
     if field_names:
         subset = "[" + ", ".join(py_str(n) for n in field_names) + "]"
-        return GeneratedCode(f"{df_out} = {df_in}.drop_duplicates(subset={subset})")
+        return GeneratedCode(
+            "# Alteryx's Unique tool sorts by the Unique fields first, then\n"
+            "# keeps the first row of each group (confirmed by Alteryx's own\n"
+            "# help for the Unique tool) — drop_duplicates() alone keeps input\n"
+            '# order and never sorts. kind="stable" keeps which row survives\n'
+            "# unchanged (a stable sort preserves same-key rows' original\n"
+            "# relative order, so drop_duplicates() still picks the same one)\n"
+            "# and only changes the final row order to match Alteryx's sorted\n"
+            '# output. na_position="first" matches Alteryx\'s Sort default.\n'
+            f"{df_out} = (\n"
+            f"    {df_in}\n"
+            f'    .sort_values(by={subset}, kind="stable", na_position="first")\n'
+            f"    .drop_duplicates(subset={subset})\n"
+            "    .reset_index(drop=True)\n"
+            ")"
+        )
     return GeneratedCode(f"{df_out} = {df_in}.drop_duplicates()")

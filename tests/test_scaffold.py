@@ -1795,13 +1795,34 @@ def test_scaffold_unique_uses_subset() -> None:
         )
     )
     code = scaffold(doc)
-    assert 'df_2 = df_1.drop_duplicates(subset=["ID_A"])' in code
+    assert 'sort_values(by=["ID_A"], kind="stable", na_position="first")' in code
+    assert 'drop_duplicates(subset=["ID_A"])' in code
+
+
+def test_scaffold_unique_sorts_before_dropping_to_match_alteryx() -> None:
+    # Alteryx's Unique sorts by the Unique fields, then keeps the first row
+    # of each group — drop_duplicates() alone keeps input order and never
+    # sorts. A stable sort first leaves which row survives unchanged (same-key
+    # rows keep their original relative order) and only fixes the final order.
+    doc = _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Unique",
+            x=10,
+            y=0,
+            config={"UniqueFields": {"Field": {"@field": "ID_A"}}},
+        )
+    )
+    code = scaffold(doc)
+    assert 'kind="stable"' in code
+    assert code.index(".sort_values(") < code.index(".drop_duplicates(subset=")
 
 
 def test_scaffold_unique_without_fields_keeps_default() -> None:
     doc = _chain_doc(AlteryxNode(tool_id=ToolID(2), tool_type="Unique", x=10, y=0))
     code = scaffold(doc)
     assert "df_2 = df_1.drop_duplicates()" in code
+    assert "sort_values" not in code
 
 
 # ── RecordID ───────────────────────────────────────────────────────────────
