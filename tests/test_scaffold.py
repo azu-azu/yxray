@@ -2628,8 +2628,8 @@ def test_scaffold_distance_measures_in_a_metric_crs() -> None:
     assert "3857" not in code
     # the output field name is Distance + the XML's OutputUnits spelling,
     # confirmed by the node's MetaInfo (DistanceKilometers)
-    assert 'df_2["DistanceKilometers"] = (' in code
-    assert "_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000" in code
+    assert "_dist = _src_m.distance(_dst_m.boundary) / 1000" in code
+    assert 'df_2["DistanceKilometers"] = np.where(' in code
     # a Double column golden CSVs compare — the block must not imply parity
     assert "WARNING: this is a planar UTM distance" in code
 
@@ -2665,23 +2665,30 @@ def test_scaffold_distance_reads_both_fields_from_one_record() -> None:
     )
 
 
-def test_scaffold_distance_inside_edge_measures_to_the_boundary() -> None:
-    # DistToInsideEdge=True means a source inside the polygon reports the
-    # distance to the nearest edge instead of 0 — .boundary does exactly
-    # that, and outside the polygon it is identical to plain .distance.
-    assert ".boundary)" in scaffold(_distance_doc())
+def test_scaffold_distance_inside_edge_negates_the_contained_case() -> None:
+    # DistToInsideEdge=True: measures to the boundary (so a source inside
+    # the polygon gets the distance to its nearest edge instead of 0), and
+    # golden shows that distance comes back NEGATIVE when the source is
+    # inside the destination — np.where flips the sign on containment.
+    code = scaffold(_distance_doc())
+    assert "distance(_dst_m.boundary)" in code
+    assert "_dst_m.contains(_src_m), -_dist, _dist" in code
+
+    # outside the polygon the two are identical, and with no inside-edge
+    # flag there is nothing to negate — plain unsigned distance, no boundary.
     plain = scaffold(_distance_doc(DistToInsideEdge={"@value": "False"}))
     assert "_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)) / 1000" in plain
     assert ".boundary" not in plain
+    assert "np.where" not in plain
 
 
 def test_scaffold_distance_converts_to_the_configured_unit() -> None:
     miles = scaffold(_distance_doc(OutputUnits={"#text": "Miles"}))
-    assert 'df_2["DistanceMiles"] = (' in miles
+    assert 'df_2["DistanceMiles"] = np.where(' in miles
     assert "/ 1609.344" in miles
     # metres need no conversion, so no division is emitted
     meters = scaffold(_distance_doc(OutputUnits={"#text": "Meters"}))
-    assert 'df_2["DistanceMeters"] = (' in meters
+    assert 'df_2["DistanceMeters"] = np.where(' in meters
     assert "/ 1" not in meters
 
 
@@ -2890,7 +2897,7 @@ def test_scaffold_distance_reads_fields_written_as_attributes() -> None:
             OutputUnits={"@value": "Kilometers"},
         )
     )
-    assert 'df_2["DistanceKilometers"] = (' in code
+    assert 'df_2["DistanceKilometers"] = np.where(' in code
     assert "# TODO: Distance — unknown OutputUnits" not in code
 
 

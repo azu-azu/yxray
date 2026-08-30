@@ -453,9 +453,19 @@ _METRES_PER_UNIT: dict[str, float] = {
 }
 
 _DISTANCE_INSIDE_EDGE_NOTE = (
-    "# DistToInsideEdge=True: measure to the boundary, so a source inside the\n"
-    "# destination polygon gets the distance to its nearest edge instead of 0\n"
-    "# (outside the polygon the two are identical)"
+    "# DistToInsideEdge=True: measures to the boundary, and the sign encodes\n"
+    "# containment — negative when the source is inside the destination\n"
+    "# polygon, positive when outside (outside, this is identical to the\n"
+    "# unsigned form). Golden-verified for the contains()-True case; the\n"
+    "# outside sign is inferred (no golden row has it), not golden-checked.\n"
+    "# KNOWN GAP: on one real dataset, ~0.6% of rows (all a source that is\n"
+    "# its own destination polygon's centroid, on a concave polygon) had\n"
+    "# that centroid fall OUTSIDE its own polygon — contains() correctly\n"
+    "# says False there, but golden still shows negative, and the magnitude\n"
+    "# is off too (not just the sign). Left unresolved: needs Alteryx's own\n"
+    "# Centroid value for one such row to tell whether Alteryx's Centroid\n"
+    "# differs from geopandas' .centroid on concave shapes, or something\n"
+    "# else is going on. Do not special-case these rows without golden."
 )
 
 # The distance lands in a Double column that golden CSVs do compare, and a
@@ -544,15 +554,11 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         lines.append(f"{df_out} = {df_in}")
         return GeneratedCode("\n".join(lines))
 
-    dst_expr = "_dst.to_crs(_crs_m)"
-    if _flag(config, "DistToInsideEdge"):
-        dst_expr += ".boundary"
-    measure = f"_src.to_crs(_crs_m).distance({dst_expr})"
+    inside_edge = _flag(config, "DistToInsideEdge")
     per_unit = _METRES_PER_UNIT[units]
-    if per_unit != 1.0:
-        # .10g keeps every digit of the factors (%g's default 6 would emit
-        # 1609.34 for a mile) while dropping the trailing .0 from round ones.
-        measure += f" / {per_unit:.10g}"
+    # .10g keeps every digit of the factors (%g's default 6 would emit
+    # 1609.34 for a mile) while dropping the trailing .0 from round ones.
+    div = f" / {per_unit:.10g}" if per_unit != 1.0 else ""
 
     body = [
         "# spatial tool — requires geopandas",
@@ -564,7 +570,7 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         f"_dst = {_geoseries_expr(df_in, dst_field)}",
         _METRIC_CRS_NOTE,
     ]
-    if _flag(config, "DistToInsideEdge"):
+    if inside_edge:
         body.append(_DISTANCE_INSIDE_EDGE_NOTE)
     out_field = py_str("Distance" + units)
     body += [
@@ -573,7 +579,19 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         _empty_geometry_note("null distances"),
         "if pd.notna(_src.total_bounds).all():",
         "    _crs_m = _src.estimate_utm_crs()",
-        f"    {df_out}[{out_field}] = (\n        {measure}\n    )",
+    ]
+    if inside_edge:
+        body += [
+            "    _dst_m = _dst.to_crs(_crs_m)",
+            "    _src_m = _src.to_crs(_crs_m)",
+            f"    _dist = _src_m.distance(_dst_m.boundary){div}",
+            f"    {df_out}[{out_field}] = np.where(\n"
+            "        _dst_m.contains(_src_m), -_dist, _dist\n    )",
+        ]
+    else:
+        measure = f"_src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m)){div}"
+        body.append(f"    {df_out}[{out_field}] = (\n        {measure}\n    )")
+    body += [
         "else:",
         "    logger.warning(",
         f'        "no usable {comment_safe(src_field)} geometry —'
@@ -581,9 +599,12 @@ def gen_distance(ctx: ToolContext) -> GeneratedCode:
         "    )",
         f'    {df_out}[{out_field}] = float("nan")',
     ]
+    requirements = _GEOPANDAS | {Requirement.LOGGING}
+    if inside_edge:
+        requirements |= {Requirement.NUMPY}
     return GeneratedCode(
         "\n".join([*body, *lines]),
-        requirements=_GEOPANDAS | {Requirement.LOGGING},
+        requirements=requirements,
     )
 
 

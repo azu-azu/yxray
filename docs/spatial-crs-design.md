@@ -305,9 +305,10 @@ _src = gpd.GeoSeries(df_1["Centroid"] if ... else df_1.geometry, crs="EPSG:4326"
 _dst = gpd.GeoSeries(df_1["SpatialObj"] if ... else df_1.geometry, crs="EPSG:4326")
 if pd.notna(_src.total_bounds).all():
     _crs_m = _src.estimate_utm_crs()
-    df_2["DistanceKilometers"] = (
-        _src.to_crs(_crs_m).distance(_dst.to_crs(_crs_m).boundary) / 1000
-    )
+    _dst_m = _dst.to_crs(_crs_m)
+    _src_m = _src.to_crs(_crs_m)
+    _dist = _src_m.distance(_dst_m.boundary) / 1000
+    df_2["DistanceKilometers"] = np.where(_dst_m.contains(_src_m), -_dist, _dist)
 else:
     logger.warning("no usable Centroid geometry — %s is null", "DistanceKilometers")
     df_2["DistanceKilometers"] = float("nan")
@@ -336,6 +337,27 @@ Alteryx の `DistToInsideEdge=True`(ソースがポリゴンの内側なら 0 �
 最寄りの辺までの距離を返す)に対応するためで、外側のときは
 `.distance(poly)` と `.distance(poly.boundary)` が恒等的に一致するので
 両ケースをこれ1つで満たせる。
+
+**実測で裏取り済み(2026-08-21)。ただし「0 ではなく距離を返す」だけでは
+足りなかった** — 実ワークフローの golden 突合で、`DistToInsideEdge=True`
+かつソースが宛先ポリゴンの内側にある行は、**距離が負の値で返ってくる**
+ことが確認できた(外側のときは正のまま、符号なしの形と一致)。ケースは
+ソースが「そのポリゴン自身の重心」で宛先が「そのポリゴン自身」という構成
+([distance-direction-pending.md](distance-direction-pending.md)参照)。
+`np.where(_dst_m.contains(_src_m), -_dist, _dist)` で内包判定に応じて
+符号を反転させている。
+
+**既知の未解決ギャップ(2298行中13行、2026-08-22)**: `.centroid` は凹
+ポリゴンだと自分自身の外に出ることがある。実測でこの13行は
+`_dst_m.contains(_src_m)` が正しく `False` を返す一方、golden 側は
+**この13行も含め全2298行が負**だった。つまりこの13行は符号(負のまま)
+だけでなく **絶対値も** golden と大きくズレている(単純な符号反転の
+問題ではない)。golden CSV に `Centroid` 列は出ない([下記参照](#spatial-info-は不変条件を宣言し直す))ため、Alteryx が実際に
+使っている `Centroid` の値そのものを、この13行のどれか1件でも実測しないと
+切り分けられない — geopandas の `.centroid`(真の幾何重心)とは違う点
+(内部保証点寄り)を Alteryx が使っている可能性と、それ以外の要因の
+両方が残っている。golden 実測なしにこの13行だけ特別扱いするコードは
+書かない。
 
 ### Buffer はメートル系へ出て、戻ってくる
 
