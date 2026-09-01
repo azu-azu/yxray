@@ -280,7 +280,14 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
         "# .centroid on EPSG:4326 is a planar centroid in degrees, which is"
         "\n# what Alteryx computes too — a golden row matched it to all 14"
         "\n# decimals, so geopandas' warning marks agreement here, not an"
-        "\n# approximation being tolerated",
+        "\n# approximation being tolerated"
+        "\n# KNOWN GAP: that match was for a centroid INSIDE its own polygon."
+        "\n# On a concave polygon where the area centroid falls outside,"
+        "\n# Alteryx pushes it back in (toward the nearest boundary point,"
+        "\n# capped at 0.01 mile) — this .centroid does not, so it can differ"
+        "\n# from Alteryx there. Not implemented: single-workflow evidence"
+        "\n# so far, one residual row still unexplained. See"
+        "\n# docs/spatial-crs-design.md for the algorithm and status.",
     ),
 }
 
@@ -458,14 +465,19 @@ _DISTANCE_INSIDE_EDGE_NOTE = (
     "# polygon, positive when outside (outside, this is identical to the\n"
     "# unsigned form). Golden-verified for the contains()-True case; the\n"
     "# outside sign is inferred (no golden row has it), not golden-checked.\n"
-    "# KNOWN GAP: on one real dataset, ~0.6% of rows (all a source that is\n"
-    "# its own destination polygon's centroid, on a concave polygon) had\n"
-    "# that centroid fall OUTSIDE its own polygon — contains() correctly\n"
-    "# says False there, but golden still shows negative, and the magnitude\n"
-    "# is off too (not just the sign). Left unresolved: needs Alteryx's own\n"
-    "# Centroid value for one such row to tell whether Alteryx's Centroid\n"
-    "# differs from geopandas' .centroid on concave shapes, or something\n"
-    "# else is going on. Do not special-case these rows without golden."
+    "# KNOWN GAP (root cause identified, not fixed here): on one real\n"
+    "# dataset, ~0.6% of rows (all a source that is its own destination\n"
+    "# polygon's centroid, on a concave polygon) had that centroid fall\n"
+    "# OUTSIDE its own polygon — contains() correctly says False there, but\n"
+    "# golden still shows negative with an off magnitude too. This isn't a\n"
+    "# Distance bug: Alteryx pushes an out-of-polygon centroid back inside\n"
+    "# (toward the nearest boundary point, capped at 0.01 mile) before\n"
+    "# Distance ever sees it — gen_spatialinfo()'s .centroid does not, so\n"
+    "# Distance here is computing correctly on the wrong input. Fixing it\n"
+    "# belongs in Spatial Info's Centroid generation, not here. See\n"
+    "# docs/spatial-crs-design.md for the algorithm and its verification\n"
+    "# status (single-workflow evidence, one residual row unexplained —\n"
+    "# not yet implemented). Do not special-case these rows without golden."
 )
 
 # The distance lands in a Double column that golden CSVs do compare, and a
