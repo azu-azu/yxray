@@ -784,3 +784,147 @@ def gen_buffer(ctx: ToolContext) -> GeneratedCode:
         "\n".join(body),
         requirements=_GEOPANDAS | {Requirement.LOGGING},
     )
+
+
+# PolySplit explodes one input row into N output rows — the vertices (or
+# parts) of its SpatialObj. SplitTo has three settings in the XML (Point,
+# Region, DetailedRegion); commit 56b34d5 pulled the whole tool from
+# promotion because a single snippet cannot cover all three safely. Only
+# Point is translated here — its two output fields are confirmed by a real
+# node's Configuration and output MetaInfo (docs/polysplit-pending.md):
+#   <SplitTo type="Point"/>
+#   Field name="Split_SpatialObj"  type="SpatialObj"
+#     source="PolySplit: SpatialObj Source=<field>"
+#   Field name="Split_SequenceNum" type="Int32"
+#     source="PolySplit: SequenceNum Source=<field>"
+# That confirms the SCHEMA, not the VALUES: whether a closed ring's
+# duplicated first/last point is kept as two vertices, whether interior
+# rings (holes) continue the numbering or restart at 1, and whether a 3D
+# input's Z survives are all unconfirmed — no golden row has been seen yet.
+# Split_SequenceNum is an Int32 column golden CSVs compare, so diff it
+# before trusting this block. Region/DetailedRegion stay TODO until their
+# own XML shows up.
+_POLYSPLIT_SCHEMA_NOTE = (
+    "# SplitTo=Point confirmed by a real node's Configuration and output\n"
+    "# MetaInfo: Split_SpatialObj (SpatialObj) and Split_SequenceNum (Int32)\n"
+    "# are the two fields it adds. That confirms the SCHEMA, not the VALUES\n"
+    "# — see docs/polysplit-pending.md for what is still open (closed-ring\n"
+    "# duplicate point, hole/interior numbering, 3D input). Split_SequenceNum\n"
+    "# is an Int32 column golden CSVs compare: diff it before trusting this."
+)
+
+_POLYSPLIT_DROP_NOTE = (
+    "# a row whose SpatialObj is missing/empty/not-a-geometry yields no\n"
+    "# vertices and is dropped from the output — same behavior as geopandas'\n"
+    "# own .explode(), but Alteryx's own null handling here is unconfirmed\n"
+    "# (docs/polysplit-pending.md), so the drop is logged instead of silent"
+)
+
+# Split_SpatialObj is what the row is *about* after a split — a later
+# Spatial Match joins on whichever geometry is active (gpd.sjoin reads the
+# frame's geometry, not a field by name — see gen_spatialmatch), and that
+# has to be the point, not the polygon that got split. Same reasoning as
+# Buffer's _BUFFER_ACTIVE_GEOMETRY_NOTE.
+_POLYSPLIT_ACTIVE_GEOMETRY_NOTE = (
+    "# Split_SpatialObj becomes the frame's active geometry: a later Spatial\n"
+    "# Match joins on whatever is active, and after a split that has to be\n"
+    "# the point, not the polygon it came from"
+)
+
+
+def _polysplit_todo(reason: str) -> str:
+    return f"# TODO: Poly Split — {comment_safe(reason)}"
+
+
+def _polysplit_vertex_helper(name: str) -> str:
+    """Source of the per-node helper that walks a geometry's vertices.
+
+    Order: exterior ring first, then each interior ring (hole), in
+    shapely's own storage order — the same walk the original prototype
+    used. Not golden-verified (docs/polysplit-pending.md); this is the
+    single most defensible reading of "one row per vertex", not a
+    confirmed match to Alteryx's own traversal.
+
+    hasattr(geom, "geom_type") stands in for an isinstance check against
+    shapely geometries without importing shapely here: it is False for
+    None, float('nan'), pd.NA, and a raw WKT string alike, so every
+    non-geometry input this codebase's normalized (EPSG:4326, already
+    parsed) frames could carry is caught the same way.
+    """
+    return (
+        f"def {name}(geom):\n"
+        f'    """Vertices of geom for PolySplit SplitTo=Point: exterior\n'
+        "    ring first, then each interior ring (hole). Schema-confirmed\n"
+        '    field names, NOT a golden-verified traversal."""\n'
+        '    if not hasattr(geom, "geom_type") or geom.is_empty:\n'
+        "        return\n"
+        "    gt = geom.geom_type\n"
+        '    if gt in ("Point", "LineString", "LinearRing"):\n'
+        "        yield from geom.coords\n"
+        '    elif gt == "Polygon":\n'
+        "        yield from geom.exterior.coords\n"
+        "        for ring in geom.interiors:\n"
+        "            yield from ring.coords\n"
+        "    else:\n"
+        "        for part in geom.geoms:\n"
+        f"            yield from {name}(part)\n"
+    )
+
+
+def gen_polysplit(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    config = ctx.config
+    spatial_obj = config.get("SpatialObj", {})
+    field = field_name(spatial_obj) if isinstance(spatial_obj, dict) else ""
+    split_to = config.get("SplitTo", {})
+    mode = split_to.get("@type", "") if isinstance(split_to, dict) else ""
+
+    blocker = ""
+    if not field:
+        blocker = "no input SpatialObj field"
+    elif mode != "Point":
+        blocker = (
+            f"SplitTo={mode!r} is not translated — only Point is confirmed by"
+            " a real node's XML (docs/polysplit-pending.md); Region and"
+            " DetailedRegion have no output MetaInfo yet to check field names"
+            " against"
+        )
+    if blocker:
+        return GeneratedCode(f"{_polysplit_todo(blocker)}\n{df_out} = {df_in}")
+
+    helper = f"_iter_vertices_{ctx.tool_id}"
+    out_obj, out_seq = "Split_SpatialObj", "Split_SequenceNum"
+    body = [
+        "# spatial tool — requires geopandas",
+        _spatial_field_note(field),
+        f"_geom = {_geoseries_expr(df_in, field)}",
+        _POLYSPLIT_SCHEMA_NOTE,
+        "_src_pos, _xs, _ys, _seqs = [], [], [], []",
+        "for _pos, _g in enumerate(_geom):",
+        f"    for _i, _c in enumerate({helper}(_g), start=1):",
+        "        _src_pos.append(_pos)",
+        "        _xs.append(_c[0])",
+        "        _ys.append(_c[1])",
+        "        _seqs.append(_i)",
+        "# _c[2] (Z), if present, is dropped — points_from_xy is 2D only\n"
+        "# and no golden row has confirmed whether Alteryx keeps it",
+        _POLYSPLIT_DROP_NOTE,
+        f"if len(_src_pos) < len({df_in}):",
+        "    logger.warning(\n"
+        f'        "ToolID_{ctx.tool_id} (Poly Split): dropped %d row(s)'
+        ' with no usable geometry",\n'
+        f"        len({df_in}) - len(set(_src_pos)),\n"
+        "    )",
+        f"{df_out} = {df_in}.iloc[_src_pos].reset_index(drop=True)",
+        f"{df_out}[{py_str(out_obj)}] = gpd.GeoSeries(\n"
+        '    gpd.points_from_xy(_xs, _ys), crs="EPSG:4326"\n)',
+        f'{df_out}[{py_str(out_seq)}] = np.array(_seqs, dtype="int32")',
+        _POLYSPLIT_ACTIVE_GEOMETRY_NOTE,
+        f"{df_out} = {df_out}.set_geometry({py_str(out_obj)})",
+    ]
+    return GeneratedCode(
+        "\n".join(body),
+        requirements=_GEOPANDAS | {Requirement.NUMPY, Requirement.LOGGING},
+        helpers=(_polysplit_vertex_helper(helper),),
+    )

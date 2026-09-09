@@ -115,3 +115,15 @@ def test_python_hint_for_directory_is_partial() -> None:
     hint, supported = python_hint_for("Directory")
     assert supported == "partial"
     assert "glob" in hint.lower()
+
+
+def test_polysplit_hint_agrees_with_what_scaffold_generates() -> None:
+    # The generator only translates SplitTo=Point (the sole mode with a
+    # real node's Configuration + output MetaInfo behind it — see
+    # docs/polysplit-pending.md), so the hint must not advertise
+    # Region/DetailedRegion as if they were covered too.
+    hint, supported = python_hint_for("PolySplit")
+    assert supported == "partial"
+    assert "Split_SpatialObj" in hint
+    assert "Split_SequenceNum" in hint
+    assert "Region/DetailedRegion not translated" in hint

@@ -2928,6 +2928,98 @@ def test_scaffold_buffer_without_size_field_is_todo() -> None:
     assert "estimate_utm_crs" not in code
 
 
+def _polysplit_config(**overrides: object) -> dict:
+    # The real node's configuration (ToolID anonymized): SplitTo=Point on
+    # a field named SpatialObj — the only mode confirmed by a real node's
+    # Configuration + output MetaInfo (docs/polysplit-pending.md).
+    config: dict = {
+        "SpatialObj": {"@field": "SpatialObj"},
+        "SplitTo": {"@type": "Point"},
+    }
+    config.update(overrides)
+    return config
+
+
+def _polysplit_doc(**overrides: object) -> WorkflowDoc:
+    return _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="PolySplit",
+            x=10,
+            y=0,
+            config=_polysplit_config(**overrides),
+        )
+    )
+
+
+def test_scaffold_polysplit_point_mode_emits_the_confirmed_columns() -> None:
+    # Field names/types confirmed by a real node's output MetaInfo:
+    #   Split_SpatialObj (SpatialObj, source="PolySplit: SpatialObj Source=…")
+    #   Split_SequenceNum (Int32,     source="PolySplit: SequenceNum Source=…")
+    code = scaffold(_polysplit_doc())
+    assert "TODO: Poly Split" not in code
+    assert 'df_2["Split_SpatialObj"] = gpd.GeoSeries(' in code
+    assert 'df_2["Split_SequenceNum"] = np.array(_seqs, dtype="int32")' in code
+    assert "import geopandas as gpd" in code
+    assert "import numpy as np" in code
+
+
+def test_scaffold_polysplit_walks_exterior_then_interior_rings() -> None:
+    # One row per vertex: exterior ring first, then each interior ring
+    # (hole), in shapely's own storage order — not golden-verified, so the
+    # helper's docstring and the block's NOTE both say so.
+    code = scaffold(_polysplit_doc())
+    assert "def _iter_vertices_2(geom):" in code
+    assert "yield from geom.exterior.coords" in code
+    assert "for ring in geom.interiors:" in code
+    assert "NOT a golden-verified traversal" in code
+    assert "confirms the SCHEMA, not the VALUES" in code
+
+
+def test_scaffold_polysplit_becomes_the_active_geometry() -> None:
+    # A later Spatial Match joins on whatever geometry is active
+    # (gpd.sjoin reads the frame, not a field by name) — after a split
+    # that has to be the point, not the polygon it came from.
+    code = scaffold(_polysplit_doc())
+    assert 'df_2 = df_2.set_geometry("Split_SpatialObj")' in code
+
+
+def test_scaffold_polysplit_logs_dropped_rows_instead_of_silence() -> None:
+    code = scaffold(_polysplit_doc())
+    assert "if len(_src_pos) < len(df_1):" in code
+    assert "logger.warning(" in code
+    assert "dropped %d row(s) with no usable geometry" in code
+
+
+def test_scaffold_simple_polysplit_sets_up_a_logger() -> None:
+    code = scaffold_simple(_polysplit_doc())
+    assert "import logging" in code
+    assert "logger = logging.getLogger(__name__)" in code
+
+
+def test_scaffold_polysplit_region_mode_is_todo() -> None:
+    # Region/DetailedRegion have no output MetaInfo in this repo yet to
+    # confirm field names against (commit 56b34d5's reasoning for pulling
+    # PolySplit from promotion in the first place).
+    code = scaffold(_polysplit_doc(SplitTo={"@type": "Region"}))
+    assert "# TODO: Poly Split — SplitTo='Region' is not translated" in code
+    assert "df_2 = df_1" in code
+    assert "_iter_vertices" not in code
+    assert "import geopandas as gpd" not in code
+
+
+def test_scaffold_polysplit_detailed_region_mode_is_todo() -> None:
+    code = scaffold(_polysplit_doc(SplitTo={"@type": "DetailedRegion"}))
+    assert "# TODO: Poly Split — SplitTo='DetailedRegion' is not translated" in code
+
+
+def test_scaffold_polysplit_without_spatial_field_is_todo() -> None:
+    code = scaffold(_polysplit_doc(SpatialObj={"@field": ""}))
+    assert "# TODO: Poly Split — no input SpatialObj field" in code
+    assert "df_2 = df_1" in code
+    assert "_iter_vertices" not in code
+
+
 # ── Unsupported ────────────────────────────────────────────────────────────
 
 

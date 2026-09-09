@@ -224,9 +224,10 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "PolySplit": ToolInfo(
         "Poly Split",
         "transform",
-        "# TODO: poly split — SplitTo Object: gdf.explode(index_parts=False); "
-        "SplitTo Point/Line: extract vertices from geometry.coords/.boundary",
-        "no",
+        'df["Split_SpatialObj"], df["Split_SequenceNum"] = one row per vertex  '
+        "# SplitTo=Point only (confirmed field names/types); "
+        "Region/DetailedRegion not translated",
+        "partial",
     ),
     "GenerateRows": ToolInfo(
         "Generate Rows", "transform", "pd.DataFrame(range(...))", "yes"
@@ -305,6 +306,7 @@ SCAFFOLD_SPATIALMATCH_SEGMENTS = frozenset({"SpatialMatch"})
 SCAFFOLD_SPATIALINFO_SEGMENTS = frozenset({"SpatialInfo"})
 SCAFFOLD_DISTANCE_SEGMENTS = frozenset({"Distance"})
 SCAFFOLD_BUFFER_SEGMENTS = frozenset({"Buffer"})
+SCAFFOLD_POLYSPLIT_SEGMENTS = frozenset({"PolySplit"})
 SCAFFOLD_BROWSE_SEGMENTS = frozenset({"Browse", "BrowseV2"})
 SCAFFOLD_SPATIAL_SEGMENTS = (
     SCAFFOLD_CREATEPOINTS_SEGMENTS
@@ -312,6 +314,7 @@ SCAFFOLD_SPATIAL_SEGMENTS = (
     | SCAFFOLD_SPATIALINFO_SEGMENTS
     | SCAFFOLD_DISTANCE_SEGMENTS
     | SCAFFOLD_BUFFER_SEGMENTS
+    | SCAFFOLD_POLYSPLIT_SEGMENTS
 )
 
 

@@ -46,6 +46,7 @@
                    SpatialInfo
                    Distance
                    Buffer
+                   PolySplit
 
   （↑ すべての生成モジュールは _common だけに依存する）
                          │
@@ -94,7 +95,7 @@ __init__              ← 外部にはここだけ見せる
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
-| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo, Distance, Buffer |
+| `_spatial` | geopandas 空間ツール | CreatePoints, SpatialMatch, SpatialInfo, Distance, Buffer, PolySplit |
 | `_registry` | セグメント→生成関数の対応表(`GENERATORS`) | — |
 | `_assemble` | 全体組み立て・公開API | — |
 
@@ -348,6 +349,36 @@ ex/Buffer scaffold側: 固定サイズが TODO のまま。実XMLの
 (BufferSizeSource が FromField 以外のノードの Configuration をそのまま貼る)
 ```
 
+### `PolySplit` の部分昇格(2026-09-09、`"no"` → `"partial"`)
+
+commit `56b34d5` で「`SplitTo` が3モードあり、1つのスニペットに還元すると
+誤ったコードを出すリスクの方が高い」として昇格候補から意図的に外されて
+いたが、**`SplitTo=Point` の実XML(Configuration + 出力側 MetaInfo)が
+出てきたので、その1モードだけ先に部分昇格させた**。`SpatialInfo`/
+`Distance`/`Buffer` と同じ、`_findreplace` 型の切り方である。
+
+詳しい根拠・残っている保留事項(値レベルの未検証点)は
+[polysplit-pending.md](polysplit-pending.md) にまとめてある。ここでは
+昇格の判断だけ要約する。
+
+| 出力・モード | 状態 |
+| --- | --- |
+| `SplitTo=Point`(`Split_SpatialObj` / `Split_SequenceNum`) | **部分昇格**。列名・型は実XMLで確定。頂点の数え方(閉じ点の重複・穴の連番・Z座標)は golden 未検証 |
+| `SplitTo=Region` / `DetailedRegion` | 未昇格。実XMLが無く、`Split_IsHole` を含むかもしれない列構成自体が未確定 |
+
+`SpatialInfo`/`Buffer` の `CentroidObj`/`SpatialObj_Buffer` は SpatialObj 型で
+golden CSV に出ないため「形が多少ズレても比較を汚さない」という昇格根拠が
+使えたが、**PolySplit はそれが使えない**。`Split_SequenceNum` は Int32 で
+golden CSV が比較する列だからである。それでも部分昇格させたのは、
+残っている不確実性が `Direction` のような「どの候補実装を選ぶか」という
+分岐ではなく、shapely の生の頂点列をどう数えるかという**単一の素朴な読み方**
+の上に乗った境界仕様(閉じ点・穴・Z)だけだからである。生成コードの
+`_POLYSPLIT_SCHEMA_NOTE` にその4点をそのまま書き出し、`Split_SequenceNum`
+は golden 突合の前に信用しないよう明示している。
+
+分割後の点は Buffer と同じ理由(`gen_spatialmatch` が列名ではなく
+active geometry で `sjoin` する)でフレームの active geometry にしている。
+
 ---
 
 ## 生成コードにヘルパー関数を出すかどうか
@@ -372,6 +403,14 @@ Spatial Info / Distance で毎ブロック同じ形が出るが、いずれも (
 | --- | --- |
 | `df_out["Centroid"] = _geom.centroid` | (d)。`.centroid` が geopandas 組み込みそのもので、隠す機構が無い。生成ブロック15行のうち11行はコメント（golden CSV に出ない理由・平面centroidの誤差・Area/Length が無い理由）で、それこそがこのブロックの中身。関数にするとコメントの置き場が消える。項目を増やすときの変更点は今も `_SPATIAL_INFO_ITEMS` の1行だけで、重複は既に (a) で潰れている |
 | `_spatial_field_note()` + `_geoseries_expr()`（XML のフィールド名 → 無ければアクティブ geometry、+ `crs="EPSG:4326"` のラベル付け） | 当面 (a)。現時点で SpatialInfo ×1・Distance ×2・Buffer ×1 の4箇所に出るが、中身は分岐の無い1式で、CRS は 4326 固定の不変条件（[spatial-crs-design.md](spatial-crs-design.md)）に守られている |
+
+`gen_polysplit()` の頂点walk（`_iter_vertices_<ToolID>`）は同じ表の中でも
+唯一 (b) を選んだ。他の行は「複数ツールにまたがる共通パターンをどこに
+置くか」の話だが、こちらは判断基準が別: 再帰する多分岐(Point/LineString/
+Polygon/マルチパート)を式1本のベタ書きに畳めず、Text Input の
+`build_text_input_df_<id>()` と同じ理由（ノードごとに定義がぶつからない
+名前が要る・呼び出し側の1行に収めたい）で `GeneratedCode.helpers` に
+乗せてある。
 | UTM へ投影 → メートルで演算（Distance / Buffer）＋ `total_bounds` ガード | (a)。共有しているのは注釈（`_METRIC_CRS_NOTE` / `_empty_geometry_note()`）と換算表（`_METRES_PER_UNIT`）だけで、演算そのものは1行ずつ違う（測る／描く、戻る／戻らない）。関数化すると「Buffer は 4326 へ戻す」という差が隠れる |
 
 `_geoseries_expr` の昇格条件（どれかが起きたら見直す。回数だけでは動かさない）:
