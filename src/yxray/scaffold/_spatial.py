@@ -131,6 +131,33 @@ _METRIC_CRS_NOTE = (
 )
 
 
+# Every tool here that PRODUCES geometry ends by handing the frame to
+# gpd.GeoDataFrame(...), never by calling .set_geometry() on it. Both work at
+# runtime — geopandas patches a set_geometry onto pandas.DataFrame itself (it
+# builds a GeoDataFrame internally), and has since 0.8 — but only one of them
+# is a documented constructor. A type checker reading pandas' own stubs finds
+# no set_geometry on DataFrame, falls back to __getattr__ (column access) and
+# reports the call as "Series[Any]" not callable, so the line that establishes
+# the frame's geometry is the one line nothing can check. The constructor also
+# states the result in one expression instead of leaving it to a method whose
+# return type depends on a runtime patch.
+#
+# Whether to pass crs= depends on where the CRS already lives, and the choice
+# is not cosmetic: a crs= that disagrees with the column's own CRS silently
+# RELABELS it (no reprojection, no warning, no error), so it must never be a
+# second source of truth.
+#   - the column was built without a CRS (points_from_xy) -> pass crs=, which
+#     is then the single place EPSG:4326 is declared
+#   - the column already carries one (a GeoSeries out of .to_crs) -> pass
+#     nothing and let the frame inherit it, so a future CRS change surfaces
+#     as a wrong frame rather than being masked by the constructor
+_GEOMETRY_FRAME_NOTE = (
+    "# gpd.GeoDataFrame(...) rather than .set_geometry(...): both work, but\n"
+    "# set_geometry on a plain DataFrame is a method geopandas patches onto\n"
+    "# pandas at import time, which no type checker can see"
+)
+
+
 def gen_createpoints(ctx: ToolContext) -> GeneratedCode:
     df_in = ctx.df_in
     df_out = ctx.df_out
@@ -689,6 +716,16 @@ _BUFFER_ACTIVE_GEOMETRY_NOTE = (
     "# object stays in the frame under its own name, reachable by name"
 )
 
+# _buffered is a GeoSeries that came back through .to_crs("EPSG:4326") (or, on
+# the all-null branch, straight from _geom), so it already carries the CRS. No
+# crs= here on purpose: see _GEOMETRY_FRAME_NOTE — a constructor crs= wins over
+# the column's own silently, which would hide a CRS bug in the branch above
+# instead of letting it show up as a wrong frame.
+_BUFFER_INHERITED_CRS_NOTE = (
+    "# no crs= — the column came back through to_crs and already carries\n"
+    "# EPSG:4326; passing one here would override it silently, not reproject"
+)
+
 # IncludeSourceInOutput=False means Alteryx's output carries only the buffer.
 # Dropping the source here would leave the frame without the geometry column
 # every upstream tool built, and it cannot show up in a comparison anyway
@@ -776,7 +813,12 @@ def gen_buffer(ctx: ToolContext) -> GeneratedCode:
         _BUFFER_OUTPUT_NOTE,
         f"{df_out}[{py_str(out_field)}] = _buffered",
         _BUFFER_ACTIVE_GEOMETRY_NOTE,
-        f"{df_out} = {df_out}.set_geometry({py_str(out_field)})",
+        _GEOMETRY_FRAME_NOTE,
+        _BUFFER_INHERITED_CRS_NOTE,
+        f"{df_out} = gpd.GeoDataFrame(\n"
+        f"    {df_out},\n"
+        f"    geometry={py_str(out_field)},\n"
+        f")",
     ]
     if not _flag(config, "IncludeSourceInOutput"):
         body.append(_BUFFER_DROP_SOURCE_NOTE)
@@ -842,6 +884,15 @@ _POLYSPLIT_ACTIVE_GEOMETRY_NOTE = (
     "# Split_SpatialObj becomes the frame's active geometry: a later Spatial\n"
     "# Match joins on whatever is active, and after a split that has to be\n"
     "# the point, not the polygon it came from"
+)
+
+# points_from_xy builds the vertices from bare floats, so the column has no CRS
+# of its own and the constructor's crs= is the single place EPSG:4326 is stated
+# for this tool — the "establish the invariant" role Create Points also plays
+# (docs/spatial-crs-design.md).
+_POLYSPLIT_DECLARED_CRS_NOTE = (
+    "# crs= belongs here: points_from_xy carries no CRS, so this is the one\n"
+    "# place the split points are labelled EPSG:4326"
 )
 
 
@@ -932,11 +983,16 @@ def gen_polysplit(ctx: ToolContext) -> GeneratedCode:
         f"        len({df_in}) - _kept,\n"
         "    )",
         f"{df_out} = {df_in}.iloc[_src_pos].reset_index(drop=True)",
-        f"{df_out}[{py_str(out_obj)}] = gpd.GeoSeries(\n"
-        '    gpd.points_from_xy(_xs, _ys), crs="EPSG:4326"\n)',
+        f"{df_out}[{py_str(out_obj)}] = gpd.points_from_xy(_xs, _ys)",
         f'{df_out}[{py_str(out_seq)}] = np.array(_seqs, dtype="int32")',
         _POLYSPLIT_ACTIVE_GEOMETRY_NOTE,
-        f"{df_out} = {df_out}.set_geometry({py_str(out_obj)})",
+        _GEOMETRY_FRAME_NOTE,
+        _POLYSPLIT_DECLARED_CRS_NOTE,
+        f"{df_out} = gpd.GeoDataFrame(\n"
+        f"    {df_out},\n"
+        f"    geometry={py_str(out_obj)},\n"
+        f'    crs="EPSG:4326",\n'
+        f")",
     ]
     return GeneratedCode(
         "\n".join(body),

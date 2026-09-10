@@ -66,8 +66,41 @@ yxray の空間処理は、
 | `_spatial.py` / Spatial Info | 重心の算出に限定される(信頼) |
 | `_spatial.py` / Distance | 測るあいだだけメートル系へ投影する(一時離脱) |
 | `_spatial.py` / Buffer | メートル系で描き、**結果を 4326 へ戻す**(一時離脱 + 復帰) |
+| `_spatial.py` / PolySplit | 頂点から新しい Point を作り 4326 を付与する(確立) |
 
 `_spatial.py` の先頭 docstring にも、この分担が明記されている。
+
+### geometry を作るツールは `gpd.GeoDataFrame(...)` でフレームを組む
+
+Create Points / Buffer / PolySplit の3つは **新しい geometry 列を作り、
+それをフレームの active geometry にする**。この最後の一手は
+`.set_geometry(...)` ではなく `gpd.GeoDataFrame(...)` に統一してある。
+
+実行時はどちらでも動く。素の `pd.DataFrame` に対しても
+`.set_geometry()` が呼べるのは、**geopandas が import 時に
+`pandas.DataFrame` 側へメソッドを生やしている**ためで
+(内部で `GeoDataFrame(self)` を作り直す)、geopandas 0.8 の時点で既に
+同じ実装が入っている。つまり AttributeError にはならない。
+
+差が出るのは**静的検査**である。pandas の型スタブに `set_geometry` は
+無いので、型チェッカは `DataFrame.__getattr__`(列アクセス)へフォール
+バックし、`"Series[Any]" not callable` を報告する。
+**フレームの geometry を確立する一行が、誰にも検証できない一行になる。**
+公開コンストラクタならこの問題が構造的に起きない。
+
+`crs=` を渡すかどうかは、**その時点で CRS がどこにあるか**で決まる。
+これは見た目の問題ではない — **列が持つ CRS と違う `crs=` を渡すと、
+再投影ではなく黙ってラベルだけが書き換わる**(警告も例外も出ない)。
+したがって `crs=` を「二つ目の真実の置き場」にしてはいけない。
+
+| 状況 | 例 | 扱い |
+| --- | --- | --- |
+| 列に CRS が無い | `points_from_xy` で作った | `crs=` を渡す。**そこが唯一の宣言箇所**になる |
+| 列が既に CRS を持つ | `.to_crs("EPSG:4326")` から戻ってきた | `crs=` を渡さず継承させる |
+
+後者で `crs=` を書くと、上流の CRS 処理が壊れたときに
+**コンストラクタがそれを上書きして隠してしまう**。渡さなければ、
+壊れたフレームとして表に出る。
 
 この設計にしない場合、Spatial Match のたびに毎回次のような
 防御的コードが必要になる。
