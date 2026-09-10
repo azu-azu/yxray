@@ -820,6 +820,19 @@ _POLYSPLIT_DROP_NOTE = (
     "# (docs/polysplit-pending.md), so the drop is logged instead of silent"
 )
 
+# The count is of DISTINCT source positions, not of _src_pos itself: this
+# tool's whole job is turning one input row into many output rows, so a
+# len(_src_pos) < len(df) guard compares vertices against rows and misses
+# every drop as soon as one surviving geometry has more than one vertex —
+# a single square (5 closed-ring vertices) already hides it. Binding the
+# number once is what keeps the guard and the logged count from drifting
+# apart, which is exactly how that bug got in.
+_POLYSPLIT_KEPT_NOTE = (
+    "# distinct source rows that survived — NOT len(_src_pos), which counts\n"
+    "# vertices: one polygon yields many, so comparing that against the row\n"
+    "# count would report no drops even when there are some"
+)
+
 # Split_SpatialObj is what the row is *about* after a split — a later
 # Spatial Match joins on whichever geometry is active (gpd.sjoin reads the
 # frame's geometry, not a field by name — see gen_spatialmatch), and that
@@ -910,11 +923,13 @@ def gen_polysplit(ctx: ToolContext) -> GeneratedCode:
         "# _c[2] (Z), if present, is dropped — points_from_xy is 2D only\n"
         "# and no golden row has confirmed whether Alteryx keeps it",
         _POLYSPLIT_DROP_NOTE,
-        f"if len(_src_pos) < len({df_in}):",
+        _POLYSPLIT_KEPT_NOTE,
+        "_kept = len(set(_src_pos))",
+        f"if _kept < len({df_in}):",
         "    logger.warning(\n"
         f'        "ToolID_{ctx.tool_id} (Poly Split): dropped %d row(s)'
         ' with no usable geometry",\n'
-        f"        len({df_in}) - len(set(_src_pos)),\n"
+        f"        len({df_in}) - _kept,\n"
         "    )",
         f"{df_out} = {df_in}.iloc[_src_pos].reset_index(drop=True)",
         f"{df_out}[{py_str(out_obj)}] = gpd.GeoSeries(\n"
