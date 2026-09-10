@@ -124,6 +124,42 @@ MetaInfo は「列が存在する」ことしか教えてくれない。`Directi
   `_BUFFER_ACTIVE_GEOMETRY_NOTE` と同じ理由 — 後続に Spatial Match が
   繋がったとき、`gpd.sjoin` は列名ではなく active geometry を見るため
 - 空/欠損ジオメトリの行は出力から落ち、件数を `logger.warning` で報告
+  (件数の数え方には落とし穴がある — 次節)
+
+### 落とし穴: 落ちた行の数え方(初回実装のバグ)
+
+初回実装(commit `1f5c17c`)の検知条件が**頂点数と行数を比べていた**。
+
+```python
+if len(_src_pos) < len(df_1):          # ← 誤り
+    logger.warning(..., len(df_1) - len(set(_src_pos)))
+```
+
+`_src_pos` は**頂点1個につき1要素**入るリストである。PolySplit は
+1入力行を N 出力行へ展開するツールなので、生き残ったジオメトリが
+1つでも複数頂点を持てば `len(_src_pos)` は行数を軽く超える。
+**正方形1つ(閉じ点込みで5頂点)＋欠損1行**という最小ケースで既に
+`5 < 2` → False となり、**1行落ちたのに警告が出ない**。
+「黙って落とさない」という設計意図そのものが無効化されていた。
+
+条件が偽になるだけで例外は出ないので、テストが文字列一致
+(`assert "if len(_src_pos) < len(df_1):" in code`)だけだと素通りする。
+
+根本原因は**同じ量が2行で別々に綴られていた**ことである
+(条件は `len(_src_pos)`、メッセージは `len(set(_src_pos))` — 後者は
+最初から正しかった)。修正では**一度だけ束縛する**形にして、
+両者がずれる余地を消した。
+
+```python
+_kept = len(set(_src_pos))             # 生き残った「行」数
+if _kept < len(df_1):
+    logger.warning(..., len(df_1) - _kept)
+```
+
+テストも文字列一致から**生成された判定部を実際に exec して動かす**形に
+変えた(`_run_polysplit_drop_guard()`)。ブロック全体は geopandas と
+shapely を要求するが、この判定部だけは int のリストに対する算術なので、
+依存を増やさずに切り出して実行できる。
 
 Region / DetailedRegion は `SplitTo` の値が違うだけで TODO に落ちる
 (実装済みの Point 分岐とは独立しているので、実XMLが出てきたときに

@@ -1,3 +1,4 @@
+import textwrap
 from typing import Any
 
 from yxray.models.types import AnchorName, ToolID
@@ -2984,11 +2985,75 @@ def test_scaffold_polysplit_becomes_the_active_geometry() -> None:
     assert 'df_2 = df_2.set_geometry("Split_SpatialObj")' in code
 
 
+def _polysplit_drop_guard(code: str) -> str:
+    """The generated drop-detection lines alone, dedented so they can run.
+
+    The rest of the block needs geopandas and shapely, which are not
+    dependencies here (yxray generates spatial code, it never executes
+    it) — but the guard is plain arithmetic over a list of ints, so it
+    can be lifted out and actually run. String assertions can only pin
+    the spelling of a condition; the bug this covers was a correct-looking
+    condition that computed the wrong thing.
+    """
+    lines = code.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.strip().startswith("_kept ="))
+    end = next(i for i in range(start, len(lines)) if lines[i].strip() == ")")
+    return textwrap.dedent("\n".join(lines[start : end + 1]))
+
+
+def _run_polysplit_drop_guard(
+    code: str, src_pos: list[int], rows: int
+) -> list[tuple[object, ...]]:
+    """Run the guard over a hand-built _src_pos; return the warnings logged."""
+    logged: list[tuple[object, ...]] = []
+
+    class _Recorder:
+        def warning(self, msg: str, *args: object) -> None:
+            logged.append((msg, *args))
+
+    namespace: dict[str, Any] = {
+        "_src_pos": src_pos,
+        "df_1": [None] * rows,
+        "logger": _Recorder(),
+    }
+    exec(_polysplit_drop_guard(code), namespace)  # noqa: S102 — see docstring
+    return logged
+
+
 def test_scaffold_polysplit_logs_dropped_rows_instead_of_silence() -> None:
     code = scaffold(_polysplit_doc())
-    assert "if len(_src_pos) < len(df_1):" in code
+    assert "_kept = len(set(_src_pos))" in code
+    assert "if _kept < len(df_1):" in code
     assert "logger.warning(" in code
     assert "dropped %d row(s) with no usable geometry" in code
+
+
+def test_scaffold_polysplit_drop_guard_counts_rows_not_vertices() -> None:
+    # The regression this exists for: PolySplit turns one row into many,
+    # so a len(_src_pos) < len(df) guard compares vertices against rows.
+    # Two input rows — a square (5 closed-ring vertices) and one unusable
+    # geometry — gave 5 < 2, i.e. no warning, and the dropped row vanished
+    # silently, which is the exact thing the block's NOTE promises it won't.
+    code = scaffold(_polysplit_doc())
+    logged = _run_polysplit_drop_guard(code, [0] * 5, rows=2)
+    assert len(logged) == 1
+    assert logged[0][1] == 1
+
+
+def test_scaffold_polysplit_drop_guard_is_quiet_when_nothing_dropped() -> None:
+    # Every row contributed at least one vertex, so there is nothing to warn
+    # about — a guard that counted vertices would be right here by accident.
+    code = scaffold(_polysplit_doc())
+    assert _run_polysplit_drop_guard(code, [0] * 5 + [1] * 4, rows=2) == []
+
+
+def test_scaffold_polysplit_drop_guard_counts_every_dropped_row() -> None:
+    # Single-vertex geometries (Points) are the one shape the old guard got
+    # right; keep it covered so a fix in the other direction is caught too.
+    code = scaffold(_polysplit_doc())
+    logged = _run_polysplit_drop_guard(code, [0, 2], rows=5)
+    assert len(logged) == 1
+    assert logged[0][1] == 3
 
 
 def test_scaffold_simple_polysplit_sets_up_a_logger() -> None:
