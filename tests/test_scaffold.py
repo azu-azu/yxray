@@ -2850,10 +2850,30 @@ def test_scaffold_buffer_makes_the_buffer_the_active_geometry() -> None:
     # downstream node's SpatialObj= attribute, so leaving the source active
     # would sjoin against the un-buffered object without saying so.
     code = scaffold(_buffer_doc())
-    assert 'df_2 = df_2.set_geometry("SpatialObj_Buffer")' in code
+    assert 'geometry="SpatialObj_Buffer",' in code
     assert code.index('df_2["SpatialObj_Buffer"] = _buffered') < code.index(
-        'df_2 = df_2.set_geometry("SpatialObj_Buffer")'
+        'geometry="SpatialObj_Buffer",'
     )
+
+
+def test_scaffold_buffer_builds_the_frame_through_the_constructor() -> None:
+    # gpd.GeoDataFrame(...), not .set_geometry(...): the latter works only
+    # because geopandas patches a set_geometry onto pandas.DataFrame at import
+    # time, which no type checker can see (pandas' stubs resolve the name as a
+    # column and report the call as "Series[Any]" not callable).
+    code = scaffold(_buffer_doc())
+    assert "df_2 = gpd.GeoDataFrame(" in code
+    assert "df_2 = df_2.set_geometry(" not in code
+
+
+def test_scaffold_buffer_inherits_the_crs_it_already_came_back_with() -> None:
+    # _buffered came through .to_crs("EPSG:4326"), so the column already
+    # carries the CRS. A constructor crs= would override it silently — it
+    # relabels, it does not reproject — making it a second source of truth
+    # that would mask a CRS bug in the branch above.
+    code = scaffold(_buffer_doc())
+    ctor = code.index('geometry="SpatialObj_Buffer",')
+    assert 'crs="EPSG:4326"' not in code[ctor : ctor + 120]
 
 
 def test_scaffold_buffer_flags_a_dropped_source_object() -> None:
@@ -2959,7 +2979,7 @@ def test_scaffold_polysplit_point_mode_emits_the_confirmed_columns() -> None:
     #   Split_SequenceNum (Int32,     source="PolySplit: SequenceNum Source=…")
     code = scaffold(_polysplit_doc())
     assert "TODO: Poly Split" not in code
-    assert 'df_2["Split_SpatialObj"] = gpd.GeoSeries(' in code
+    assert 'df_2["Split_SpatialObj"] = gpd.points_from_xy(_xs, _ys)' in code
     assert 'df_2["Split_SequenceNum"] = np.array(_seqs, dtype="int32")' in code
     assert "import geopandas as gpd" in code
     assert "import numpy as np" in code
@@ -2982,7 +3002,25 @@ def test_scaffold_polysplit_becomes_the_active_geometry() -> None:
     # (gpd.sjoin reads the frame, not a field by name) — after a split
     # that has to be the point, not the polygon it came from.
     code = scaffold(_polysplit_doc())
-    assert 'df_2 = df_2.set_geometry("Split_SpatialObj")' in code
+    assert 'geometry="Split_SpatialObj",' in code
+
+
+def test_scaffold_polysplit_builds_the_frame_through_the_constructor() -> None:
+    # Same reason as Buffer: .set_geometry() on a plain DataFrame relies on a
+    # runtime patch geopandas applies to pandas, so the one line that
+    # establishes the frame's geometry would be the one line unverifiable.
+    code = scaffold(_polysplit_doc())
+    assert "df_2 = gpd.GeoDataFrame(" in code
+    assert "df_2 = df_2.set_geometry(" not in code
+
+
+def test_scaffold_polysplit_declares_the_crs_on_the_constructor() -> None:
+    # points_from_xy builds the vertices from bare floats and carries no CRS,
+    # so unlike Buffer this is the single place EPSG:4326 gets stated.
+    code = scaffold(_polysplit_doc())
+    assert 'df_2["Split_SpatialObj"] = gpd.points_from_xy(_xs, _ys)' in code
+    ctor = code.index('geometry="Split_SpatialObj",')
+    assert 'crs="EPSG:4326",' in code[ctor : ctor + 120]
 
 
 def _polysplit_drop_guard(code: str) -> str:

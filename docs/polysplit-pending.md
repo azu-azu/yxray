@@ -119,10 +119,12 @@ MetaInfo は「列が存在する」ことしか教えてくれない。`Directi
   `geom.interiors` の順で頂点を yield)、1入力行 → N出力行に展開する
 - 出力列は確定どおり `Split_SpatialObj`(`gpd.points_from_xy` 由来の
   GeoSeries)と `Split_SequenceNum`(`int32` の numpy 配列)
-- 分割後の点が**フレームの active geometry になる**
-  (`.set_geometry("Split_SpatialObj")`)。Buffer の
-  `_BUFFER_ACTIVE_GEOMETRY_NOTE` と同じ理由 — 後続に Spatial Match が
-  繋がったとき、`gpd.sjoin` は列名ではなく active geometry を見るため
+- 分割後の点が**フレームの active geometry になる**。後続に Spatial Match
+  が繋がったとき、`gpd.sjoin` は列名ではなく active geometry を見るため
+  (Buffer の `_BUFFER_ACTIVE_GEOMETRY_NOTE` と同じ理由)。フレームは
+  `gpd.GeoDataFrame(..., geometry=..., crs="EPSG:4326")` で組む —
+  `.set_geometry()` を使わない理由と `crs=` の有無の判断は
+  [spatial-crs-design.md](spatial-crs-design.md) を参照
 - 空/欠損ジオメトリの行は出力から落ち、件数を `logger.warning` で報告
   (件数の数え方には落とし穴がある — 次節)
 
