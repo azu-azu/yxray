@@ -1259,6 +1259,42 @@ def test_scaffold_select_with_type_change() -> None:
     assert 'SelectColumnEdit("old_col", new_name="new_col", type="V_WString")' in code
     assert 'SelectColumnEdit("junk", selected=False)' in code
     assert 'SelectColumnEdit("plain")' in code
+    # V_WString is a string-family target, so the astype("string")-vs-Alteryx
+    # formatting risk applies (same class as ToString()'s unconfirmed
+    # rounding) — see reference_impl/select_edits.py.
+    assert "WARNING: a type change here converts to a string type" in code
+
+
+def test_scaffold_select_type_change_to_non_string_has_no_string_warning() -> None:
+    # Double/Int32 targets go through astype()/to_numeric(), not the
+    # Python-float-repr path astype("string") takes — no formatting risk to
+    # flag.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [
+                        {"@field": "amount", "@selected": "True", "@type": "Double"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "WARNING: a type change here converts to a string type" not in code
 
 
 def test_scaffold_select_does_not_emit_helper_definitions() -> None:

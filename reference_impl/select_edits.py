@@ -46,6 +46,16 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
     スキップ + 警告する。
     """
     if alteryx_type in _STRING_TYPES:
+        # 変換元が数値だった場合、astype("string") は Python の float 表記
+        # （全桁保持・整数値にも ".0" が付く）をそのまま使う。Alteryx は
+        # 整数相当の値の小数点以下を落とす（"1.0" → "1"）— この表記ルールは
+        # to_display_string.py が既に実装しているが、ここでは呼んでいない。
+        # 呼ばない理由は自動化しない方針そのもの（20章「自動適用はしない」）
+        # ではなく、ここは型変換の汎用パスで数値以外の型(Date/Bool等)も
+        # 通るため、そのまま差し替えると数値以外のケースを壊しかねないから。
+        # 数値からの型変更だと分かっているなら to_display_string() へ
+        # 差し替えを検討すること。ただし to_display_string() 自身も
+        # Alteryx との golden 突合は未検証（同ファイルの docstring 参照）
         return series.astype("string")
     if alteryx_type in _INT_DTYPES:
         # round(): Alteryx の Double→Int は四捨五入。小数を含む float から

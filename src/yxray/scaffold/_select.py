@@ -22,6 +22,27 @@ _SELECT_STALE_XML_WARNING = (
     "# may still appear here as regular entries. Always verify in the GUI."
 )
 
+# apply_select_edits() (reference_impl/select_edits.py) converts a type
+# change to one of these with series.astype("string") — Python's own float
+# repr ("1.0"), not Alteryx's drop-the-trailing-zero rule ("1") that
+# reference_impl/to_display_string.py already implements (docs/
+# alteryx-pandas-differences.md 20章) but apply_select_edits doesn't call.
+# The XML's @type only names the TARGET type (it appears "only on a column
+# with a type change" — see gen_select()), not what the column held
+# before, so a numeric source can't be ruled out here.
+_SELECT_STRING_TYPES = frozenset({"String", "WString", "V_String", "V_WString"})
+
+_SELECT_STRING_CONVERSION_WARNING = (
+    "# WARNING: a type change here converts to a string type — if the source\n"
+    "# was numeric, apply_select_edits()'s astype(\"string\") uses Python's own\n"
+    '# float formatting ("1.0", full precision), not Alteryx\'s ("1", trailing\n'
+    "# zero dropped). reference_impl/to_display_string.py already implements\n"
+    "# Alteryx's rule but is not called here — same unconfirmed-formatting\n"
+    "# risk as ToString() elsewhere in this repo either way, since\n"
+    "# to_display_string() itself is not golden-verified against Alteryx\n"
+    "# — diff the converted column against golden output before trusting it"
+)
+
 
 def gen_select(ctx: ToolContext) -> GeneratedCode:
     tool_id = ctx.tool_id
@@ -59,6 +80,10 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
     unknown_deselected = any(
         name == "*Unknown" and not selected for name, _, selected, _ in edits
     )
+    converts_to_string = any(
+        selected and alteryx_type in _SELECT_STRING_TYPES
+        for _, _, selected, alteryx_type in edits
+    )
 
     var = f"_COLS_{tool_id}"
     col_lines: list[str] = [_SELECT_STALE_XML_WARNING]
@@ -72,6 +97,8 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
             "# WARNING: *Unknown=False — apply_select_edits keeps only explicitly"
             " selected columns; verify column list matches Alteryx output"
         )
+    if converts_to_string:
+        col_lines.append(_SELECT_STRING_CONVERSION_WARNING)
     col_lines.append(
         "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
     )
