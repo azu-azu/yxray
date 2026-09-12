@@ -95,9 +95,10 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
     "MultiRowFormula": ToolInfo(
         "Multi-Row Formula",
         "transform",
-        "# TODO: multi-row formula — [Row-N:Field]/[Row+N:Field] references; "
-        "typically df[col].shift(n), or groupby(...).shift(n) if GroupByFields is set",
-        "no",
+        'df["Field"] = df.groupby([...]).cumcount() + 1  '
+        "# only the [Row-1:<field>]+1 running-counter idiom (OtherRows=Empty); "
+        "other expressions/UpdateField=True not translated",
+        "partial",
     ),
     "AlteryxJoin": ToolInfo(
         "Join", "transform", "pd.merge(left, right, on=..., how='inner')", "yes"
@@ -299,6 +300,7 @@ SCAFFOLD_SAMPLE_SEGMENTS = frozenset({"AlteryxSample", "Sample"})
 SCAFFOLD_UNIQUE_SEGMENTS = frozenset({"Unique"})
 SCAFFOLD_RECORDID_SEGMENTS = frozenset({"RecordID"})
 SCAFFOLD_COUNTRECORDS_SEGMENTS = frozenset({"CountRecords"})
+SCAFFOLD_MULTIROWFORMULA_SEGMENTS = frozenset({"MultiRowFormula"})
 SCAFFOLD_FINDREPLACE_SEGMENTS = frozenset({"FindReplace"})
 SCAFFOLD_APPENDFIELDS_SEGMENTS = frozenset({"AppendFields"})
 SCAFFOLD_CREATEPOINTS_SEGMENTS = frozenset({"CreatePoints"})

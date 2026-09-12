@@ -91,7 +91,7 @@ __init__              ← 外部にはここだけ見せる
 | `_filter` | Filter 式変換サブシステム(日付比較・IsEmpty 死コード検出) | Filter |
 | `_select` | stale-XML 警告つき列編集 | Select |
 | `_combine` | 複数入力の結合(アンカー駆動) | Join, Union, AppendFields |
-| `_transform` | 単一入力の行変換 | Formula, Sort, Sample, Unique, RecordID, CountRecords |
+| `_transform` | 単一入力の行変換 | Formula, Sort, Sample, Unique, RecordID, CountRecords, MultiRowFormula |
 | `_source` | ファイル以外の端点 | TextInput, Browse |
 | `_aggregate` | 集約 | Summarize |
 | `_findreplace` | golden 検証済み4モード変換 | FindReplace |
@@ -406,6 +406,54 @@ golden CSV が比較する列だからである。それでも部分昇格させ
 
 分割後の点は Buffer と同じ理由(`gen_spatialmatch` が列名ではなく
 active geometry で `sjoin` する)でフレームの active geometry にしている。
+
+### `MultiRowFormula` の部分昇格(2026-09-12、`"no"` → `"partial"`)
+
+commit `56b34d5` で PolySplit/DynamicInput と並んで昇格候補から外されて
+いたツール。実ワークフロー1本に **10ノード** あり、実XMLが揃ったので
+判断できるようになったが、結論は「広く昇格させない」である。
+
+10ノードの `Expression` を見ると中身は互いにバラバラだった: 隣接行との
+比較で「ブロックの境界」を判定し複雑な文字列を組み立てるもの、
+`UpdateField=True` で既存列を上書きするもの(この場合 `CreateField_Name`
+は UI の初期値のまま放置され、実際の出力先は `UpdateField_Name`)など。
+**`56b34d5` の「1スニペットに還元するとリスクが高い」という判断は、
+この実データで裏付けが取れた**格好である。
+
+そのなかで唯一、**同一の形で2回出現し、閉じた pandas 形を持つ**
+パターンだけ実コードにした:
+
+```xml
+<UpdateField value="False" />
+<CreateField_Name>innerBoundaryID</CreateField_Name>
+<CreateField_Type>Int32</CreateField_Type>
+<OtherRows>Empty</OtherRows>
+<Expression>[Row-1:innerBoundaryID]+1</Expression>
+<GroupByFields>
+  <Field field="EL_ID" />
+</GroupByFields>
+```
+
+自己参照の `[Row-1:<CreateField_Name>]+1` — グループ内で1から連番を
+振る Alteryx の定番イディオムである。`OtherRows=Empty` の意味は
+[Alteryx公式ヘルプ](https://help.alteryx.com/current/en/designer/tools/preparation/multi-row-formula-tool.html)
+の "Values for Rows That Don't Exist" 節で確認済みで、既定の
+"0 or Empty" は**数値項目に対しては 0 として扱われる**。つまりグループ
+先頭行の `Row-1` 参照は 0 になり、`0+1, 1+1, 2+1, ...` という**閉じた
+形の連番**に帰着する — 実際に1行ずつ再帰させなくても
+`groupby(...).cumcount() + 1` で表現できる。`NumRows` は式エディタの
+Row-N/Row+N ボタン表示数を決めるだけの UI 設定で(同ヘルプで確認済み)、
+実行時の挙動には無関係なため判定条件に使っていない。
+
+| 形 | 状態 |
+| --- | --- |
+| `[Row-1:<CreateField_Name>]+1`、`OtherRows=Empty`、`UpdateField=False` | **部分昇格**。`GroupByFields` があれば `groupby(...).cumcount()+1`、無ければ `np.arange(1, len(df)+1)`(1グループ相当) |
+| それ以外の式・`UpdateField=True`・`OtherRows` が `Empty` 以外 | 未昇格。自由記述の再帰は pandas に閉じた形で落とせない |
+
+`CreateField_Type` が `Int32` だったので `.astype("int32")` で確定させて
+いる(PolySplit の `Split_SequenceNum` と同じ扱い)。`gen_multirowformula()`
+は `_transform.py` にある — Formula や Sort と同じ「単一入力の行変換」だが
+自己参照の再帰を扱う点だけ特殊。
 
 ---
 

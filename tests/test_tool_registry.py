@@ -40,10 +40,16 @@ def test_classify_tool_recognizes_new_registry_entries(
     assert category == expected_category
 
 
-def test_python_hint_for_multi_row_formula_is_unsupported_but_specific() -> None:
+def test_multi_row_formula_hint_agrees_with_what_scaffold_generates() -> None:
+    # Same two-code-path trap as Formula/SpatialInfo: the generator only
+    # translates the [Row-1:<field>]+1 running-counter idiom, so the hint
+    # must not imply the general [Row-N:Field]/shift(n) translation it
+    # deliberately does not attempt (10 real nodes showed free-form
+    # Expression strings a single snippet cannot safely cover).
     hint, supported = python_hint_for("MultiRowFormula")
-    assert supported == "no"
-    assert "Row-N" in hint or "shift" in hint
+    assert supported == "partial"
+    assert "cumcount" in hint
+    assert "shift" not in hint
 
 
 def test_formula_hint_agrees_with_what_scaffold_generates() -> None:

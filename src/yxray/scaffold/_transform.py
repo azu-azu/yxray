@@ -1,4 +1,5 @@
-"""Single-input row transforms (Formula, Sort, Sample, Unique, RecordID).
+"""Single-input row transforms (Formula, Sort, Sample, Unique, RecordID,
+Multi-Row Formula).
 
 Formula is the interesting one — it leans on alteryx_expr for expression
 translation and preserves Alteryx's top-to-bottom formula semantics; the
@@ -6,6 +7,9 @@ rest are one-line pandas translations.
 """
 
 from __future__ import annotations
+
+import re
+from typing import Any
 
 from yxray.alteryx_expr import (
     ExprTranslation,
@@ -177,3 +181,105 @@ def gen_unique(ctx: ToolContext) -> GeneratedCode:
             ")"
         )
     return GeneratedCode(f"{df_out} = {df_in}.drop_duplicates()")
+
+
+# Multi-Row Formula stayed unpromoted (commit 56b34d5) for lack of real XML,
+# and 10 real nodes across one workflow confirm that caution was right: the
+# Expression field is genuinely free-form (adjacent-row comparisons building
+# XML/KML strings, UpdateField=True overwrites of an existing column, etc.)
+# — no single snippet covers it. Exactly one shape recurs identically twice
+# in that corpus and has a closed pandas form: [Row-1:<CreateField_Name>]+1
+# with OtherRows=Empty, a self-referential running-counter idiom. Alteryx's
+# own help for "Values for Rows That Don't Exist" confirms Empty means an
+# out-of-range Row-N reads as 0 for a numeric field, so the recurrence
+# resolves to "1, 2, 3, ... per group" — exactly groupby(...).cumcount()+1,
+# no actual row-by-row recursion needed. Everything else — a different
+# field/other rows' reference, more than one Row-N term, UpdateField=True,
+# any OtherRows other than Empty — is a free-form recurrence pandas can't
+# vectorize the same way, so it stays an explicit TODO like Distance's
+# Direction or Buffer's fixed-size mode.
+_MULTIROWFORMULA_COUNTER_RE = re.compile(r"^\[Row-1:(.+?)\]\s*\+\s*1$")
+
+_MULTIROWFORMULA_COUNTER_NOTE = (
+    "# [Row-1:<field>]+1 with OtherRows=Empty is Alteryx's per-group running-\n"
+    "# counter idiom: an out-of-range Row-1 (the first row of a group) reads\n"
+    "# as 0 for a numeric field (Alteryx help, \"Values for Rows That Don't\n"
+    '# Exist" = 0 or Empty), so the recurrence is "1, 2, 3, ..." per group —\n'
+    "# a closed form (groupby().cumcount()) covers it without an actual\n"
+    "# row-by-row recurrence. Any other Multi-Row Formula shape (a different\n"
+    "# field or other rows' reference, UpdateField=True, non-Empty OtherRows)\n"
+    "# is a free-form recurrence this does not attempt to translate."
+)
+
+
+def _multirowformula_group_fields(config: dict[str, Any]) -> list[str]:
+    """Field names under <GroupByFields><Field field="..."/></GroupByFields>."""
+    group = config.get("GroupByFields", {})
+    if not isinstance(group, dict):
+        return []
+    return [
+        field_name(f)
+        for f in as_list(group.get("Field"))
+        if isinstance(f, dict) and field_name(f)
+    ]
+
+
+def _multirowformula_todo(reason: str, df_in: str, df_out: str) -> GeneratedCode:
+    return GeneratedCode(
+        f"# TODO: Multi-Row Formula — {comment_safe(reason)}\n{df_out} = {df_in}"
+    )
+
+
+def gen_multirowformula(ctx: ToolContext) -> GeneratedCode:
+    df_in = ctx.df_in
+    df_out = ctx.df_out
+    config = ctx.config
+    create_field = get_text(config, "CreateField_Name")
+    update_field = config.get("UpdateField", {})
+    updates_existing = (
+        isinstance(update_field, dict)
+        and str(update_field.get("@value", "")).lower() == "true"
+    )
+    other_rows = get_text(config, "OtherRows")
+    expr = get_text(config, "Expression").strip()
+    group_fields = _multirowformula_group_fields(config)
+
+    if updates_existing:
+        return _multirowformula_todo(
+            "UpdateField=True overwrites an existing field with a free-form"
+            " expression — not translated",
+            df_in,
+            df_out,
+        )
+    if not create_field:
+        return _multirowformula_todo("no CreateField_Name found", df_in, df_out)
+    if other_rows != "Empty":
+        return _multirowformula_todo(
+            f"OtherRows={other_rows!r} is not translated — only Empty (0 for"
+            " an out-of-range numeric row, confirmed by Alteryx's help) is",
+            df_in,
+            df_out,
+        )
+    match = _MULTIROWFORMULA_COUNTER_RE.match(expr)
+    if not match or match.group(1) != create_field:
+        return _multirowformula_todo(
+            "expression is not the recognized [Row-1:<field>]+1 running-"
+            f"counter idiom: {comment_safe(expr)}",
+            df_in,
+            df_out,
+        )
+
+    requirements: frozenset[Requirement]
+    if group_fields:
+        subset = "[" + ", ".join(py_str(f) for f in group_fields) + "]"
+        counter = f"{df_in}.groupby({subset}).cumcount() + 1"
+        requirements = frozenset()
+    else:
+        counter = f"np.arange(1, len({df_in}) + 1)"
+        requirements = frozenset({Requirement.NUMPY})
+    return GeneratedCode(
+        f"{_MULTIROWFORMULA_COUNTER_NOTE}\n"
+        f"{df_out} = {df_in}.copy()\n"
+        f'{df_out}[{py_str(create_field)}] = ({counter}).astype("int32")',
+        requirements=requirements,
+    )

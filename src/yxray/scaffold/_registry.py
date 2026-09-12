@@ -29,6 +29,7 @@ from yxray.scaffold._spatial import (
 from yxray.scaffold._transform import (
     gen_countrecords,
     gen_formula,
+    gen_multirowformula,
     gen_recordid,
     gen_sample,
     gen_sort,
@@ -46,6 +47,7 @@ from yxray.tool_registry import (
     SCAFFOLD_FORMULA_SEGMENTS,
     SCAFFOLD_INPUT_SEGMENTS,
     SCAFFOLD_JOIN_SEGMENTS,
+    SCAFFOLD_MULTIROWFORMULA_SEGMENTS,
     SCAFFOLD_OUTPUT_SEGMENTS,
     SCAFFOLD_POLYSPLIT_SEGMENTS,
     SCAFFOLD_RECORDID_SEGMENTS,
@@ -77,6 +79,7 @@ GENERATORS: dict[str, Generator] = {
     **dict.fromkeys(SCAFFOLD_UNIQUE_SEGMENTS, gen_unique),
     **dict.fromkeys(SCAFFOLD_RECORDID_SEGMENTS, gen_recordid),
     **dict.fromkeys(SCAFFOLD_COUNTRECORDS_SEGMENTS, gen_countrecords),
+    **dict.fromkeys(SCAFFOLD_MULTIROWFORMULA_SEGMENTS, gen_multirowformula),
     **dict.fromkeys(SCAFFOLD_TEXTINPUT_SEGMENTS, gen_text_input),
     **dict.fromkeys(SCAFFOLD_FINDREPLACE_SEGMENTS, gen_findreplace),
     **dict.fromkeys(SCAFFOLD_APPENDFIELDS_SEGMENTS, gen_appendfields),

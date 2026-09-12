@@ -1862,6 +1862,112 @@ def test_scaffold_unique_without_fields_keeps_default() -> None:
     assert "sort_values" not in code
 
 
+# ── Multi-Row Formula ────────────────────────────────────────────────────────
+
+
+def _mrf_config(**overrides: object) -> dict:
+    # A real node's configuration (ToolID anonymized): the per-group
+    # running-counter idiom — [Row-1:<CreateField_Name>]+1 with
+    # OtherRows=Empty — the only Multi-Row Formula shape this repo
+    # translates (docs/scaffold-architecture.md).
+    config: dict = {
+        "UpdateField": {"@value": "False"},
+        "UpdateField_Name": {"#text": "Name"},
+        "CreateField_Name": {"#text": "innerBoundaryID"},
+        "CreateField_Type": {"#text": "Int32"},
+        "OtherRows": {"#text": "Empty"},
+        "NumRows": {"@value": "1"},
+        "Expression": {"#text": "[Row-1:innerBoundaryID]+1"},
+        "GroupByFields": {"Field": [{"@field": "EL_ID"}]},
+    }
+    config.update(overrides)
+    return config
+
+
+def _mrf_doc(**overrides: object) -> WorkflowDoc:
+    return _chain_doc(
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="MultiRowFormula",
+            x=10,
+            y=0,
+            config=_mrf_config(**overrides),
+        )
+    )
+
+
+def test_scaffold_multirowformula_counter_idiom_uses_cumcount() -> None:
+    code = scaffold(_mrf_doc())
+    assert "TODO: Multi-Row Formula" not in code
+    assert "df_2 = df_1.copy()" in code
+    assert (
+        'df_2["innerBoundaryID"] = (df_1.groupby(["EL_ID"]).cumcount() + 1)'
+        '.astype("int32")' in code
+    )
+
+
+def test_scaffold_multirowformula_without_groupby_enumerates_all_rows() -> None:
+    # No GroupByFields means the counter runs across the whole frame — one
+    # group, so cumcount() reduces to a plain row enumeration.
+    code = scaffold(_mrf_doc(GroupByFields={}))
+    assert (
+        'df_2["innerBoundaryID"] = (np.arange(1, len(df_1) + 1)).astype("int32")'
+        in code
+    )
+    assert "import numpy as np" in code
+
+
+def test_scaffold_multirowformula_update_field_is_todo() -> None:
+    # UpdateField=True overwrites an existing column with a free-form
+    # expression — not the self-referential counter idiom, not translated.
+    code = scaffold(_mrf_doc(UpdateField={"@value": "True"}))
+    assert "# TODO: Multi-Row Formula — UpdateField=True" in code
+    assert "df_2 = df_1" in code
+    assert "cumcount" not in code
+
+
+def test_scaffold_multirowformula_non_empty_other_rows_is_todo() -> None:
+    # Only OtherRows=Empty is confirmed (Alteryx help: out-of-range Row-N
+    # reads as 0 for a numeric field) — Null / closest-valid-row are guesses.
+    code = scaffold(_mrf_doc(OtherRows={"#text": "Null"}))
+    assert "# TODO: Multi-Row Formula — OtherRows='Null'" in code
+    assert "cumcount" not in code
+
+
+def test_scaffold_multirowformula_free_form_expression_is_todo() -> None:
+    # Real workflows use Multi-Row Formula for adjacent-row comparisons and
+    # string building far beyond a simple counter — none of that is a
+    # recognized closed form, so it stays an explicit TODO rather than a
+    # guess.
+    code = scaffold(
+        _mrf_doc(
+            Expression={"#text": "if [Row-1:Status] != [Status] then 1 else 0 endif"}
+        )
+    )
+    assert "# TODO: Multi-Row Formula — expression is not the recognized" in code
+    assert "cumcount" not in code
+
+
+def test_scaffold_multirowformula_other_field_reference_is_todo() -> None:
+    # [Row-1:<other field>]+1 (not self-referential to CreateField_Name) is
+    # a plain shift, not the recurrence this generator recognizes — still
+    # not translated, since only the exact self-referential shape is
+    # confirmed.
+    code = scaffold(_mrf_doc(Expression={"#text": "[Row-1:SomeOtherField]+1"}))
+    assert "# TODO: Multi-Row Formula — expression is not the recognized" in code
+    assert "cumcount" not in code
+
+
+def test_scaffold_multirowformula_without_create_field_is_todo() -> None:
+    code = scaffold(_mrf_doc(CreateField_Name={"#text": ""}))
+    assert "# TODO: Multi-Row Formula — no CreateField_Name found" in code
+
+
+def test_scaffold_simple_multirowformula_ungrouped_sets_up_numpy() -> None:
+    code = scaffold_simple(_mrf_doc(GroupByFields={}))
+    assert "import numpy as np" in code
+
+
 # ── RecordID ───────────────────────────────────────────────────────────────
 
 
