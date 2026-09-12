@@ -359,6 +359,14 @@ _CENTROID_XY_NOTE = (
     "# unsure"
 )
 
+# .x and .y each need the Point .centroid produces, and CentroidObj (if also
+# selected on this node) needs that same Point again — bound once here so a
+# node selecting both isn't computing the same GeoSeries.centroid 3 times.
+_CENTROID_ONCE_NOTE = (
+    "# bound once: CentroidXY reads it twice (.x/.y), and CentroidObj below\n"
+    "# reuses it too when both are selected on this node"
+)
+
 
 def _selected_items(config: dict[str, Any]) -> list[str]:
     """Item names under <SelectedItems>, in XML order."""
@@ -500,12 +508,18 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
         f"_geom = {_geoseries_expr(df_in, field)}\n"
         f"{df_out} = {df_in}.copy()"
     )
+    # CentroidXY always needs .centroid twice (.x and .y); bind it once here
+    # rather than in the per-item loop below so CentroidObj — if selected
+    # alongside it — can reuse the same binding instead of recomputing it.
+    centroid_xy_selected = "CentroidXY" in translated
+    if centroid_xy_selected:
+        lines.append(f"{_CENTROID_ONCE_NOTE}\n_centroid = _geom.centroid")
     for item in translated:
         if item == "CentroidXY":
             lines.append(
                 f"{_CENTROID_XY_NOTE}\n"
-                f'{df_out}["CentroidX"] = _geom.centroid.x\n'
-                f'{df_out}["CentroidY"] = _geom.centroid.y'
+                f'{df_out}["CentroidX"] = _centroid.x\n'
+                f'{df_out}["CentroidY"] = _centroid.y'
             )
             continue
         out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
@@ -513,6 +527,9 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
             out_field, why = _centroid_field(ctx, field, out_field)
             if why:
                 note = f"{note}\n{why}"
+            expr = "_centroid" if centroid_xy_selected else f"_geom.{attr}"
+            lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = {expr}")
+            continue
         lines.append(f"{note}\n{df_out}[{py_str(out_field)}] = _geom.{attr}")
     return GeneratedCode("\n".join(lines), requirements=_GEOPANDAS)
 

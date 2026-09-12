@@ -2648,8 +2648,11 @@ def test_scaffold_spatialinfo_centroid_xy() -> None:
     code = scaffold(_spatialinfo_doc({"@name": "CentroidXY"}))
     assert "import geopandas as gpd" in code
     assert "df_2 = df_1.copy()" in code
-    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
-    assert 'df_2["CentroidY"] = _geom.centroid.y' in code
+    # .centroid is bound once and reused for .x/.y, not recomputed per field
+    assert "_centroid = _geom.centroid" in code
+    assert 'df_2["CentroidX"] = _centroid.x' in code
+    assert 'df_2["CentroidY"] = _centroid.y' in code
+    assert "_geom.centroid.x" not in code
     assert "TODO: Spatial Info" not in code
 
 
@@ -2660,9 +2663,13 @@ def test_scaffold_spatialinfo_centroid_xy_alongside_centroidobj() -> None:
     code = scaffold(
         _spatialinfo_doc([{"@name": "CentroidObj"}, {"@name": "CentroidXY"}])
     )
-    assert 'df_2["Centroid"] = _geom.centroid' in code
-    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
-    assert 'df_2["CentroidY"] = _geom.centroid.y' in code
+    # CentroidObj reuses the same _centroid binding CentroidXY needs, rather
+    # than each computing .centroid on _geom separately (3 calls -> 1).
+    assert code.count("_geom.centroid") == 1
+    assert "_centroid = _geom.centroid" in code
+    assert 'df_2["Centroid"] = _centroid' in code
+    assert 'df_2["CentroidX"] = _centroid.x' in code
+    assert 'df_2["CentroidY"] = _centroid.y' in code
     assert "TODO: Spatial Info" not in code
 
 
@@ -2670,7 +2677,7 @@ def test_scaffold_spatialinfo_centroid_xy_with_untranslated_item_stays_todo() ->
     # Area is still not translatable even when CentroidXY, selected on the
     # same node, is — the _findreplace rule applies per item, not per node.
     code = scaffold(_spatialinfo_doc([{"@name": "CentroidXY"}, {"@name": "Area"}]))
-    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
+    assert 'df_2["CentroidX"] = _centroid.x' in code
     assert "# TODO: Spatial Info — selected items not translated: Area" in code
     assert ".area" not in code
 
