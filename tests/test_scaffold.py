@@ -2604,6 +2604,41 @@ def test_scaffold_spatialinfo_without_spatial_field_is_todo() -> None:
     assert "_geom" not in code
 
 
+def test_scaffold_spatialinfo_centroid_xy() -> None:
+    # CentroidXY adds two Double fields, not one, so it gets its own branch
+    # in gen_spatialinfo rather than fitting _SPATIAL_INFO_ITEMS' one-item/
+    # one-field shape. Both are the .x/.y of the same centroid CentroidObj
+    # already computes, and MetaInfo fixes the names (no rename UI).
+    code = scaffold(_spatialinfo_doc({"@name": "CentroidXY"}))
+    assert "import geopandas as gpd" in code
+    assert "df_2 = df_1.copy()" in code
+    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
+    assert 'df_2["CentroidY"] = _geom.centroid.y' in code
+    assert "TODO: Spatial Info" not in code
+
+
+def test_scaffold_spatialinfo_centroid_xy_alongside_centroidobj() -> None:
+    # Both items selected on one node: each gets its own output line.
+    # CentroidXY's fixed names are unrelated to CentroidObj's Centroid2-style
+    # collision renaming, so selecting both together must not cross-wire them.
+    code = scaffold(
+        _spatialinfo_doc([{"@name": "CentroidObj"}, {"@name": "CentroidXY"}])
+    )
+    assert 'df_2["Centroid"] = _geom.centroid' in code
+    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
+    assert 'df_2["CentroidY"] = _geom.centroid.y' in code
+    assert "TODO: Spatial Info" not in code
+
+
+def test_scaffold_spatialinfo_centroid_xy_with_untranslated_item_stays_todo() -> None:
+    # Area is still not translatable even when CentroidXY, selected on the
+    # same node, is — the _findreplace rule applies per item, not per node.
+    code = scaffold(_spatialinfo_doc([{"@name": "CentroidXY"}, {"@name": "Area"}]))
+    assert 'df_2["CentroidX"] = _geom.centroid.x' in code
+    assert "# TODO: Spatial Info — selected items not translated: Area" in code
+    assert ".area" not in code
+
+
 def _distance_config(**overrides: object) -> dict:
     # The real node's configuration (ToolID anonymized): straight-line distance in
     # kilometers between two spatial fields of one record, plus a cardinal

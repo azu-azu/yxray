@@ -288,13 +288,15 @@ def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
 # rename UI, so the name is fixed. {item: (output field, GeoSeries attribute,
 # comment lines)}.
 #
-# Only CentroidObj is translated, following _findreplace's rule of emitting
-# real code for the verified combinations and an explicit TODO for the rest.
-# Area and Length are held back on purpose: Alteryx returns them in the unit
-# its config selects (sq miles, km) while EPSG:4326 — the CRS every frame
-# carries here, see docs/spatial-crs-design.md — measures in degrees, so
-# .area/.length would put a wrong number in a column golden CSVs compare.
-# Centroid has neither problem, being a SpatialObj golden CSVs never show.
+# Only CentroidObj and CentroidXY are translated (CentroidXY gets its own
+# branch in gen_spatialinfo — it adds two fields, not one, so it does not fit
+# this dict's shape), following _findreplace's rule of emitting real code for
+# the verified combinations and an explicit TODO for the rest. Area and
+# Length are held back on purpose: Alteryx returns them in the unit its
+# config selects (sq miles, km) while EPSG:4326 — the CRS every frame carries
+# here, see docs/spatial-crs-design.md — measures in degrees, so .area/.length
+# would put a wrong number in a column golden CSVs compare. Centroid has
+# neither problem, being a SpatialObj golden CSVs never show.
 _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
     "CentroidObj": (
         "Centroid",
@@ -321,6 +323,40 @@ _SPATIAL_INFO_ITEMS: dict[str, tuple[str, str, str]] = {
 _SPATIAL_INFO_SKIP_NOTE = (
     "#   Area/Length need a projected CRS (EPSG:4326 measures in degrees) and\n"
     "#   Alteryx's unit setting; other items await golden verification"
+)
+
+# CentroidX/CentroidY are the x/y ordinates of the exact same centroid
+# CentroidObj computes above — golden-verified to 14 decimals there (see
+# _SPATIAL_INFO_ITEMS["CentroidObj"]), so decomposing that already-checked
+# Point into .x/.y adds no new numerical risk, and the same KNOWN GAP
+# (a concave polygon's area centroid can fall outside it; Alteryx pushes it
+# back in, this .centroid does not — docs/spatial-crs-design.md) carries over
+# unchanged.
+#
+# Field names are fixed by MetaInfo (source="SpatialInfo: CentroidXY
+# Source=<field>", no rename UI) — but whether a second upstream Spatial
+# Info selecting CentroidXY gets renamed the way CentroidObj becomes
+# Centroid2 is unconfirmed: only one example exists in the corpus, unlike
+# the two-deep case _upstream_centroid_count was built from. Guessing a
+# renaming rule from a single example would be exactly the kind of
+# confirmation-dressed-as-guess _centroid_field's docstring warns against,
+# so CentroidX/CentroidY are emitted as fixed names with no collision
+# handling — verify against Alteryx if a workflow selects CentroidXY twice
+# in one chain.
+_CENTROID_XY_NOTE = (
+    "# CentroidX/CentroidY are the x/y ordinates of the same centroid\n"
+    '# CentroidObj computes (see _SPATIAL_INFO_ITEMS["CentroidObj"] for the\n'
+    "# planar-centroid-on-EPSG:4326 note) — golden-verified to 14 decimals\n"
+    "# there, so decomposing it into .x/.y adds no new numerical risk. The\n"
+    "# same KNOWN GAP applies: a concave polygon's area centroid can fall\n"
+    "# outside it, and Alteryx pushes it back in while .centroid does not\n"
+    "# (docs/spatial-crs-design.md).\n"
+    "# NOTE: field names CentroidX/CentroidY are confirmed by this node's\n"
+    "# own output MetaInfo, no rename UI. Whether Alteryx renames them on a\n"
+    "# second upstream Spatial Info selecting CentroidXY (the way CentroidObj\n"
+    "# becomes Centroid2) is unconfirmed — only one example in the corpus —\n"
+    "# so no collision handling is applied here; verify against Alteryx if\n"
+    "# unsure"
 )
 
 
@@ -437,8 +473,14 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
     spatial_obj = ctx.config.get("SpatialObj", {})
     field = field_name(spatial_obj) if isinstance(spatial_obj, dict) else ""
     items = _selected_items(ctx.config)
-    translated = [item for item in items if item in _SPATIAL_INFO_ITEMS]
-    skipped = [item for item in items if item not in _SPATIAL_INFO_ITEMS]
+    translated = [
+        item for item in items if item in _SPATIAL_INFO_ITEMS or item == "CentroidXY"
+    ]
+    skipped = [
+        item
+        for item in items
+        if item not in _SPATIAL_INFO_ITEMS and item != "CentroidXY"
+    ]
 
     lines: list[str] = []
     if skipped:
@@ -459,6 +501,13 @@ def gen_spatialinfo(ctx: ToolContext) -> GeneratedCode:
         f"{df_out} = {df_in}.copy()"
     )
     for item in translated:
+        if item == "CentroidXY":
+            lines.append(
+                f"{_CENTROID_XY_NOTE}\n"
+                f'{df_out}["CentroidX"] = _geom.centroid.x\n'
+                f'{df_out}["CentroidY"] = _geom.centroid.y'
+            )
+            continue
         out_field, attr, note = _SPATIAL_INFO_ITEMS[item]
         if item == "CentroidObj":
             out_field, why = _centroid_field(ctx, field, out_field)

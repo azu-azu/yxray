@@ -203,7 +203,7 @@ TOOL_REGISTRY: dict[str, ToolInfo] = {
         "Spatial Info",
         "transform",
         'df["Centroid"] = gpd.GeoSeries(geom, crs="EPSG:4326").centroid  '
-        "# CentroidObj only; Area/Length need a projected CRS",
+        "# CentroidObj/CentroidXY only; Area/Length need a projected CRS",
         "partial",
     ),
     "Buffer": ToolInfo(

@@ -180,14 +180,15 @@ tool_id → ノード/predecessors)は、1ホップ先の `preds` では足り�
 ### `SpatialInfo` の部分昇格(2026-07-31、`"no"` → `"partial"`)
 
 同じく `56b34d5` で候補外だったが、実ワークフローの `<Node>` XML が出てきたので
-`_findreplace` 型の部分昇格をした。**選択項目のうち `CentroidObj` だけ実コード、
-他は明示 TODO** という形である。
+`_findreplace` 型の部分昇格をした。**選択項目のうち `CentroidObj`/`CentroidXY`
+だけ実コード、他は明示 TODO** という形である。
 
 `SelectedItems` の項目ごとに、golden 突合が要るかどうかが割れるのが理由:
 
 | 項目 | 出力の型 | golden CSV に出るか | 判断 |
 | --- | --- | --- | --- |
 | `CentroidObj` | SpatialObj | **出ない**(Map タブのみ) | 昇格。値がズレても CSV 比較を汚さない |
+| `CentroidXY`(`CentroidX`/`CentroidY`、2026-09-12 昇格) | Double ×2 | 出る | 昇格。`CentroidObj` が golden 14桁一致まで検証済みの同じ `.centroid` を `.x`/`.y` に分解するだけで、新しい数値リスクを持ち込まない(下記) |
 | `Area` / `Length` | 数値 | 出る | 未昇格。EPSG:4326 は単位が度で、Alteryx の単位設定(sq miles / km)と一致しない |
 | その他 | — | — | 未昇格。実XMLが無く項目名すら未確定 |
 
@@ -248,11 +249,38 @@ MetaInfo が無ければ黙ってスキップするだけで済む。
 一致して区別できない**。その場合は確認済みを名乗らず、ベストエフォートのまま
 にする。
 
-項目を増やすときは `_spatial.py` の `_SPATIAL_INFO_ITEMS` に1行足す。
-ただし数値を返す項目は、投影CRSの選択と Alteryx の単位設定を決めるまで
-足してはいけない(投影CRSの方は
+#### `CentroidXY` の追加(2026-09-12)
+
+`_SPATIAL_INFO_ITEMS` は「1項目 → 1出力列 + 1 GeoSeries 属性」という形の
+辞書だが、`CentroidXY` は1項目で `CentroidX`/`CentroidY` の**2列**を出すため
+この形に乗らない。`gen_spatialinfo()` 側に専用の分岐(`item == "CentroidXY"`)
+を足して対応した — 辞書を無理に2列対応させるより、例外1件を明示分岐にする
+方が読みやすいという判断である。
+
+数値項目でありながら `Area`/`Length` と違って昇格できたのは、**新しい数値
+計算をしていない**ため。`CentroidObj` が golden 14桁一致まで検証済みの
+`.centroid` を、そのまま `.x`/`.y` に分解しているだけで、投影CRSも単位換算も
+関与しない(`.centroid` の [KNOWN GAP](spatial-crs-design.md) はそのまま
+引き継ぐ)。
+
+列名 `CentroidX`/`CentroidY` は実ノード自身の出力 MetaInfo
+(`source="SpatialInfo: CentroidXY Source=<field>"`、型 `Double`)で確認済み。
+ただし `CentroidObj` の `Centroid2` 相当のリネーム規則(同じチェーンに
+`CentroidXY` を選択した Spatial Info が2つあるとどうなるか)は**未確認**
+(実例が1件しかなく、`_upstream_centroid_count()` を組んだときの「2階層目まで
+確認できた」ケースに及ばない)。ここで衝突ルールを推測するのは
+`_centroid_field()` が戒めている「確認済みを装った推測」そのものになるため、
+`CentroidXY` は固定名のまま衝突検知を持たせていない。踏んだら Alteryx 側で
+確認すること。
+
+項目を増やすときは、まず `_SPATIAL_INFO_ITEMS` の形(1項目1列)に収まるかを
+見る。収まるなら1行足すだけ、収まらない(`CentroidXY` のような複数列)なら
+`gen_spatialinfo()` に専用分岐を足す。いずれの場合も、数値を返す項目は
+投影CRSの選択と Alteryx の単位設定を決めるまで足してはいけない(投影CRSの方は
 [spatial-crs-design.md の共通ルール](spatial-crs-design.md#メートル演算は-utm-へ投影してから測る共通ルール)
-で解決済みだが、単位設定は Spatial Info の XML に現れないため未解決)。
+で解決済みだが、単位設定は Spatial Info の XML に現れないため未解決) —
+`CentroidXY` が例外なのは、単位換算そのものが要らない(度のままの
+`CentroidObj` を分解するだけの)項目だからである。
 
 ### `Distance` の部分昇格(2026-07-31、`"no"` → `"partial"`)
 

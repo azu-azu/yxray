@@ -65,13 +65,13 @@ def test_formula_hint_agrees_with_what_scaffold_generates() -> None:
 
 def test_spatial_info_hint_agrees_with_what_scaffold_generates() -> None:
     # Same two-code-path trap as Formula (docs/explain-output-anatomy.md):
-    # the generator translates CentroidObj only, so the hint must not
-    # advertise the .area / .length it deliberately refuses to emit.
+    # the generator translates CentroidObj/CentroidXY only, so the hint must
+    # not advertise the .area / .length it deliberately refuses to emit.
     hint, supported = python_hint_for("SpatialInfo")
     assert supported == "partial"
     assert "gpd.GeoSeries" in hint
     assert ".centroid" in hint
-    assert "CentroidObj only" in hint
+    assert "CentroidObj/CentroidXY only" in hint
     assert ".area" not in hint
     assert ".length" not in hint
 
