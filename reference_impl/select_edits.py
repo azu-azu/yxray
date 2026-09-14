@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Literal
 
 import pandas as pd
 
@@ -25,7 +26,15 @@ logger = logging.getLogger(__name__)
 _STRING_TYPES = {"String", "WString", "V_String", "V_WString"}
 # pandas の nullable 整数 dtype 名は Alteryx の型名とほぼ一致する
 # （Byte のみ Alteryx では符号なし 8bit なので UInt8）
-_INT_DTYPES = {"Byte": "UInt8", "Int16": "Int16", "Int32": "Int32", "Int64": "Int64"}
+# 値は Literal で固定する: dict[str, str] のままだと astype() に str が渡り、
+# dtype 名を Literal で受ける型スタブ側のオーバーロードに一致しない
+_IntDtypeName = Literal["UInt8", "Int16", "Int32", "Int64"]
+_INT_DTYPES: dict[str, _IntDtypeName] = {
+    "Byte": "UInt8",
+    "Int16": "Int16",
+    "Int32": "Int32",
+    "Int64": "Int64",
+}
 # FixedDecimal は本来固定小数点。float64 に落とすため金額計算では誤差が出うる —
 # 精度が必要な場合は decimal.Decimal 化を検討すること
 _FLOAT_TYPES = {"Double", "Float", "FixedDecimal"}
