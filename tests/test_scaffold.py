@@ -1,6 +1,8 @@
 import textwrap
 from typing import Any
 
+import pytest
+
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import (
     AlteryxConnection,
@@ -1266,9 +1268,10 @@ def test_scaffold_select_with_type_change() -> None:
 
 
 def test_scaffold_select_type_change_to_non_string_has_no_string_warning() -> None:
-    # Double/Int32 targets go through astype()/to_numeric(), not the
-    # Python-float-repr path astype("string") takes — no formatting risk to
-    # flag.
+    # A Double target goes through to_numeric(), not the Python-float-repr
+    # path astype("string") takes, so the STRING formatting warning does not
+    # apply. It says nothing about the integer rounding warning, which is a
+    # separate axis and has its own test below (Double does not round).
     doc = _doc(
         AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
         AlteryxNode(
@@ -1295,6 +1298,112 @@ def test_scaffold_select_type_change_to_non_string_has_no_string_warning() -> No
     )
     code = scaffold(doc)
     assert "WARNING: a type change here converts to a string type" not in code
+    # A Double target never reaches round(), so no rounding warning either.
+    assert "WARNING: a type change here converts to an integer type" not in code
+
+
+def _select_type_change_doc(alteryx_type: str) -> WorkflowDoc:
+    """A one-Select workflow whose single column carries a type change."""
+    return _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [
+                        {
+                            "@field": "amount",
+                            "@selected": "True",
+                            "@type": alteryx_type,
+                        },
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize("alteryx_type", ["Byte", "Int16", "Int32", "Int64"])
+def test_scaffold_select_type_change_to_int_warns_about_rounding(
+    alteryx_type: str,
+) -> None:
+    # apply_select_edits() rounds with Series.round() (half-to-even) to reach a
+    # nullable Int dtype, and Alteryx's own mode is unconfirmed — the generated
+    # code has to say so rather than imply parity, same as ToString() does.
+    code = scaffold(_select_type_change_doc(alteryx_type))
+    assert "WARNING: a type change here converts to an integer type" in code
+    assert "half-to-even" in code
+    assert "not confirmed against Alteryx" in code
+
+
+def test_scaffold_select_no_type_change_has_no_rounding_warning() -> None:
+    # The warning is keyed on an explicit @type, not on the Select itself.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [{"@field": "amount", "@selected": "True"}]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "WARNING: a type change here converts to an integer type" not in code
+
+
+def test_scaffold_select_deselected_int_type_change_has_no_rounding_warning() -> None:
+    # A deselected column is dropped before _apply_type_edits runs, so its
+    # @type never reaches round() — warning there would be noise.
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Select",
+            x=10,
+            y=0,
+            config={
+                "SelectFields": {
+                    "SelectField": [
+                        {"@field": "amount", "@selected": "False", "@type": "Int32"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+    code = scaffold(doc)
+    assert "WARNING: a type change here converts to an integer type" not in code
 
 
 def test_scaffold_select_does_not_emit_helper_definitions() -> None:

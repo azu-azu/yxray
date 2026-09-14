@@ -1,16 +1,19 @@
-"""Alteryx Select ツール用ヘルパーの参照実装。
+"""Reference implementation of the Alteryx Select tool helper.
 
-yxray の scaffold が生成する apply_select_edits(df, [...]) 呼び出しの定義。
-生成コードには埋め込まれないため、このファイルをプロジェクトへコピーして使う。
+Defines the apply_select_edits(df, [...]) call that yxray's scaffold
+generates. The definition is not embedded in the generated code, so copy
+this file into the target project.
 
-- *Unknown selected=False: 明示的に selected な列だけを残す
-- それ以外: deselected な列を drop する（存在しない列は無視 —
-  Alteryx XML は stale な列リストを持ちがちなので KeyError にしない）
-- type: Alteryx の型名（V_WString / Int32 / Double / Date など）を pandas の
-  dtype へ変換する。変換に失敗した値は Alteryx の Conversion Error と同様に
-  null になる（errors="coerce"）。ただし pandas は黙って null 化するため、
-  変換で null が増えた列は logger.warning で件数を報告する
-- rename は selected な列にのみ適用する
+- *Unknown selected=False: keep only the explicitly selected columns
+- otherwise: drop the deselected columns (columns that are absent are
+  ignored — Alteryx XML tends to carry a stale column list, so this must
+  not raise KeyError)
+- type: convert an Alteryx type name (V_WString / Int32 / Double / Date
+  etc.) to a pandas dtype. Values that fail to convert become null, the
+  same as an Alteryx Conversion Error (errors="coerce"). pandas nulls them
+  silently, so a column whose conversion added nulls is reported through
+  logger.warning with the count
+- rename applies only to selected columns
 """
 
 from __future__ import annotations
@@ -24,10 +27,11 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 _STRING_TYPES = {"String", "WString", "V_String", "V_WString"}
-# pandas の nullable 整数 dtype 名は Alteryx の型名とほぼ一致する
-# （Byte のみ Alteryx では符号なし 8bit なので UInt8）
-# 値は Literal で固定する: dict[str, str] のままだと astype() に str が渡り、
-# dtype 名を Literal で受ける型スタブ側のオーバーロードに一致しない
+# pandas' nullable integer dtype names almost match Alteryx's type names
+# (only Byte differs: Alteryx's is unsigned 8-bit, so UInt8)
+# The values are pinned with Literal: as a plain dict[str, str] the astype()
+# call receives a str, which does not match the type stubs' overload that
+# takes a dtype name as a Literal.
 _IntDtypeName = Literal["UInt8", "Int16", "Int32", "Int64"]
 _INT_DTYPES: dict[str, _IntDtypeName] = {
     "Byte": "UInt8",
@@ -35,8 +39,9 @@ _INT_DTYPES: dict[str, _IntDtypeName] = {
     "Int32": "Int32",
     "Int64": "Int64",
 }
-# FixedDecimal は本来固定小数点。float64 に落とすため金額計算では誤差が出うる —
-# 精度が必要な場合は decimal.Decimal 化を検討すること
+# FixedDecimal is fixed-point in Alteryx. Dropping it to float64 can
+# introduce error in monetary calculations — consider decimal.Decimal where
+# precision matters.
 _FLOAT_TYPES = {"Double", "Float", "FixedDecimal"}
 
 
@@ -45,36 +50,56 @@ class SelectColumnEdit:
     name: str
     new_name: str | None = None
     selected: bool = True
-    type: str | None = None  # Alteryx の型名。型変更のある列にのみ設定される
+    type: str | None = None  # Alteryx type name; set only on a column with a type change
 
 
 def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
-    """series を Alteryx 型名に対応する pandas dtype へ変換する。
+    """Convert series to the pandas dtype matching an Alteryx type name.
 
-    未対応の型（Blob / SpatialObj など）は None を返し、呼び出し側で
-    スキップ + 警告する。
+    Unsupported types (Blob / SpatialObj etc.) return None so the caller
+    can skip them and warn.
     """
     if alteryx_type in _STRING_TYPES:
-        # 変換元が数値だった場合、astype("string") は Python の float 表記
-        # （全桁保持・整数値にも ".0" が付く）をそのまま使う。Alteryx は
-        # 整数相当の値の小数点以下を落とす（"1.0" → "1"）— この表記ルールは
-        # to_display_string.py が既に実装しているが、ここでは呼んでいない。
-        # 呼ばない理由は自動化しない方針そのもの（20章「自動適用はしない」）
-        # ではなく、ここは型変換の汎用パスで数値以外の型(Date/Bool等)も
-        # 通るため、そのまま差し替えると数値以外のケースを壊しかねないから。
-        # 数値からの型変更だと分かっているなら to_display_string() へ
-        # 差し替えを検討すること。ただし to_display_string() 自身も
-        # Alteryx との golden 突合は未検証（同ファイルの docstring 参照）
+        # When the source was numeric, astype("string") uses Python's own
+        # float repr (full precision, and a ".0" even on integral values).
+        # Alteryx drops the fractional part of an integral value ("1.0" ->
+        # "1") — to_display_string.py already implements that formatting
+        # rule, but it is not called here. The reason is not the
+        # don't-automate policy itself (chapter 20, "no automatic
+        # application"): this is the generic type-conversion path, so
+        # non-numeric types (Date/Bool etc.) come through it too, and
+        # swapping it in wholesale could break those cases. Where the
+        # source is known to be numeric, consider switching to
+        # to_display_string(). Note that to_display_string() is itself not
+        # yet verified against Alteryx golden output (see that file's
+        # docstring).
         return series.astype("string")
     if alteryx_type in _INT_DTYPES:
-        # round(): Alteryx の Double→Int は四捨五入。小数を含む float から
-        # nullable Int への astype は "cannot safely cast" で落ちるため必須
+        # round() is required: astype to a nullable Int fails with "cannot
+        # safely cast" on a float carrying a fractional part.
+        #
+        # WARNING: the rounding MODE is not confirmed against Alteryx.
+        # Series.round() is round-half-to-even (banker's rounding), so a
+        # value at exactly .5 whose integer part is even rounds DOWN:
+        # 0.5 -> 0 and 2.5 -> 2, where round-half-away-from-zero gives 1
+        # and 3. Ties whose integer part is odd (1.5 -> 2, 3.5 -> 4)
+        # agree under both modes, so they cannot tell the two apart.
+        # Negative values split three ways rather than two — half-to-even
+        # (-0.5 -> 0, -1.5 -> -2), half-up toward +inf via floor(x + 0.5)
+        # (-0.5 -> 0, -1.5 -> -1) and half-away-from-zero (-0.5 -> -1,
+        # -1.5 -> -2) all differ — so do not port the floor(x + 0.5)
+        # rewrite from docs/distance-direction-pending.md here: that one is
+        # sound only because a compass bearing is never negative.
+        # Diff this column against golden output before trusting it; see
+        # the unverified-items checklist in
+        # docs/alteryx-pandas-differences.md.
         num = pd.to_numeric(series, errors="coerce")
         return num.round().astype(_INT_DTYPES[alteryx_type])
     if alteryx_type in _FLOAT_TYPES:
         return pd.to_numeric(series, errors="coerce")
     if alteryx_type == "Bool":
-        # Alteryx 準拠: 非ゼロ数値 → True。CSV 由来の "True"/"False" 文字列も拾う
+        # Alteryx-compatible: a non-zero number → True. Also picks up
+        # "True"/"False" strings that came from a CSV.
         num = pd.to_numeric(series, errors="coerce")
         text = series.astype("string").str.strip().str.lower()
         result = num.ne(0).mask(num.isna())
@@ -82,12 +107,12 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
         result = result.mask(num.isna() & text.eq("false"), False)
         return result.astype("boolean")
     if alteryx_type == "Date":
-        # Alteryx の Date は時刻部分を持たないため 00:00:00 に正規化する
+        # An Alteryx Date carries no time part, so normalize to 00:00:00
         return pd.to_datetime(series, errors="coerce").dt.normalize()
     if alteryx_type == "DateTime":
         return pd.to_datetime(series, errors="coerce")
     if alteryx_type == "Time":
-        # pandas に time-of-day dtype はないため timedelta で近似する
+        # pandas has no time-of-day dtype, so approximate with timedelta
         return pd.to_timedelta(series, errors="coerce")
     return None
 
@@ -103,7 +128,7 @@ def _apply_type_edits(
         converted = _convert_series(df[edit.name], edit.type)
         if converted is None:
             logger.warning(
-                "apply_select_edits: 未対応の Alteryx 型 %r（列 %r）— 変換をスキップ",
+                "apply_select_edits: unsupported Alteryx type %r (column %r) — skipping conversion",
                 edit.type,
                 edit.name,
             )
@@ -111,15 +136,15 @@ def _apply_type_edits(
         added_nulls = int(converted.isna().sum()) - int(df[edit.name].isna().sum())
         if added_nulls > 0:
             logger.warning(
-                "apply_select_edits: 列 %r の %s 変換で %d 件が null になった"
-                "（Alteryx の Conversion Error 相当）",
-                edit.name,
+                "apply_select_edits: the %s conversion of column %r nulled %d value(s)"
+                " (equivalent to an Alteryx Conversion Error)",
                 edit.type,
+                edit.name,
                 added_nulls,
             )
         updates[edit.name] = converted
-    # assign は既存列を置き換えた新しい DataFrame を返すので、呼び出し元の
-    # df を変更せず、列順も保たれる
+    # assign returns a new DataFrame with the existing columns replaced, so
+    # the caller's df is left untouched and the column order is preserved
     return df.assign(**updates) if updates else df
 
 
@@ -135,7 +160,8 @@ def apply_select_edits(
     else:
         drop = {c.name for c in explicit if not c.selected} & set(df.columns)
         df = df.drop(columns=drop)
-    # 型変換は drop の後・rename の前（edit.name は rename 前の列名のため）
+    # Type conversion runs after the drop and before the rename, because
+    # edit.name is the pre-rename column name
     df = _apply_type_edits(df, explicit)
     rename_map = {
         c.name: c.new_name

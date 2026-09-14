@@ -422,7 +422,7 @@ def test_apply_select_edits_type_string() -> None:
     assert list(out["a"]) == ["1", "2"]
 
 
-def test_apply_select_edits_type_int_sizes_and_rounding() -> None:
+def test_apply_select_edits_type_int_sizes_and_truncation() -> None:
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame(
         {
@@ -441,11 +441,39 @@ def test_apply_select_edits_type_int_sizes_and_rounding() -> None:
     )
     assert out["i16"].dtype == "Int16"
     assert out["i64"].dtype == "Int64"
-    # 変換失敗は Alteryx の Conversion Error と同じく null
+    # A failed conversion nulls the value, same as an Alteryx Conversion Error
     assert out["i64"].isna().iloc[1]
-    # Double→Int は四捨五入（切り捨てだと astype が落ちるうえ Alteryx と不一致）
+    # Double->Int rounds rather than truncating (truncation would both crash
+    # astype and disagree with Alteryx). 1.5 is deliberately NOT evidence of
+    # WHICH rounding mode is in play — see the half-to-even test below.
     assert out["dbl"].dtype == "Int32"
     assert list(out["dbl"]) == [2, 2]
+
+
+def test_apply_select_edits_int_rounding_is_half_to_even_not_half_up() -> None:
+    """Pins the CURRENT rounding mode, which is NOT confirmed against Alteryx.
+
+    Series.round() is round-half-to-even, so a tie whose integer part is even
+    rounds down. Alteryx's own mode is unverified (see the unverified-items
+    checklist in docs/alteryx-pandas-differences.md); if golden output shows
+    Alteryx rounds half away from zero, this test is the one to flip, together
+    with the WARNING comment in reference_impl/select_edits.py.
+
+    Ties whose integer part is odd (1.5, 3.5) round the same way under both
+    modes, so they cannot distinguish them and are not used here.
+    """
+    edit = select_helpers.SelectColumnEdit
+    df = pd.DataFrame({"pos": [0.5, 2.5, 4.5], "neg": [-0.5, -1.5, -2.5]})
+    out = select_helpers.apply_select_edits(
+        df,
+        [edit("pos", type="Int32"), edit("neg", type="Int32")],
+    )
+    # half-to-even; half-away-from-zero would give [1, 3, 5]
+    assert list(out["pos"]) == [0, 2, 4]
+    # half-to-even; half-away-from-zero would give [-1, -2, -3] and the
+    # floor(x + 0.5) half-up rewrite would give [0, -1, -2] — three distinct
+    # answers, which is why negative values belong in the golden check.
+    assert list(out["neg"]) == [0, -2, -2]
 
 
 def test_apply_select_edits_type_float_and_date() -> None:
@@ -467,7 +495,7 @@ def test_apply_select_edits_type_float_and_date() -> None:
     )
     assert out["f"].dtype == "float64"
     assert out["f"].iloc[0] == 1.5
-    # Date は時刻部分を持たない（normalize）、DateTime は保持
+    # Date carries no time part (normalize); DateTime keeps it
     assert out["d"].iloc[0] == pd.Timestamp("2024-01-02")
     assert pd.isna(out["d"].iloc[1])
     assert out["dt"].iloc[0] == pd.Timestamp("2024-01-02 15:30:00")
@@ -483,8 +511,8 @@ def test_apply_select_edits_type_bool() -> None:
 
 
 def test_apply_select_edits_type_applied_before_rename() -> None:
-    # type は rename 前の列名で指定される（Alteryx XML と同じ）ため、
-    # rename と併用しても変換が効くこと
+    # type is keyed by the pre-rename column name (same as the Alteryx
+    # XML), so the conversion still applies when combined with a rename
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"old": ["1", "2"]})
     out = select_helpers.apply_select_edits(
@@ -498,7 +526,8 @@ def test_apply_select_edits_type_applied_before_rename() -> None:
 
 
 def test_apply_select_edits_type_unsupported_or_absent_is_skipped() -> None:
-    # 未対応型（Blob 等）と存在しない列は警告のみで落ちない
+    # An unsupported type (Blob etc.) and an absent column only warn,
+    # they do not raise
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame({"a": [1], "b": ["x"]})
     out = select_helpers.apply_select_edits(
