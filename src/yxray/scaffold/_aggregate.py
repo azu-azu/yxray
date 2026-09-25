@@ -46,8 +46,7 @@ def gen_summarize(ctx: ToolContext) -> GeneratedCode:
                     f"Count_{field}" if action_lower == "count" else field
                 )
                 named_parts.append(
-                    f"{py_str(output_name)}: "
-                    f"({py_str(field)}, {py_str(pandas_action)})"
+                    f"{py_str(output_name)}: ({py_str(field)}, {py_str(pandas_action)})"
                 )
             named_agg_map = "{" + ", ".join(named_parts) + "}"
             return GeneratedCode(
