@@ -31,47 +31,27 @@ def gen_summarize(ctx: ToolContext) -> GeneratedCode:
         return GeneratedCode(f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO")
     group_str = "[" + ", ".join(py_str(g) for g in groups if g) + "]"
     if aggs:
+        # Named aggregation preserves Alteryx output names and allows multiple
+        # aggregations on the same input field without one silently replacing
+        # another.  dropna=False keeps null-valued GroupBy keys, as Alteryx does.
         # Alteryx Count means the number of records in each group (including
-        # nulls), whereas pandas "count" excludes null values.  Count can also
-        # target a field that is itself a GroupBy key; the old dict-style agg
-        # then produced a duplicate column name and reset_index() failed.
-        if any(action.lower() == "count" for _, action, _ in aggs):
-            named_parts: list[str] = []
-            for field, action, rename in aggs:
-                if not field:
-                    continue
-                action_lower = action.lower()
-                pandas_action = "size" if action_lower == "count" else action_lower
-                output_name = rename or (
-                    f"Count_{field}" if action_lower == "count" else field
-                )
-                named_parts.append(
-                    f"{py_str(output_name)}: ({py_str(field)}, {py_str(pandas_action)})"
-                )
-            named_agg_map = "{" + ", ".join(named_parts) + "}"
-            return GeneratedCode(
-                f"{df_out} = (\n"
-                f"    {df_in}\n"
-                f"    .groupby({group_str}, dropna=False)\n"
-                f"    .agg(**{named_agg_map})\n"
-                f"    .reset_index()\n"
-                f")"
+        # nulls), whereas pandas "count" excludes null values.
+        named_parts: list[str] = []
+        for field, action, rename in aggs:
+            if not field:
+                continue
+            action_lower = action.lower()
+            pandas_action = "size" if action_lower == "count" else action_lower
+            output_name = rename or f"{action}_{field}"
+            named_parts.append(
+                f"{py_str(output_name)}: ({py_str(field)}, {py_str(pandas_action)})"
             )
-
-        agg_map = (
-            "{"
-            + ", ".join(
-                f"{py_str(field)}: {py_str(action.lower())}"
-                for field, action, _ in aggs
-                if field
-            )
-            + "}"
-        )
+        named_agg_map = "{" + ", ".join(named_parts) + "}"
         return GeneratedCode(
             f"{df_out} = (\n"
             f"    {df_in}\n"
-            f"    .groupby({group_str})\n"
-            f"    .agg({agg_map})\n"
+            f"    .groupby({group_str}, dropna=False)\n"
+            f"    .agg(**{named_agg_map})\n"
             f"    .reset_index()\n"
             f")"
         )
