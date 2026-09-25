@@ -42,9 +42,8 @@ def gen_summarize(ctx: ToolContext) -> GeneratedCode:
                     continue
                 action_lower = action.lower()
                 pandas_action = "size" if action_lower == "count" else action_lower
-                output_name = (
-                    rename
-                    or (f"Count_{field}" if action_lower == "count" else field)
+                output_name = rename or (
+                    f"Count_{field}" if action_lower == "count" else field
                 )
                 named_parts.append(
                     f"{py_str(output_name)}: "
