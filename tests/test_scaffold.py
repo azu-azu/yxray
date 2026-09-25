@@ -1737,6 +1737,101 @@ def test_scaffold_summarize_groupby() -> None:
     assert '"Sales"' in code
 
 
+def test_scaffold_summarize_named_aggregation_without_count() -> None:
+    """Sum/Max keep distinct renamed outputs and null-valued groups."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Summarize",
+            x=10,
+            y=0,
+            config={
+                "SummarizeFields": {
+                    "SummarizeField": [
+                        {"@field": "G", "@action": "GroupBy"},
+                        {"@field": "Sales", "@action": "Sum", "@rename": "Sum_Sales"},
+                        {"@field": "Sales", "@action": "Max", "@rename": "Max_Sales"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+    code = node_code_snippets(doc)[2]
+    assert '.groupby(["G"], dropna=False)' in code
+    assert '"Sum_Sales": ("Sales", "sum")' in code
+    assert '"Max_Sales": ("Sales", "max")' in code
+
+    namespace: dict[str, Any] = {
+        "df_1": pd.DataFrame(
+            {
+                "G": ["A", "A", None],
+                "Sales": [1, 3, 5],
+            }
+        )
+    }
+    exec(code, namespace)
+
+    result = namespace["df_2"]
+    assert list(result.columns) == ["G", "Sum_Sales", "Max_Sales"]
+    assert result.loc[result["G"].eq("A"), "Sum_Sales"].item() == 4
+    assert result.loc[result["G"].eq("A"), "Max_Sales"].item() == 3
+    assert result.loc[result["G"].isna(), "Sum_Sales"].item() == 5
+
+
+def test_scaffold_summarize_fallback_output_names_do_not_collide() -> None:
+    """Missing @rename falls back to Alteryx-style Action_Field names."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Summarize",
+            x=10,
+            y=0,
+            config={
+                "SummarizeFields": {
+                    "SummarizeField": [
+                        {"@field": "G", "@action": "GroupBy"},
+                        {"@field": "Sales", "@action": "Sum"},
+                        {"@field": "Sales", "@action": "Max"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+    code = node_code_snippets(doc)[2]
+    assert '"Sum_Sales": ("Sales", "sum")' in code
+    assert '"Max_Sales": ("Sales", "max")' in code
+
+    namespace: dict[str, Any] = {
+        "df_1": pd.DataFrame({"G": ["A", "A"], "Sales": [1, 3]})
+    }
+    exec(code, namespace)
+
+    result = namespace["df_2"]
+    assert list(result.columns) == ["G", "Sum_Sales", "Max_Sales"]
+    assert result.loc[0, "Sum_Sales"] == 4
+    assert result.loc[0, "Max_Sales"] == 3
+
+
 def test_scaffold_summarize_count_same_groupby_field() -> None:
     """Count must count records even when its field is also a GroupBy key."""
     doc = _doc(
