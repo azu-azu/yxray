@@ -1,6 +1,8 @@
 import textwrap
 from typing import Any
 
+import pandas as pd
+
 from yxray.models.types import AnchorName, ToolID
 from yxray.models.workflow import (
     AlteryxConnection,
@@ -1733,6 +1735,54 @@ def test_scaffold_summarize_groupby() -> None:
     assert "groupby" in code
     assert '"Region"' in code
     assert '"Sales"' in code
+
+
+def test_scaffold_summarize_count_same_groupby_field() -> None:
+    """Count must count records even when its field is also a GroupBy key."""
+    doc = _doc(
+        AlteryxNode(tool_id=ToolID(1), tool_type="InputData", x=0, y=0),
+        AlteryxNode(
+            tool_id=ToolID(2),
+            tool_type="Summarize",
+            x=10,
+            y=0,
+            config={
+                "SummarizeFields": {
+                    "SummarizeField": [
+                        {"@field": "EL_ID", "@action": "GroupBy"},
+                        {"@field": "Co", "@action": "GroupBy"},
+                        {"@field": "Co", "@action": "Count", "@rename": "Count"},
+                    ]
+                }
+            },
+        ),
+        connections=(
+            AlteryxConnection(
+                src_tool=ToolID(1),
+                src_anchor=AnchorName("Output"),
+                dst_tool=ToolID(2),
+                dst_anchor=AnchorName("Input"),
+            ),
+        ),
+    )
+
+    code = node_code_snippets(doc)[2]
+    assert '.groupby(["EL_ID", "Co"], dropna=False)' in code
+    assert '"Count": ("Co", "size")' in code
+
+    namespace: dict[str, Any] = {
+        "df_1": pd.DataFrame(
+            {
+                "EL_ID": ["E1", "E1", "E1"],
+                "Co": ["A", "A", None],
+            }
+        )
+    }
+    exec(code, namespace)
+
+    result = namespace["df_2"]
+    assert result.loc[result["Co"].eq("A"), "Count"].item() == 2
+    assert result.loc[result["Co"].isna(), "Count"].item() == 1
 
 
 # ── Union ──────────────────────────────────────────────────────────────────
