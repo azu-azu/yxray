@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yxray.config_utils import as_list, py_str
+from yxray.config_utils import as_list, first_text, py_str
 from yxray.scaffold._common import GeneratedCode, ToolContext
 
 
@@ -19,7 +19,11 @@ def gen_summarize(ctx: ToolContext) -> GeneratedCode:
         if isinstance(r, dict) and r.get("@action", "").lower() == "groupby"
     ]
     aggs = [
-        (r.get("@field", ""), r.get("@action", ""))
+        (
+            r.get("@field", ""),
+            r.get("@action", ""),
+            first_text(r, "@rename", "@Rename", "rename", "Rename"),
+        )
         for r in rows
         if isinstance(r, dict) and r.get("@action", "").lower() != "groupby"
     ]
@@ -27,11 +31,40 @@ def gen_summarize(ctx: ToolContext) -> GeneratedCode:
         return GeneratedCode(f"{df_out} = {df_in}.groupby([...]).agg({{...}})  # TODO")
     group_str = "[" + ", ".join(py_str(g) for g in groups if g) + "]"
     if aggs:
+        # Alteryx Count means the number of records in each group (including
+        # nulls), whereas pandas "count" excludes null values.  Count can also
+        # target a field that is itself a GroupBy key; the old dict-style agg
+        # then produced a duplicate column name and reset_index() failed.
+        if any(action.lower() == "count" for _, action, _ in aggs):
+            named_parts: list[str] = []
+            for field, action, rename in aggs:
+                if not field:
+                    continue
+                action_lower = action.lower()
+                pandas_action = "size" if action_lower == "count" else action_lower
+                output_name = (
+                    rename
+                    or (f"Count_{field}" if action_lower == "count" else field)
+                )
+                named_parts.append(
+                    f"{py_str(output_name)}: "
+                    f"({py_str(field)}, {py_str(pandas_action)})"
+                )
+            named_agg_map = "{" + ", ".join(named_parts) + "}"
+            return GeneratedCode(
+                f"{df_out} = (\n"
+                f"    {df_in}\n"
+                f"    .groupby({group_str}, dropna=False)\n"
+                f"    .agg(**{named_agg_map})\n"
+                f"    .reset_index()\n"
+                f")"
+            )
+
         agg_map = (
             "{"
             + ", ".join(
                 f"{py_str(field)}: {py_str(action.lower())}"
-                for field, action in aggs
+                for field, action, _ in aggs
                 if field
             )
             + "}"
