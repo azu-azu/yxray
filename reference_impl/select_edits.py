@@ -119,7 +119,10 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
         # because a compass bearing is never negative.
         #
         # Diff this column against golden output before trusting it — see
-        # chapter 23 of docs/alteryx-pandas-differences.md.
+        # chapter 23 of docs/alteryx-pandas-differences.md. The discrimination
+        # tables and the four-value minimality result quoted above come from
+        # tools/double_to_int_candidates.py; re-run it (--check) rather than
+        # trusting these numbers by eye.
         num = pd.to_numeric(series, errors="coerce")
         return num.round().astype(_INT_DTYPES[alteryx_type])
     if alteryx_type in _FLOAT_TYPES:

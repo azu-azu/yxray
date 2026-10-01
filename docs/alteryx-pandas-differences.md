@@ -1347,6 +1347,20 @@ pd.Series([1.5, 2.4]).round().astype("Int32")    → [2, 2]   OK
 
 ### 候補7種の判別表（実測）
 
+> 本章の判別表・最小性の数値は **`tools/double_to_int_candidates.py` が正本**。
+> 散文へ手で転記した数字が過去3回誤っていたため、スクリプトを source of truth に
+> した。再実行して確認する:
+>
+> ```
+> python3 tools/double_to_int_candidates.py            # 全レポート
+> python3 tools/double_to_int_candidates.py --check    # 結論の assert のみ
+> python3 tools/double_to_int_candidates.py --markdown # 本章に貼れる表
+> ```
+>
+> 候補方式を増減すると `--check` の assert が落ちて本章の数値が陳腐化した旨を
+> 報告する。`apply_select_edits()` の実挙動との突合も含む。
+
+
 | 入力 | half-to-even | ties → +∞ | half-away | half-to-zero | trunc | floor | ceil |
 |---|---|---|---|---|---|---|---|
 | -2.5 | -2 | -2 | **-3** | -2 | -2 | **-3** | -2 |
@@ -1392,7 +1406,9 @@ pd.Series([1.5, 2.4]).round().astype("Int32")    → [2, 2]   OK
 
 全行が異なる。**4点が最小**であることは総当たりで確認済み（`-4.5`〜`4.5` を
 0.1 刻みにした91点のプールで、1点・2点・3点の全部分集合は7候補を分けられず、
-4点では 6,336 通りの識別セットが存在する）。
+4点では 6,336 通りの識別セットが存在する）。この探索は
+`tools/double_to_int_candidates.py` の `minimality_search()` が実行するもので、
+上記の数値はすべて同スクリプトの assert に埋め込まれている。
 
 **推奨 golden セットは8点**:
 
@@ -1479,6 +1495,7 @@ tie/non-tie・整数部の偶奇をすべて張るので、golden と食い違�
 - `reference_impl/select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename。整数型への変換は丸め方式どころか「丸めるのか切り捨てるのか」から未検証 — 23章）。設定型 `SelectColumnEdit` と適用関数 `apply_select_edits` の2つを公開するため、他の参照実装と違いファイル名は関数名と一致しない
 - `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
 - `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
+- `tools/double_to_int_candidates.py` — 23章の判別表・最小性探索の正本となる分析スクリプト（standalone。`--check` で結論を assert、`--markdown` で本章用の表を出力。`apply_select_edits()` の実挙動との突合も行う）
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`
 - `src/yxray/scaffold/` — 領域ごとの生成モジュール(構成は `docs/scaffold-architecture.md`)。`_combine.py` の `gen_join`（inner のみ生成）/ `gen_union`（ByName 固定）、`_filter.py` の `gen_filter`（複合条件のマスク分割）/ `_filter_date_warning_lines`（日付比較 × `IsEmpty` の列名付き警告）、`_spatial.py` の `gen_createpoints`（`geometry` 列の NOTE 付き生成）/ `gen_spatialmatch`（アクティブジオメトリ任せの `sjoin` + `index_right` drop + 埋め込み Select 逸脱の WARNING）
 - `src/yxray/alteryx_expr.py` — `translate_filter_masks`（トップレベル AND/OR のオペランド分解）/ `_missing_fill`（19章の欠損値補充 peephole。肯定形・否定形の両方を判定し、`if_expr` と `IIF` の両方から呼ばれる）/ `_emit_tostring`（21章。小数桁数・桁区切りがリテラルのときだけ翻訳し、`uses_tostring_format` フラグで呼び出し元に WARNING を出させる）
