@@ -4,7 +4,9 @@ Select's quirk is that its XML is saved-state: the .yxmd keeps the Select
 configuration as of some earlier save, so it can silently disagree with
 what the Alteryx GUI actually shows. Every generated block therefore
 carries a stale-XML warning, plus targeted warnings for the *Unknown
-pseudo-field patterns that usually indicate a source-file issue.
+pseudo-field patterns that usually indicate a source-file issue and for the
+type changes whose pandas equivalent is not confirmed against Alteryx
+(string formatting, integer rounding).
 """
 
 from __future__ import annotations
@@ -26,7 +28,8 @@ _SELECT_STALE_XML_WARNING = (
 # change to one of these with series.astype("string") — Python's own float
 # repr ("1.0"), not Alteryx's drop-the-trailing-zero rule ("1") that
 # reference_impl/to_display_string.py already implements (docs/
-# alteryx-pandas-differences.md 20章) but apply_select_edits doesn't call.
+# alteryx-pandas-differences.md chapter 20) but apply_select_edits doesn't
+# call.
 # The XML's @type only names the TARGET type (it appears "only on a column
 # with a type change" — see gen_select()), not what the column held
 # before, so a numeric source can't be ruled out here.
@@ -41,6 +44,29 @@ _SELECT_STRING_CONVERSION_WARNING = (
     "# risk as ToString() elsewhere in this repo either way, since\n"
     "# to_display_string() itself is not golden-verified against Alteryx\n"
     "# — diff the converted column against golden output before trusting it"
+)
+
+# apply_select_edits() reaches a nullable Int dtype via series.round(), which
+# is round-half-to-even: a tie whose integer part is even rounds down (0.5 ->
+# 0, 2.5 -> 2) where round-half-away-from-zero gives 1 and 3. astype() to a
+# nullable Int does require the values to be integer-valued first, but that
+# forces SOME integer-ization, not round() specifically — trunc/floor/ceil
+# qualify too. So the open question is not merely which tie-break Alteryx
+# uses; it is whether Alteryx rounds to nearest at all. The warning has to
+# leave both stages open, same caveat as TOSTRING_FORMAT_WARNING_LINES in
+# _common.py and _DISTANCE_WARNING in _spatial.py — the generated code says so
+# rather than implying parity. Byte is Alteryx's unsigned 8-bit type; the set
+# mirrors _INT_DTYPES in reference_impl/select_edits.py.
+_SELECT_INT_TYPES = frozenset({"Byte", "Int16", "Int32", "Int64"})
+
+_SELECT_INT_ROUNDING_WARNING = (
+    "# WARNING: a type change here converts to an integer type —\n"
+    "# apply_select_edits() uses Series.round() (half-to-even: 0.5 -> 0,\n"
+    "# 2.5 -> 2). Not confirmed against Alteryx: whether Alteryx rounds to\n"
+    "# nearest at all rather than truncating/flooring/ceiling, nor which\n"
+    "# tie-break it uses if it does — diff this column against golden output\n"
+    "# before trusting it, using non-tie and negative values, not ties alone\n"
+    "# (-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5)"
 )
 
 
@@ -61,7 +87,8 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
         new_name: str | None = first_text(r, "@rename", "@Rename") or None
         if new_name == name:
             new_name = None
-        # @type は型変更された列にのみ現れる（V_WString / Int32 など）
+        # @type appears only on a column with a type change (V_WString /
+        # Int32 etc.)
         alteryx_type: str | None = first_text(r, "@type", "@Type") or None
         edits.append((name, new_name, selected, alteryx_type))
 
@@ -84,6 +111,10 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
         selected and alteryx_type in _SELECT_STRING_TYPES
         for _, _, selected, alteryx_type in edits
     )
+    converts_to_int = any(
+        selected and alteryx_type in _SELECT_INT_TYPES
+        for _, _, selected, alteryx_type in edits
+    )
 
     var = f"_COLS_{tool_id}"
     col_lines: list[str] = [_SELECT_STALE_XML_WARNING]
@@ -99,6 +130,8 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
         )
     if converts_to_string:
         col_lines.append(_SELECT_STRING_CONVERSION_WARNING)
+    if converts_to_int:
+        col_lines.append(_SELECT_INT_ROUNDING_WARNING)
     col_lines.append(
         "# NOTE: SelectColumnEdit / apply_select_edits are not generated —"
     )
@@ -106,7 +139,7 @@ def gen_select(ctx: ToolContext) -> GeneratedCode:
     col_lines.append(f"{var} = [")
     for name, new_name, selected, alteryx_type in edits:
         if not selected:
-            # drop される列に new_name / type を出しても意味がないので省く
+            # new_name / type are meaningless on a dropped column, so omit them
             col_lines.append(f"    SelectColumnEdit({py_str(name)}, selected=False),")
             continue
         args = [py_str(name)]
