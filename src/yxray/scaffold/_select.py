@@ -48,21 +48,25 @@ _SELECT_STRING_CONVERSION_WARNING = (
 
 # apply_select_edits() reaches a nullable Int dtype via series.round(), which
 # is round-half-to-even: a tie whose integer part is even rounds down (0.5 ->
-# 0, 2.5 -> 2) where round-half-away-from-zero gives 1 and 3. The round() call
-# itself is required (astype to a nullable Int rejects a fractional float), so
-# the open question is the MODE, not whether to round. Alteryx's own mode is
-# unconfirmed, same caveat as TOSTRING_FORMAT_WARNING_LINES in _common.py and
-# _DISTANCE_WARNING in _spatial.py — the generated code says so rather than
-# implying parity. Byte is Alteryx's unsigned 8-bit type; the set mirrors
-# _INT_DTYPES in reference_impl/select_edits.py.
+# 0, 2.5 -> 2) where round-half-away-from-zero gives 1 and 3. astype() to a
+# nullable Int does require the values to be integer-valued first, but that
+# forces SOME integer-ization, not round() specifically — trunc/floor/ceil
+# qualify too. So the open question is not merely which tie-break Alteryx
+# uses; it is whether Alteryx rounds to nearest at all. The warning has to
+# leave both stages open, same caveat as TOSTRING_FORMAT_WARNING_LINES in
+# _common.py and _DISTANCE_WARNING in _spatial.py — the generated code says so
+# rather than implying parity. Byte is Alteryx's unsigned 8-bit type; the set
+# mirrors _INT_DTYPES in reference_impl/select_edits.py.
 _SELECT_INT_TYPES = frozenset({"Byte", "Int16", "Int32", "Int64"})
 
 _SELECT_INT_ROUNDING_WARNING = (
     "# WARNING: a type change here converts to an integer type —\n"
-    "# apply_select_edits() rounds with Series.round(), which is\n"
-    "# half-to-even (0.5 -> 0, 2.5 -> 2, not 1 and 3), and the rounding mode\n"
-    "# is not confirmed against Alteryx — diff this column against golden\n"
-    "# output before trusting it, negative values included"
+    "# apply_select_edits() uses Series.round() (half-to-even: 0.5 -> 0,\n"
+    "# 2.5 -> 2). Not confirmed against Alteryx: whether Alteryx rounds to\n"
+    "# nearest at all rather than truncating/flooring/ceiling, nor which\n"
+    "# tie-break it uses if it does — diff this column against golden output\n"
+    "# before trusting it, using non-tie and negative values\n"
+    "# (-0.7, -0.5, 0.5, 0.7, 1.5, 2.5), not ties alone"
 )
 
 

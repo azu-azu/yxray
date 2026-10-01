@@ -75,24 +75,39 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
         # docstring).
         return series.astype("string")
     if alteryx_type in _INT_DTYPES:
-        # round() is required: astype to a nullable Int fails with "cannot
-        # safely cast" on a float carrying a fractional part.
+        # Reaching a nullable Int dtype requires the values to be
+        # integer-valued first: astype() rejects a float still carrying a
+        # fractional part with "cannot safely cast". That requirement forces
+        # SOME integer-ization step here — it does not single out
+        # Series.round(). trunc, floor and ceil satisfy astype() just as well,
+        # so the presence of round() is this implementation's choice, not
+        # something astype() dictated.
         #
-        # WARNING: the rounding MODE is not confirmed against Alteryx.
-        # Series.round() is round-half-to-even (banker's rounding), so a
-        # value at exactly .5 whose integer part is even rounds DOWN:
-        # 0.5 -> 0 and 2.5 -> 2, where round-half-away-from-zero gives 1
-        # and 3. Ties whose integer part is odd (1.5 -> 2, 3.5 -> 4)
-        # agree under both modes, so they cannot tell the two apart.
-        # Negative values split three ways rather than two — half-to-even
-        # (-0.5 -> 0, -1.5 -> -2), half-up toward +inf via floor(x + 0.5)
-        # (-0.5 -> 0, -1.5 -> -1) and half-away-from-zero (-0.5 -> -1,
-        # -1.5 -> -2) all differ — so do not port the floor(x + 0.5)
-        # rewrite from docs/distance-direction-pending.md here: that one is
-        # sound only because a compass bearing is never negative.
-        # Diff this column against golden output before trusting it; see
-        # the unverified-items checklist in
-        # docs/alteryx-pandas-differences.md.
+        # KNOWN: this implementation uses Series.round(), which is
+        # round-half-to-even (0.5 -> 0, 2.5 -> 2, 1.5 -> 2).
+        #
+        # NOT VERIFIED against Alteryx: whether Alteryx rounds to nearest at
+        # all, and if it does, which tie-break it applies. Keep the candidate
+        # set open:
+        #   nearest  — half-to-even | ties toward +inf (floor(x + 0.5))
+        #              | half-away-from-zero | half-to-zero
+        #   directed — trunc (toward zero) | floor (-inf) | ceil (+inf)
+        #
+        # Settle it in two stages, not one: first nearest vs directed, then
+        # (only if nearest) the tie-break. Ties alone cannot do stage one —
+        # and cannot even finish stage two. 1.5 and 3.5 agree across every
+        # nearest mode, and {-0.5, 0.5} alone leaves half-to-even and
+        # half-to-zero indistinguishable. Non-tie values separate nearest from
+        # directed; negative values are required throughout, because the
+        # candidates that agree on positives diverge on negatives.
+        # {-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5} separates all seven.
+        #
+        # Do not port the floor(x + 0.5) rewrite from
+        # docs/distance-direction-pending.md here: it is sound there only
+        # because a compass bearing is never negative.
+        #
+        # Diff this column against golden output before trusting it — see
+        # chapter 23 of docs/alteryx-pandas-differences.md.
         num = pd.to_numeric(series, errors="coerce")
         return num.round().astype(_INT_DTYPES[alteryx_type])
     if alteryx_type in _FLOAT_TYPES:

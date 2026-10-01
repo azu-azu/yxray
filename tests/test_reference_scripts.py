@@ -422,7 +422,7 @@ def test_apply_select_edits_type_string() -> None:
     assert list(out["a"]) == ["1", "2"]
 
 
-def test_apply_select_edits_type_int_sizes_and_truncation() -> None:
+def test_apply_select_edits_type_int_sizes_and_fractional_values() -> None:
     edit = select_helpers.SelectColumnEdit
     df = pd.DataFrame(
         {
@@ -443,37 +443,50 @@ def test_apply_select_edits_type_int_sizes_and_truncation() -> None:
     assert out["i64"].dtype == "Int64"
     # A failed conversion nulls the value, same as an Alteryx Conversion Error
     assert out["i64"].isna().iloc[1]
-    # Double->Int rounds rather than truncating (truncation would both crash
-    # astype and disagree with Alteryx). 1.5 is deliberately NOT evidence of
-    # WHICH rounding mode is in play — see the half-to-even test below.
+    # A fractional value survives the cast as an integer, which is all this
+    # asserts. It is NOT evidence of which integer-ization Alteryx performs:
+    # 1.5 -> 2 rules out trunc/floor here, but says nothing about ceil and
+    # cannot separate the nearest-rounding modes from each other. The
+    # characterization test below covers the full candidate set.
     assert out["dbl"].dtype == "Int32"
     assert list(out["dbl"]) == [2, 2]
 
 
-def test_apply_select_edits_int_rounding_is_half_to_even_not_half_up() -> None:
-    """Pins the CURRENT rounding mode, which is NOT confirmed against Alteryx.
+def test_apply_select_edits_int_conversion_is_half_to_even_pending_golden() -> None:
+    """Pins the CURRENT pandas behavior. This is NOT a guarantee of Alteryx.
 
-    Series.round() is round-half-to-even, so a tie whose integer part is even
-    rounds down. Alteryx's own mode is unverified (see the unverified-items
-    checklist in docs/alteryx-pandas-differences.md); if golden output shows
-    Alteryx rounds half away from zero, this test is the one to flip, together
-    with the WARNING comment in reference_impl/select_edits.py.
+    Series.round() is round-half-to-even. What Alteryx does is unverified on
+    BOTH counts: whether it rounds to nearest at all rather than truncating /
+    flooring / ceiling, and if it rounds, which tie-break it applies. See
+    chapter 23 of docs/alteryx-pandas-differences.md.
 
-    Ties whose integer part is odd (1.5, 3.5) round the same way under both
-    modes, so they cannot distinguish them and are not used here.
+    The inputs are the discriminating set, so this one assertion separates all
+    seven candidates. Each exists for a reason:
+      +-0.7  non-ties, separating nearest rounding from trunc/floor/ceil
+      +-0.5  ties whose integer part is even
+      +-1.5  ties whose integer part is odd
+      +-2.5  confirms the even/odd dependence is real and not a sign artifact
+    Negative values are not optional: candidates that agree on positives
+    diverge on negatives. Ties alone would not even settle the tie-break,
+    since {-0.5, 0.5} leaves half-to-even and half-to-zero identical.
+
+    When golden output lands, this is the test to flip, together with the
+    comment in reference_impl/select_edits.py and the generated WARNING in
+    src/yxray/scaffold/_select.py.
     """
     edit = select_helpers.SelectColumnEdit
-    df = pd.DataFrame({"pos": [0.5, 2.5, 4.5], "neg": [-0.5, -1.5, -2.5]})
+    values = [-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5]
     out = select_helpers.apply_select_edits(
-        df,
-        [edit("pos", type="Int32"), edit("neg", type="Int32")],
+        pd.DataFrame({"v": values}), [edit("v", type="Int32")]
     )
-    # half-to-even; half-away-from-zero would give [1, 3, 5]
-    assert list(out["pos"]) == [0, 2, 4]
-    # half-to-even; half-away-from-zero would give [-1, -2, -3] and the
-    # floor(x + 0.5) half-up rewrite would give [0, -1, -2] — three distinct
-    # answers, which is why negative values belong in the golden check.
-    assert list(out["neg"]) == [0, -2, -2]
+    # half-to-even. The rejected candidates, on these same inputs:
+    #   ties toward +inf   [-2, -1, -1,  0, 1, 1, 2, 3]
+    #   half-away-from-0   [-3, -2, -1, -1, 1, 1, 2, 3]
+    #   half-to-zero       [-2, -1, -1,  0, 0, 1, 1, 2]
+    #   trunc              [-2, -1,  0,  0, 0, 0, 1, 2]
+    #   floor              [-3, -2, -1, -1, 0, 0, 1, 2]
+    #   ceil               [-2, -1,  0,  0, 1, 1, 2, 3]
+    assert list(out["v"]) == [-2, -2, -1, 0, 0, 1, 2, 2]
 
 
 def test_apply_select_edits_type_float_and_date() -> None:

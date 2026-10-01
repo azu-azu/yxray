@@ -1302,65 +1302,121 @@ golden 突合は比較前に全列ソートを掛けるのが通例のため、�
 
 ---
 
-## 23. Select の型変換 — Double→Int の丸め方式
+## 23. Select の型変換 — Double→Int で何が起きるか
 
 `reference_impl/select_edits.py` の `apply_select_edits()` は、Alteryx の
 `@type` が整数型（Byte / Int16 / Int32 / Int64）のとき `Series.round()` を
 通してから nullable Int へ `astype()` する。
 
-`round()` 自体は**省略できない**。小数部を持つ float から nullable Int への
-`astype()` は `TypeError: cannot safely cast non-equivalent object to int32`
-で落ちるため、丸めるかどうかは選択の余地がない。論点は**丸めの方式**だけ。
+### `astype()` が要求しているのは「整数値化」であって `round()` ではない
 
-| | `.5` ちょうどの扱い |
-|---|---|
-| **pandas** `Series.round()` | 銀行丸め(round-half-to-even)。整数部が偶数なら切り下げ |
-| **四捨五入**(round-half-away-from-zero) | 常に絶対値方向へ切り上げ |
+小数部を持つ float から nullable Int への `astype()` は
+`TypeError: cannot safely cast non-equivalent object to int32` で落ちる。
+したがって**何らかの整数値化は必須**である。ただしこれは `round()` を
+要求しているのではない — `trunc` / `floor` / `ceil` でも `astype()` は通る:
 
 ```
-入力        0.5   1.5   2.5   3.5   4.5
-.round()     0     2     2     4     4
-四捨五入      1     2     3     4     5
+pd.Series([1.5, 2.4]).astype("Int32")            → TypeError
+np.trunc([1.5, 2.4]).astype("Int32")             → [1, 2]   OK
+np.floor([1.5, 2.4]).astype("Int32")             → [1, 2]   OK
+np.ceil([1.5, 2.4]).astype("Int32")              → [2, 3]   OK
+pd.Series([1.5, 2.4]).round().astype("Int32")    → [2, 2]   OK
 ```
 
-食い違うのは**`.5` の整数部が偶数のときだけ**（0.5 / 2.5 / 4.5）。整数部が
-奇数（1.5 / 3.5）のときは両方式が同じ答えを返すため、**1.5 を使ったテストでは
-方式を判別できない**。
+つまり `round()` が置かれているのは**この実装の選択**であり、`astype()` に
+強制された結果ではない。論点は「丸めの方式」に限られず、**そもそも
+最近傍丸めなのか、切り捨て／切り下げ／切り上げなのか**から始まる。
 
-> **未検証**: Alteryx の Double→Int の丸め方式は実機で確認できていない。
-> 生成コードは `# WARNING: a type change here converts to an integer type`
+### 検証は二段階に分ける
+
+```
+第1問: Alteryx は小数→整数で何をするのか
+   ├─ 最近傍丸め(nearest)
+   ├─ trunc  (0 方向へ切り捨て)
+   ├─ floor  (-∞ 方向へ切り下げ)
+   └─ ceil   (+∞ 方向へ切り上げ)
+
+第2問: 最近傍丸めだった場合、.5 をどちらへ寄せるのか
+   ├─ half-to-even          (銀行丸め — pandas の現在挙動)
+   ├─ half-away-from-zero   (いわゆる四捨五入)
+   ├─ ties toward +∞        (floor(x + 0.5) 型)
+   └─ half-to-zero          (.5 を 0 方向へ)
+```
+
+第1問を飛ばして第2問から入ると、検証対象を根拠なく狭めることになる。
+
+### 候補7種の判別表（実測）
+
+| 入力 | half-to-even | ties → +∞ | half-away | half-to-zero | trunc | floor | ceil |
+|---|---|---|---|---|---|---|---|
+| -2.5 | -2 | -2 | **-3** | -2 | -2 | **-3** | -2 |
+| -1.5 | -2 | **-1** | -2 | **-1** | **-1** | -2 | **-1** |
+| -0.7 | -1 | -1 | -1 | -1 | **0** | -1 | **0** |
+| -0.5 | **0** | **0** | **-1** | **0** | **0** | **-1** | **0** |
+| 0.5 | **0** | **1** | **1** | **0** | **0** | **0** | **1** |
+| 0.7 | 1 | 1 | 1 | 1 | **0** | **0** | 1 |
+| 1.5 | 2 | 2 | 2 | **1** | **1** | **1** | 2 |
+| 2.5 | **2** | **3** | **3** | **2** | **2** | **2** | **3** |
+
+`-0.7` / `0.7` のような**非 tie 値**が第1問（最近傍か trunc/floor/ceil か）を
+分け、`±0.5` / `±1.5` / `±2.5` が第2問（tie-breaking と整数部の偶奇依存）を
+分ける。
+
+> **未検証**: Alteryx の Double→Int の実挙動は実機で確認できていない。
+> **「丸め方式がどれか」ではなく「そもそも丸めるのか」から未確定**である点に
+> 注意。生成コードは
+> `# WARNING: a type change here converts to an integer type`
 > （`_select.py` の `_SELECT_INT_ROUNDING_WARNING`）を出すので、golden と
 > diff してから信用すること（21章 `ToString` の丸め・`_DISTANCE_WARNING` と
 > 同じ立て付け）。現在の挙動は
-> `tests/test_reference_scripts.py::test_apply_select_edits_int_rounding_is_half_to_even_not_half_up`
-> が固定しているので、golden で確定したらこのテストと
-> `select_edits.py` の WARNING コメントを同時に更新する。
+> `tests/test_reference_scripts.py::test_apply_select_edits_int_conversion_is_half_to_even_pending_golden`
+> が固定している（これは **pandas の現在挙動を固定するテスト**であって、
+> Alteryx 仕様を保証するものではない）。golden で確定したら、このテストと
+> `select_edits.py` のコメント、`_select.py` の WARNING、本章を**同時に**
+> 更新する。
 
-### 負の値は2通りではなく3通りに分かれる
+### golden で確認する値
 
-golden 突合で確認する値に**負値を必ず含めること**。正値だけでは
-「銀行丸めか四捨五入か」の2択に見えるが、負値では実装候補が3つに割れる:
+```
+-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5
+```
 
-| 入力 | `.round()`<br>(half-to-even) | `floor(x + 0.5)`<br>(half-up → +∞) | 四捨五入<br>(half-away-from-zero) |
-|---|---|---|---|
-| -2.5 | -2 | -2 | **-3** |
-| -1.5 | -2 | **-1** | -2 |
-| -0.5 | -0 | **0** | **-1** |
-| 0.5 | **0** | 1 | 1 |
-| 2.5 | **2** | 3 | 3 |
+この8点で上表の7候補すべてが一意に分かれる（実測確認済み）。
+
+**最小構成は4点**（`-0.7`, `-0.5`, `0.5`, `0.7`）で、これだけでも
+half-to-even / ties→+∞ / half-away / trunc / floor / ceil の6候補は分かれる。
+ただし**half-to-even と half-to-zero はこの4点では区別できない**
+（どちらも `-1, 0, 0, 1`）— `±1.5` / `±2.5` を足して初めて分かれる。
+実運用では上の8点を使うこと。
+
+- **非 tie 値を必ず含める**（`±0.7`）— 最近傍丸めか trunc/floor/ceil かは
+  tie 値では判別できない
+- **負値を必ず含める** — 正値だけでは候補が潰れる。正値4点
+  （`0.5, 0.7, 1.5, 2.5`）では **`ties→+∞` / `half-away` / `ceil` の3つが
+  完全に同一**（`1, 1, 2, 3`）、**`trunc` と `floor` も同一**（`0, 0, 1, 2`）に
+  なり、7候補が4グループに縮退する。負値を入れて初めて全て分かれる
+- **tie 値だけでは足りない** — ただし「`1.5` / `3.5` はどの方式でも同じ」は
+  言い過ぎ。正確には**最近傍丸め同士の判別に使えない**だけで
+  （half-to-even / ties→+∞ / half-away はいずれも `1.5 → 2`。ただし
+  half-to-zero は `1`）、**trunc / floor との判別には使える**
+  （`trunc(1.5) = floor(1.5) = 1 ≠ 2`）。第1問には効き、第2問には効かない値
+
+### 用語について
+
+"round half up" は分野・ライブラリによって「+∞ 方向」とも「絶対値方向」とも
+解釈されるため、用語単体に頼らず挙動を併記する。本章は
+**ties toward +∞**（`floor(x + 0.5)`）と
+**half-away-from-zero**（いわゆる四捨五入）を別物として扱う。
+
+### `floor(x + 0.5)` をここへコピーしてはいけない
 
 `docs/distance-direction-pending.md` の
 [(b) 偶数丸め](distance-direction-pending.md#b-round-による8方位の丸めは境界規則が非対称になる)
 は同じ偶数丸め問題に `int(np.floor(bearing / 45 + 0.5))` を当てているが、
 **あれは方位角が常に非負だから成立する**書き換えである。金額や差分のように
-負値を取りうる列へそのまま流用すると、`-0.5` / `-1.5` で別のずれを作り込む。
-ここへコピーしてはいけない。
+負値を取りうる列へそのまま流用すると、`-0.5` / `-1.5` で別のずれを作り込む
+（上表の `ties → +∞` 列と `half-away` 列を参照）。
 
-### golden で確認する値
-
-- 正の tie: `0.5`, `2.5`, `4.5`（整数部が偶数 — 方式が分かれる）
-- 負の tie: `-0.5`, `-1.5`, `-2.5`（3方式が分かれる）
-- 判別に使えない値: `1.5`, `3.5`（整数部が奇数 — どの方式でも同じ）
 
 ---
 
@@ -1388,7 +1444,7 @@ golden 突合で確認する値に**負値を必ず含めること**。正値だ
 | 式の途中・フィルタ条件の `IsEmpty` / `!IsEmpty` | 関数化せず `(df[col].isna() \| (df[col] == ""))` を直書き — 関数を使うのは補充の場合だけ（19章） |
 | Double 列に文字列プレースホルダを入れて出力する | Alteryx は `1.0` を `"1"` と書く。出力直前に `to_display_string()` を通す（`fill_empty(to_display_string(df[col]), "-")` の順）。scaffold は生成しないのでレビュー時に人間が入れる（20章） |
 | `ToString(値, 小数桁数, [桁区切り])` | `.map(lambda v: format(v, ",.0f") if pd.notna(v) else pd.NA).astype("string")`(桁区切りありの例。無しなら `".0f"`)。丸め方式は未検証、生成コードに WARNING（21章） |
-| Select で Double→Int の型変換がある | `apply_select_edits()` は `Series.round()`（銀行丸め）を通す。`.5` の整数部が偶数だと四捨五入と食い違う（0.5→0、2.5→2）。丸め方式は未検証、生成コードに WARNING。golden 突合には負値も含める（負値は3方式に割れる）（23章） |
+| Select で Double→Int の型変換がある | `apply_select_edits()` は `Series.round()`（銀行丸め）を通す。**そもそも Alteryx が丸めるのか trunc/floor/ceil なのかが未検証**で、丸めるとしても tie-breaking も未確定。生成コードに WARNING。golden には非 tie 値と負値を含める（`-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5`）（23章） |
 | FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
@@ -1405,7 +1461,7 @@ golden 突合で確認する値に**負値を必ず含めること**。正値だ
 ## 関連実装
 
 - `reference_impl/find_any_append.py` — FindAny + Append の参照実装（golden 突合済み）
-- `reference_impl/select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename。整数型への変換の丸め方式は未検証 — 23章）。設定型 `SelectColumnEdit` と適用関数 `apply_select_edits` の2つを公開するため、他の参照実装と違いファイル名は関数名と一致しない
+- `reference_impl/select_edits.py` — Select ツールヘルパーの参照実装（drop / 型変換 / rename。整数型への変換は丸め方式どころか「丸めるのか切り捨てるのか」から未検証 — 23章）。設定型 `SelectColumnEdit` と適用関数 `apply_select_edits` の2つを公開するため、他の参照実装と違いファイル名は関数名と一致しない
 - `reference_impl/fill_empty.py` — Formula の `IsEmpty` 欠損値補充ヘルパーの参照実装（dtype 保持。`IsNull` 版は `fillna` で足りるのでヘルパー無し）
 - `reference_impl/to_display_string.py` — Alteryx 互換の数値→文字列表記ヘルパーの参照実装（20章）。**生成コードからは呼ばれない** — レビュー時に人間が挿入する唯一の reference_impl ヘルパー
 - `src/yxray/tool_registry.py` — 各ツールの python_hint と `_FILTER_HINT`

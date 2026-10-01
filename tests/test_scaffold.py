@@ -1339,12 +1339,24 @@ def test_scaffold_select_type_change_to_int_warns_about_rounding(
     alteryx_type: str,
 ) -> None:
     # apply_select_edits() rounds with Series.round() (half-to-even) to reach a
-    # nullable Int dtype, and Alteryx's own mode is unconfirmed — the generated
-    # code has to say so rather than imply parity, same as ToString() does.
+    # nullable Int dtype, and Alteryx's own behavior is unconfirmed — the
+    # generated code has to say so rather than imply parity, same as
+    # ToString() does.
     code = scaffold(_select_type_change_doc(alteryx_type))
     assert "WARNING: a type change here converts to an integer type" in code
+    # States what the implementation actually does...
     assert "half-to-even" in code
-    assert "not confirmed against Alteryx" in code
+    assert "Not confirmed against Alteryx" in code
+    # ...and leaves BOTH stages open: astype() only forces some
+    # integer-ization, so "which tie-break" is the second question, not the
+    # first. A warning that named only the tie-break would quietly assert that
+    # Alteryx rounds at all.
+    assert "rather than truncating/flooring/ceiling" in code
+    assert "tie-break" in code
+    # Points at values that can actually discriminate: non-ties separate
+    # nearest from directed, and negatives are required on top of that.
+    assert "non-tie and negative values" in code
+    assert "-0.7" in code
 
 
 def test_scaffold_select_no_type_change_has_no_rounding_warning() -> None:
