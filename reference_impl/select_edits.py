@@ -99,12 +99,12 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
         # Which values discriminate is not obvious, so note what each is for.
         # 1.5 and 3.5 agree across half-to-even, ties-toward-+inf and
         # half-away-from-zero, so they are useless BETWEEN those three — but
-        # they do separate half-to-zero (1.5 -> 1) and trunc/floor
-        # (1.5 -> 1), so they still carry stage one. Non-tie values such as
-        # +-0.7 are what cleanly split nearest from directed. Negative values
-        # are required throughout: on positives alone, ties-toward-+inf /
-        # half-away / ceil are indistinguishable from each other, as are
-        # trunc / floor.
+        # they still help distinguish nearest rounding from trunc/floor, which
+        # both give 1.5 -> 1, and from half-to-zero, which also gives 1.
+        # Non-tie values such as +-0.7 are what cleanly split nearest from
+        # directed. Negative values are required throughout: on positives
+        # alone, ties-toward-+inf / half-away / ceil are indistinguishable
+        # from each other, as are trunc / floor.
         #
         # Four well-chosen values suffice to separate all seven candidates
         # (e.g. {-1.5, -0.7, 0.5, 0.7}; four is the proven minimum, no
