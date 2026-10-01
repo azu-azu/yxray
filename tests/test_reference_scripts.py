@@ -460,15 +460,18 @@ def test_apply_select_edits_int_conversion_is_half_to_even_pending_golden() -> N
     flooring / ceiling, and if it rounds, which tie-break it applies. See
     chapter 23 of docs/alteryx-pandas-differences.md.
 
-    The inputs are the discriminating set, so this one assertion separates all
-    seven candidates. Each exists for a reason:
+    The inputs are the recommended golden set, so this one assertion separates
+    all seven candidates. Four values would be enough to do that (four is the
+    minimum; no three-value set can) -- these eight are deliberately redundant
+    so that a failure localizes the cause rather than only reporting "not
+    half-to-even". Each axis earns its place:
       +-0.7  non-ties, separating nearest rounding from trunc/floor/ceil
       +-0.5  ties whose integer part is even
       +-1.5  ties whose integer part is odd
       +-2.5  confirms the even/odd dependence is real and not a sign artifact
     Negative values are not optional: candidates that agree on positives
-    diverge on negatives. Ties alone would not even settle the tie-break,
-    since {-0.5, 0.5} leaves half-to-even and half-to-zero identical.
+    diverge on negatives. Ties alone would not settle stage two either, since
+    {-0.5, 0.5} leaves half-to-even and half-to-zero identical.
 
     When golden output lands, this is the test to flip, together with the
     comment in reference_impl/select_edits.py and the generated WARNING in

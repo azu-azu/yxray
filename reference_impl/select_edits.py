@@ -94,13 +94,25 @@ def _convert_series(series: pd.Series, alteryx_type: str) -> pd.Series | None:
         #   directed — trunc (toward zero) | floor (-inf) | ceil (+inf)
         #
         # Settle it in two stages, not one: first nearest vs directed, then
-        # (only if nearest) the tie-break. Ties alone cannot do stage one —
-        # and cannot even finish stage two. 1.5 and 3.5 agree across every
-        # nearest mode, and {-0.5, 0.5} alone leaves half-to-even and
-        # half-to-zero indistinguishable. Non-tie values separate nearest from
-        # directed; negative values are required throughout, because the
-        # candidates that agree on positives diverge on negatives.
-        # {-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5} separates all seven.
+        # (only if nearest) the tie-break.
+        #
+        # Which values discriminate is not obvious, so note what each is for.
+        # 1.5 and 3.5 agree across half-to-even, ties-toward-+inf and
+        # half-away-from-zero, so they are useless BETWEEN those three — but
+        # they do separate half-to-zero (1.5 -> 1) and trunc/floor
+        # (1.5 -> 1), so they still carry stage one. Non-tie values such as
+        # +-0.7 are what cleanly split nearest from directed. Negative values
+        # are required throughout: on positives alone, ties-toward-+inf /
+        # half-away / ceil are indistinguishable from each other, as are
+        # trunc / floor.
+        #
+        # Four well-chosen values suffice to separate all seven candidates
+        # (e.g. {-1.5, -0.7, 0.5, 0.7}; four is the proven minimum, no
+        # three-value set can). The eight-value set recommended for golden
+        # comparison is deliberately redundant rather than minimal — it spans
+        # sign, tie/non-tie and integer-part parity, so a mismatch localizes
+        # the cause instead of only saying "not half-to-even":
+        #   {-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5}
         #
         # Do not port the floor(x + 0.5) rewrite from
         # docs/distance-direction-pending.md here: it is sound there only

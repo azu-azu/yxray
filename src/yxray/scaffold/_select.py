@@ -65,8 +65,8 @@ _SELECT_INT_ROUNDING_WARNING = (
     "# 2.5 -> 2). Not confirmed against Alteryx: whether Alteryx rounds to\n"
     "# nearest at all rather than truncating/flooring/ceiling, nor which\n"
     "# tie-break it uses if it does — diff this column against golden output\n"
-    "# before trusting it, using non-tie and negative values\n"
-    "# (-0.7, -0.5, 0.5, 0.7, 1.5, 2.5), not ties alone"
+    "# before trusting it, using non-tie and negative values, not ties alone\n"
+    "# (-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5)"
 )
 
 
