@@ -10,7 +10,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from yxray.config_utils import as_list, comment_safe, field_name, first_text, py_str
+from yxray.config_utils import (
+    as_list,
+    comment_safe,
+    field_name,
+    first_text,
+    py_str,
+    select_field_rows,
+)
 from yxray.scaffold._common import (
     GeneratedCode,
     ToolContext,
@@ -86,6 +93,70 @@ def gen_join(ctx: ToolContext) -> GeneratedCode:
 
     expr = first_text(ctx.config, "JoinExpression") or ""
     matches = _resolve_join_matches(ctx.config)
+
+    if str(ctx.config.get("@joinByRecordPos", "False")).lower() == "true":
+        return GeneratedCode(
+            "# TODO: Join by record position is not implemented\n"
+            'raise NotImplementedError("Join by record position")'
+        )
+
+    selections = ctx.config.get("SelectConfiguration", {})
+    if isinstance(selections, dict) and matches:
+        for selection in as_list(selections.get("Configuration")):
+            if not isinstance(selection, dict):
+                continue
+            if selection.get("@outputConnection") != "Join":
+                continue
+            rows = select_field_rows(selection)
+            if not rows:
+                continue
+            order_value = selection.get("OrderChanged", {})
+            order_changed = (
+                str(order_value.get("@value", "")).lower() == "true"
+                if isinstance(order_value, dict)
+                else str(order_value).lower() == "true"
+            )
+            lines = [
+                "# NOTE: join_selected() is not generated — copy it from",
+                "# reference_impl/join_selected.py, together with select_edits.py",
+                "# WARNING: saved Select XML may be stale; verify against Alteryx.",
+                "# Type conversions use select_edits.py's documented approximations.",
+                f"_JOIN_COLS_{ctx.tool_id} = [",
+            ]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                name = field_name(row)
+                if not name:
+                    continue
+                side = str(row.get("@input", ""))
+                if name != "*Unknown":
+                    if side not in ("Left_", "Right_") or not name.startswith(side):
+                        return GeneratedCode(
+                            "# TODO: ambiguous Join Select field; resolve input side\n"
+                            'raise NotImplementedError("Ambiguous Join Select input")'
+                        )
+                    name = name[len(side) :]
+                selected = str(row.get("@selected", "True")).lower() != "false"
+                rename = first_text(row, "@rename", "@Rename") if selected else ""
+                dtype = first_text(row, "@type", "@Type") if selected else ""
+                lines.append(
+                    f"    ({py_str(side)}, {py_str(name)}, {selected}, "
+                    f"{py_str(rename) if rename else 'None'}, "
+                    f"{py_str(dtype) if dtype else 'None'}),"
+                )
+            lines.extend(
+                [
+                    "]",
+                    f"{df_out} = join_selected(",
+                    f"    {df_left}, {df_right},",
+                    f"    keys={matches!r},",
+                    f"    columns=_JOIN_COLS_{ctx.tool_id},",
+                    f"    order_changed={order_changed},",
+                    ")",
+                ]
+            )
+            return GeneratedCode("\n".join(lines))
 
     if matches:
         if all(lk == rk for lk, rk in matches):
