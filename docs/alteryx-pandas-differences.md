@@ -710,7 +710,8 @@ Create Points は Longitude/Latitude から SpatialObj 型の `Centroid` フィ�
 
 ただし SpatialObj は通常の文字列・数値列と扱いが違い、Designer の Results
 グリッドには表示されない（Browse では追加の **Map タブ**に描画される）。
-golden CSV にも空間列は現れない。一方 geopandas は空間オブジェクトを明示的な
+このプロジェクトの比較用 golden CSV では空間列を除外する。
+これは Alteryx の CSV 出力一般の仕様を確定したものではない。一方 geopandas は空間オブジェクトを明示的な
 DataFrame 列（デフォルト名 `geometry`）として保持するため、生成コードを
 実行すると「golden にない列が増えた」ように見える。
 
@@ -720,7 +721,7 @@ Alteryx の内部ストリーム              pandas（GeoDataFrame）
 ├─ Longitude                          ├─ Longitude
 ├─ Latitude                           ├─ Latitude
 └─ Centroid ← SpatialObj型。          └─ geometry ← 明示的な列として
-    グリッド/CSV に出ない                  常に見える
+    比較用 CSV では除外する                  常に見える
 ```
 
 `ID_A` は実ワークフロー由来の列を匿名化した仮名。`Longitude` / `Latitude` /
@@ -737,7 +738,9 @@ actual = pd.DataFrame(gdf.drop(columns=gdf.geometry.name))
 ```
 
 scaffold が生成する Create Points コードには、この旨の NOTE コメントが付く
-（「golden CSV には現れない列なので比較側で drop せよ」）。
+（比較側で空間列を drop する運用を案内する）。
+複数の空間列がある場合は、比較対象の列集合に合わせて除外する。
+アクティブ geometry だけを drop する上の例では、他の空間列は残る。
 
 ### 未検証（golden で確定したら消し込む）
 
@@ -786,8 +789,11 @@ Select の `field` は入力プレフィックス込みの作業名（`Target_ID
 名前が一致しない。`apply_select_edits` は存在しない列を黙って無視する設計
 （stale XML 対策）なので、XML の名前で edit を機械生成すると **silent no-op**
 になる — 「出したのに効かない」は「出さない」より悪い。名前対応が golden
-突合で確定したら、Join の SelectConfiguration（同型・同じく未翻訳）と
-共通ヘルパー化して実装する。
+突合で確定したら、左右の入力と出力名の対応を保持する方式で実装する。
+main の Join はまだ単純な merge だが、別ブランチ
+[`fix/join-output-selection`](https://github.com/azu-azu/yxray/tree/fix/join-output-selection)
+では SelectConfiguration 対応を実装中である。Spatial Match の対応と
+Alteryx golden 突合は未完了である。
 
 Spatial Match 以降の golden 突合では列名の食い違い（プレフィックス vs
 サフィックス）を前提にレビューすること。
@@ -820,8 +826,8 @@ EPSG:4326 の単位は度なので、`<Units>Kilometers</Units>` のような設
 geometry を差し替えるので `to_crs("EPSG:4326")` で戻す**
 （[spatial-crs-design.md](spatial-crs-design.md#buffer-はメートル系へ出て戻ってくる)）。
 
-Buffer の出力は SpatialObj なので、Alteryx と頂点一致しなくても
-golden CSV を汚さない（形状差は shapely の64分割円で 0.16%、
+Buffer の出力は SpatialObj で、比較用 golden CSV では直接比較しない。
+ただし形状差は下流の数値・結合結果に影響しうる（形状差は shapely の64分割円で 0.16%、
 `GeneralizeToOnePercent` の 1% simplify でさらに 0.5% ほど — いずれも実測）。
 一方 Distance の出力は Double 列で golden に出るため、生成コードに
 `WARNING: this is a planar UTM distance` を残してある。この非対称が、
@@ -853,8 +859,6 @@ Formula の `IF` は原則 `np.where` / `np.select` に翻訳される（16章�
 構文をそのまま写す）。**例外は「欠損値補充」の形だけ** — この形に限り
 `np.where` を使わない。判定と生成コードは次の表で確定している。
 
-| Alteryx 式 | 生成コード | 追加の依存 |
-|---|---|---|
 | Alteryx 式 | 生成コード | 追加の依存 |
 |---|---|---|
 | `IF IsNull([c]) THEN v ELSE [c] ENDIF` | `df["c"].fillna(v)` | なし（pandas 組み込み） |
@@ -1476,14 +1480,14 @@ tie/non-tie・整数部の偶奇をすべて張るので、golden と食い違�
 | Double 列に文字列プレースホルダを入れて出力する | Alteryx は `1.0` を `"1"` と書く。出力直前に `to_display_string()` を通す（`fill_empty(to_display_string(df[col]), "-")` の順）。scaffold は生成しないのでレビュー時に人間が入れる（20章） |
 | `ToString(値, 小数桁数, [桁区切り])` | `.map(lambda v: format(v, ",.0f") if pd.notna(v) else pd.NA).astype("string")`(桁区切りありの例。無しなら `".0f"`)。丸め方式は未検証、生成コードに WARNING（21章） |
 | Select で Double→Int の型変換がある | `apply_select_edits()` は `Series.round()`（銀行丸め）を通す。**そもそも Alteryx が丸めるのか trunc/floor/ceil なのかが未検証**で、丸めるとしても tie-breaking も未確定。生成コードに WARNING。golden には非 tie 値と負値を含める（`-2.5, -1.5, -0.7, -0.5, 0.5, 0.7, 1.5, 2.5`）（23章） |
-| FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep=RMF対応)` — 素の left join だと行が増える |
+| FindReplace FindWhole + 重複キー lookup | merge 前に `drop_duplicates(keep="last")`（RMF に依らない） — 素の left join だと行が増える |
 | FindReplace FindAny + Append | `find_any_append(...)` の呼び出しに変換（定義は生成されない — `reference_impl/find_any_append.py` をコピー） |
 | FindReplace の ReplaceMultipleFound | 読まない・生成コードに出さない — Append モードでは出力に影響しないことが golden 実測で確定（出すと意味があるように見えるため） |
 | 空間ファイル読み込み（.shp 等） | 読み込み直後に WGS84 へ正規化（CRS None は warning 付き `set_crs`、その他は `to_crs`）— scaffold が自動生成。`.prj` 欠落 .shp × Create Points の sjoin で出る CRS mismatch 警告の恒久対策 |
 | .shp の属性列が geometry しか無い | 同名 `.dbf` サイドカーが同フォルダに無い（GDAL は無音で geometry のみ開く）。scaffold 生成の存在チェックが `FileNotFoundError` で検知 — ファイル一式を揃える |
 | FindReplace の NoCase | ヘルパーの `case_sensitive` に反転して渡される（NoCase=True → case_sensitive=False） |
 | 日付比較と `IsEmpty()` が同じ列に混在 | 変換前は日付比較がエラー、変換後は `IsEmpty` の `== ""` が常に False。scaffold の列名付き WARNING/NOTE を確認（`IsNull` は対象外） |
-| Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx では Map タブのみ、通常グリッド/CSV に出ない）。golden 比較前に比較側で drop — 生成コード側では消さない |
+| Create Points / Spatial Match の SpatialObj | geopandas では明示的な `geometry` 列になる（Alteryx のストリームにも存在する。CSV 出力一般の挙動は未実測）。golden 比較前に比較側で drop — 生成コード側では消さない |
 | Spatial Match の出力列 | `index_right`（sjoin の人工列）は生成コードが drop 済み。埋め込み Select の逸脱（deselected / rename / type）は WARNING コメントで列挙のみ — 列名の食い違い（XML は `Target_`/`Universe_` プレフィックス、sjoin は `_left`/`_right` サフィックス）を前提に手動で整合させる |
 | Unique の出力順 | Alteryx は Unique 列でソートしてから先頭行を出力。`drop_duplicates()` は入力順を維持するだけ。`.sort_values(by=keys, kind="stable", na_position="first").drop_duplicates(subset=keys)` で順序も一致させる（残る行の値自体は変わらない）。特定の重複を優先したいなら Unique 前に明示的な Sort が要る（22章） |
 

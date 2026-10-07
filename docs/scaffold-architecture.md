@@ -110,7 +110,7 @@ __init__              ← 外部にはここだけ見せる
 すべてのジェネレータは `ToolContext` 1個を受け取る形に統一されている。
 
 ```python
-def gen_xxx(ctx: ToolContext) -> str: ...
+def gen_xxx(ctx: ToolContext) -> GeneratedCode: ...
 ```
 
 `ToolContext`(`_common.py`)は `tool_id / segment / config / preds / anchors /
@@ -154,8 +154,9 @@ tool_id → ノード/predecessors)は、1ホップ先の `preds` では足り�
 
 ## `TOOL_REGISTRY` の `"no"`/`"partial"` を生成器に昇格させる基準
 
-`tool_registry.py` の `python_supported` が `"no"`/`"partial"` のツールは、
-`GENERATORS` 未登録のため `_assemble.py` が汎用 TODO スタブしか出さない
+`tool_registry.py` の `python_supported` は対応状況の説明であり、生成器の
+ディスパッチ条件ではない。`GENERATORS` 未登録のツールに対して
+`_assemble.py` が汎用 TODO スタブを出す。`"partial"` でも登録済みの生成器はある
 (`python_hint` は `acd i`/`acd explain` のヒント表示専用で、`.py` 生成には
 使われない)。これを実際の生成器に昇格させてよいかの基準:
 
@@ -173,7 +174,9 @@ tool_id → ノード/predecessors)は、1ホップ先の `preds` では足り�
   [2026-08-05 に部分昇格](#buffer-の部分昇格2026-08-05)した)。
   `MultiRowFormula`/`PolySplit`/`DynamicInput`
   (`"no"`)はcommit `56b34d5` で「1つの生成スニペットに還元すると誤ったコードを
-  出すリスクの方が高い」と判断され、そもそも昇格候補から意図的に外されている
+  出すリスクの方が高い」と判断され、当時は昇格候補から外された。
+  現在は `MultiRowFormula` と `PolySplit` が部分昇格済みで、
+  `DynamicInput` は引き続き未登録
 - 昇格させる場合は本ドキュメントの表と `tool_registry.py` の該当 `ToolInfo`
   (hint文言が実際の生成コードと食い違わないよう)を両方更新すること
 
@@ -187,7 +190,7 @@ tool_id → ノード/predecessors)は、1ホップ先の `preds` では足り�
 
 | 項目 | 出力の型 | golden CSV に出るか | 判断 |
 | --- | --- | --- | --- |
-| `CentroidObj` | SpatialObj | **出ない**(Map タブのみ) | 昇格。値がズレても CSV 比較を汚さない |
+| `CentroidObj` | SpatialObj | **比較対象外** | 部分昇格。形状を直接比較しないが、下流の数値・行数への影響は検証が必要 |
 | `CentroidXY`(`CentroidX`/`CentroidY`、2026-09-12 昇格) | Double ×2 | 出る | 昇格。`CentroidObj` が golden 14桁一致まで検証済みの同じ `.centroid` を `.x`/`.y` に分解するだけで、新しい数値リスクを持ち込まない(下記) |
 | `Area` / `Length` | 数値 | 出る | 未昇格。EPSG:4326 は単位が度で、Alteryx の単位設定(sq miles / km)と一致しない |
 | その他 | — | — | 未昇格。実XMLが無く項目名すら未確定 |
@@ -333,7 +336,7 @@ MetaInfo が無ければ黙ってスキップするだけで済む。
 | `Units` | 昇格。Distance の `<OutputUnits>` と同じ綴りなので `_METRES_PER_UNIT` を共用。未知の綴りは TODO |
 | `GeneralizeToOnePercent` | 昇格。`simplify(サイズの1%)`。負サイズ対策に `.abs()`(GEOS は負の tolerance を例外にする) |
 | 出力フィールド名 | 昇格。**`<入力フィールド名>_Buffer`** で確定(下記 MetaInfo)。Buffer は入力オブジェクトを上書きせず、**列を1本足す** |
-| `IncludeSourceInOutput=False` | 生成コードは元オブジェクトを残したまま、コメントで「Alteryx 出力にはバッファだけ」と明示する。SpatialObj は golden CSV に出ないので列の有無は比較に影響せず、落とすと上流が作った geometry を失うほうが害が大きい |
+| `IncludeSourceInOutput=False` | 生成コードは元オブジェクトを残したまま、コメントで「Alteryx 出力にはバッファだけ」と明示する。比較用 golden CSV では空間列を除外するため列の有無は直接比較せず、落とすと上流が作った geometry を失うほうが害が大きい |
 
 出力フィールド名は推測ではなく、Buffer ノードの出力 MetaInfo で裏取りしてある。
 Spatial Info と同じくリネームUIを持たないため、名前は固定である。
@@ -353,14 +356,18 @@ Buffer が「golden 突合なし」で昇格できるのは、Distance の距離
 **出力が SpatialObj だから** である(Spatial Info の `CentroidObj` と同じ根拠)。
 バッファ形状は Alteryx と頂点一致しない — shapely の64分割円は真円より
 面積が 0.16% 小さく、1% generalize でさらに 0.5% 減る(いずれも実測)— が、
-SpatialObj は Results grid にも golden CSV にも出ないので比較を汚さない。
+このプロジェクトの golden CSV 比較では空間列を除外するため、
+形状差を直接検出しない。ただし後続の Spatial Match、Distance、
+Spatial Info などの数値や行数には影響しうる。
 
 **Distance の 0.19% 残差は Buffer まで追わない(2026-08-05)**。
 バッファサイズ列が上流の `DistanceKilometers` から作られている場合、
 Distance 側の残差(実測1行で半径 107.6 m に対し約 0.19%、原因未特定)は
-バッファ半径にもそのまま乗る。ただし影響は数 cm 相当で、既存の形状近似
-(64分割円 0.16%、1% generalize で追加 0.5%)より一桁小さく、しかも
-Buffer の出力は SpatialObj なので golden CSV の比較結果は変わらない。
+バッファ半径にもそのまま乗る。107.6 m × 0.19% は約 0.20 m
+(20 cm)である。半径の相対誤差と面積の近似誤差
+(64分割円 0.16%、1% generalize で追加 0.5%)は同じ指標ではなく、
+一桁小さいとは言えない。空間列を直接比較しなくても、下流の結合結果や
+数値が変わる可能性はある。
 これ以上の追及は Distance 側の残差調査(未解決)に一本化し、
 Buffer 側では扱わない。
 
@@ -395,8 +402,8 @@ commit `56b34d5` で「`SplitTo` が3モードあり、1つのスニペットに
 | `SplitTo=Region` / `DetailedRegion` | 未昇格。実XMLが無く、`Split_IsHole` を含むかもしれない列構成自体が未確定 |
 
 `SpatialInfo`/`Buffer` の `CentroidObj`/`SpatialObj_Buffer` は SpatialObj 型で
-golden CSV に出ないため「形が多少ズレても比較を汚さない」という昇格根拠が
-使えたが、**PolySplit はそれが使えない**。`Split_SequenceNum` は Int32 で
+比較用 golden CSV では直接比較しないが、下流への影響の検証は必要である。
+**PolySplit ではさらに行数と連番の検証が必要になる**。`Split_SequenceNum` は Int32 で
 golden CSV が比較する列だからである。それでも部分昇格させたのは、
 残っている不確実性が `Direction` のような「どの候補実装を選ぶか」という
 分岐ではなく、shapely の生の頂点列をどう数えるかという**単一の素朴な読み方**
@@ -425,12 +432,12 @@ commit `56b34d5` で PolySplit/DynamicInput と並んで昇格候補から外さ
 
 ```xml
 <UpdateField value="False" />
-<CreateField_Name>innerBoundaryID</CreateField_Name>
+<CreateField_Name>SequenceNo</CreateField_Name>
 <CreateField_Type>Int32</CreateField_Type>
 <OtherRows>Empty</OtherRows>
-<Expression>[Row-1:innerBoundaryID]+1</Expression>
+<Expression>[Row-1:SequenceNo]+1</Expression>
 <GroupByFields>
-  <Field field="EL_ID" />
+  <Field field="GroupKey" />
 </GroupByFields>
 ```
 
@@ -477,7 +484,7 @@ Spatial Info / Distance で毎ブロック同じ形が出るが、いずれも (
 
 | 繰り返している部分 | 判断 |
 | --- | --- |
-| `df_out["Centroid"] = _geom.centroid` | (d)。`.centroid` が geopandas 組み込みそのもので、隠す機構が無い。生成ブロック15行のうち11行はコメント（golden CSV に出ない理由・平面centroidの誤差・Area/Length が無い理由）で、それこそがこのブロックの中身。関数にするとコメントの置き場が消える。項目を増やすときの変更点は今も `_SPATIAL_INFO_ITEMS` の1行だけで、重複は既に (a) で潰れている |
+| `df_out["Centroid"] = _geom.centroid` | (d)。`.centroid` が geopandas 組み込みそのもので、隠す機構が無い。生成ブロック15行のうち11行はコメント（比較用 golden CSV で空間列を除外する理由・平面centroidの誤差・Area/Length が無い理由）で、それこそがこのブロックの中身。関数にするとコメントの置き場が消える。項目を増やすときの変更点は今も `_SPATIAL_INFO_ITEMS` の1行だけで、重複は既に (a) で潰れている |
 | `_spatial_field_note()` + `_geoseries_expr()`（XML のフィールド名 → 無ければアクティブ geometry、+ `crs="EPSG:4326"` のラベル付け） | 当面 (a)。現時点で SpatialInfo ×1・Distance ×2・Buffer ×1 の4箇所に出るが、中身は分岐の無い1式で、CRS は 4326 固定の不変条件（[spatial-crs-design.md](spatial-crs-design.md)）に守られている |
 
 `gen_polysplit()` の頂点walk（`_iter_vertices_<ToolID>`）は同じ表の中でも

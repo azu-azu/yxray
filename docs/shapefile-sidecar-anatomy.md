@@ -126,7 +126,7 @@ universe 側の属性列(CODE_A 等)が結果に乗らない
 
 ### 採用したもの
 
-**1. .shp 読み込みの直前に .dbf 存在チェックを生成する**(`_io.py: _shp_read_stmt`)
+**1. .shp 読み込みの直前に .dbf 存在チェックを生成する**(`_io.py: _sidecar_read_stmt`)
 
 ```python
 # attribute columns live in the same-name .dbf sidecar; GDAL opens
@@ -180,7 +180,7 @@ if df_1.crs is None:
 | --- | --- |
 | `rename_geometry("SpatialObj")` で Alteryx の列名に揃える | 下流の生成コード(Create Points / sjoin)が `geometry` 名前提。golden CSV 比較でも geometry/SpatialObj は比較側で落とす運用が既にコメントに明記されている |
 | 入力直後に必要列だけへ絞り込む | 列の絞り込みは Alteryx 上では Select ツールの仕事。DbFileInput の生成コードが勝手に列を落とすとワークフローとの対応が崩れる |
-| XML の MetaInfo(RecordInfo)から期待列リストを取り、生成コードに assert を出す | parser は `Properties/Configuration` しか読んでおらず、モデル拡張が必要。MetaInfo は古くなり得るメタデータでもあるため、入れるなら assert より参考コメントが妥当。**将来の選択肢として保留** |
+| XML の MetaInfo(RecordInfo)から期待列リストを取り、生成コードに assert を出す | parser の `_meta_fields()` は `Properties/MetaInfo` とノード直下の MetaInfo を読み、`AlteryxNode.meta_fields` に保持している。期待列ガードの生成は未実装。MetaInfo は古くなり得るため、必須 assert として使うには別途検証が必要。**将来の選択肢として保留** |
 
 ---
 

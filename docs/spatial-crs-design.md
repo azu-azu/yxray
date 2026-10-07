@@ -337,8 +337,8 @@ CRS 不一致で `ValueError` になる。不変条件が崩れていたら黙�
 [Distance の項](#distance-はメートル系へ一時離脱する)の追記を参照)。
 `gen_spatialinfo()` はこの補正を実装していない — 重心が内側に収まる
 通常のケースでは影響ないが、外側に出るケースでは `Centroid` の値が
-Alteryx とズレる。`Centroid` 自体は SpatialObj 型で golden CSV には
-出ないため、この差分単独では検出できない。後続の Distance の結果を
+Alteryx とズレる。`Centroid` 自体は SpatialObj 型で比較用 golden CSV では
+直接比較しないため、この差分単独では検出できない。後続の Distance の結果を
 通じて初めて表面化する。
 
 ### Distance はメートル系へ一時離脱する
@@ -409,8 +409,8 @@ Distance 自身の符号ロジック(このすぐ上)は正しい — 間違っ�
 
 補正アルゴリズムは独立した2回の実測(対象行の大部分が誤差数cm以内で
 一致)まで裏取りできているが、実装するかは未決定。`Centroid` は
-SpatialObj 型で golden CSV に出ないため、実装してもこれらの行の
-`DistanceKilometers` 以外に golden 比較上の効果はなく、かつ現状
+SpatialObj 型で比較用 golden CSV では直接比較しないが、補正は
+下流の Distance、Spatial Info、Spatial Match などに影響しうる。現状
 1件(該当行)は上記の補正モデルでも説明のつかない残差が残っている。
 単一ワークフローの実測のみで恒久的な生成コードに組み込むリスクと
 天秤にかけ、現時点では見送り — 詳細・再現性・残課題は内部の調査ログに
@@ -434,6 +434,7 @@ EPSG:4326 のまま触らない。Buffer が作るのは **geometry そのもの
 _geom = gpd.GeoSeries(df_1["SpatialObj"] if ... else df_1.geometry, crs="EPSG:4326")
 _dist_m = pd.to_numeric(df_1["bufferSize"], errors="coerce").astype("float64")
 _dist_m = _dist_m * 1000                       # Units=Kilometers → metres
+df_2 = df_1.copy()
 if pd.notna(_geom.total_bounds).all():
     _crs_m = _geom.estimate_utm_crs()
     _buffered = _geom.to_crs(_crs_m).buffer(_dist_m)
@@ -443,7 +444,7 @@ else:
     logger.warning("no usable SpatialObj geometry — the buffer is null")
     _buffered = _geom
 df_2["SpatialObj_Buffer"] = _buffered          # 上書きではなく列を1本足す
-df_2 = df_2.set_geometry("SpatialObj_Buffer")  # 後続 sjoin はアクティブを使う
+df_2 = gpd.GeoDataFrame(df_2, geometry="SpatialObj_Buffer")  # 後続 sjoin はアクティブを使う
 ```
 
 最後の2行が Buffer の出力の形である。**入力オブジェクトは上書きされない** —
@@ -479,28 +480,30 @@ Alteryx も `<入力フィールド名>_Buffer` という新しいフィール�
 面積が 0.16% 小さく、`GeneralizeToOnePercent`(1% の tolerance で
 `simplify`)を掛けるとさらに 0.5% 程度減る(半径1km で 65頂点 → 33頂点、
 いずれも実測)。それでも実コードとして出しているのは、**バッファが
-SpatialObj で golden CSV に出ないから** である
+SpatialObj を比較用 golden CSV では直接比較しないから** である
 (Spatial Info の `Centroid` と同じ根拠 —
 [scaffold-architecture.md](scaffold-architecture.md#buffer-の部分昇格2026-08-05))。
-Distance の距離が Double 列で golden 比較に直接乗るのとは立場が違う。
+Distance の距離は Double 列で直接比較する。空間列を直接比較しなくても、
+形状差が下流の数値や行数に影響する可能性は検証する必要がある。
 
 ### 方位(`Direction`)を生成しない理由
 
 同じ Distance ノードは方位も出しているが、こちらは生成しない。
-8方位の文字列であることは MetaInfo の `size="2"` から確定できるが
-(16方位なら `NNE` で3文字必要)、**ポリゴン相手にどの点への方位を取るのかが
+MetaInfo の `size="2"` は最大2文字を示し、通常の16方位表記
+(`NNE` など3文字)とは整合しない。8方位という説明はこの推定に基づくが、**ポリゴン相手にどの点への方位を取るのかが
 XML からは決まらない** ためである。距離と違って形が確定していないので、
 「残る不確定が投影誤差だけ」という距離の昇格根拠が使えない。
 
 しかも `Direction` は String 列なので **golden CSV に出る**。
-`Centroid` のように「値がズレても比較を汚さない」逃げ道がなく、
+`Centroid` と異なり列自体が直接の比較対象であり、
 現状の生成コードは golden 比較で列が1本足りない状態にある。
 
 方位を CRS の観点から見たときの注意点は2つ。
 
 1. **最寄り点は宛先の `.boundary` に対して取る**。起点は宛先ポリゴン自身の
-   重心なので常に内側にあり、生ポリゴンに `nearest_points()` を当てると
-   同一点が返って全行 `N` になる(例外は出ない)
+   重心が内側にある場合、生ポリゴンに `nearest_points()` を当てると
+   同一点が返って方位を決められない(例外は出ない)。凹ポリゴンでは
+   重心が外側になる場合があり、上記の補正との差も確認する
 2. **方位そのものは投影平面ではなく測地で取るのが安全**。UTM の子午線収差は
    中緯度(φ ≈ 35°)・中央子午線から 1.3° 離れで 0.7° 前後あり、8方位に
    丸めても境界付近の数 % が反転しうる。最寄り点を UTM で求め、その2点を
@@ -614,8 +617,9 @@ df_result = df_metric.to_crs(original_crs)
 
 生成コードが実際にこの形を取っているのが Buffer である
 ([Buffer はメートル系へ出て、戻ってくる](#buffer-はメートル系へ出て戻ってくる))。
-`df.geometry.buffer(100)` を 4326 のまま呼んだ場合に何が起きるかの実測値も
-そこに置いてある(結論: 100 m ではなく約 100 km の楕円になる)。
+EPSG:4326 の `.buffer(100)` は 100 m ではなく100度を指定する。
+上記の約100 kmという実測値は `.buffer(1)` に対するものであり、
+`.buffer(100)` の結果として転用してはいけない。
 
 なお Web メルカトル(EPSG:3857)は Web 地図表示には便利だが、
 場所によって距離・面積の歪みが大きい。正確なメートル計算では、
