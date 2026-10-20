@@ -115,6 +115,7 @@ def _filter_mask_lines(
     translation: FilterTranslation,
     df_in: str,
     df_out: str,
+    ctx: ToolContext,
 ) -> list[str] | None:
     """Split-form lines for an Expression Filter, or None to keep one line.
 
@@ -137,7 +138,21 @@ def _filter_mask_lines(
     joined = f" {translation.joiner} ".join(
         f"cond_{i}" for i in range(1, len(masks) + 1)
     )
-    lines += ["", f"{df_out} = {df_in}[{joined}]"]
+    lines += ["", *_filter_output_lines(ctx, joined)]
+    return lines
+
+
+def _filter_output_lines(ctx: ToolContext, expression: str) -> list[str]:
+    if not ctx.output_ports:
+        return [f"{ctx.df_out} = {ctx.df_in}[{expression}]"]
+    mask = f"_filter_mask_{ctx.tool_id}"
+    lines = [
+        f"{mask} = ({expression}).fillna(False)",
+        "# Missing predicates route to False; verify null cases against Alteryx.",
+    ]
+    for port in ctx.output_ports:
+        suffix, condition = ("t", mask) if port == "True" else ("f", f"~{mask}")
+        lines.append(f"{ctx.df_out}_{suffix} = {ctx.df_in}.loc[{condition}].copy()")
     return lines
 
 
@@ -254,6 +269,11 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
         except ExprTranslationError:
             translation = None
             pandas_expr = fallback_field_substitute(expr, df_in)
+        if translation is None and ctx.output_ports:
+            return GeneratedCode(
+                f"# TODO: could not translate Filter expression: {comment_safe(expr)}\n"
+                'raise NotImplementedError("Untranslated Filter predicate")'
+            )
         lines = ["# Alteryx expression — review translation"]
         if translation is not None and translation.uses_fill_empty:
             # Rare here (a Filter condition that is really a fill), but the
@@ -265,7 +285,7 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
             lines += TOSTRING_FORMAT_WARNING_LINES
         lines += _expression_diagnostic_lines(expr, pandas_expr, translation)
         mask_lines = (
-            _filter_mask_lines(translation, df_in, df_out)
+            _filter_mask_lines(translation, df_in, df_out, ctx)
             if translation is not None
             else None
         )
@@ -276,7 +296,7 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
         if mask_lines is not None:
             lines += mask_lines
         else:
-            lines.append(f"{df_out} = {df_in}[{pandas_expr}]")
+            lines += _filter_output_lines(ctx, pandas_expr)
         uses_numpy = translation is not None and translation.uses_numpy
         return GeneratedCode(
             "\n".join(lines),
@@ -286,6 +306,11 @@ def gen_filter(ctx: ToolContext) -> GeneratedCode:
     if simple_expr:
         return GeneratedCode(
             "# from Simple-mode filter settings — review translation\n"
-            f"{df_out} = {df_in}[{simple_expr}]"
+            + "\n".join(_filter_output_lines(ctx, simple_expr))
+        )
+    if ctx.output_ports:
+        return GeneratedCode(
+            "# TODO: Filter expression missing\n"
+            'raise NotImplementedError("Filter expression missing")'
         )
     return GeneratedCode(f"{df_out} = {df_in}  # TODO: Filter expression missing")

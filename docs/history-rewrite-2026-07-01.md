@@ -1,31 +1,25 @@
-# 履歴の作り直しについて(2026-07-01)
+# Git 履歴に関する記録（2026-10-07 確認）
 
-このリポジトリの git 履歴は **2026-07-01 に作り直されている**。現在の main の
-ルートコミットは `0b23e28`("Add \"Copy Python\" button to inspect panel for
-Select tools")で、それ以前の開発内容(2026-06-03〜06-24、約130コミット)は
-このルートコミットにスナップショットとして焼き込まれており、コミット単位の
-履歴としては残っていない。
+このファイル名は以前の記録へのリンクを維持するため残している。
+以前の本文にあった「2026-07-01 に履歴を作り直し、`0b23e28` が現在の
+ルートになった」という説明は、現在の main の履歴と一致しない。
 
-## 古いクローンとの不一致は正常
+現在の main のルートコミットは
+`c05fd39d45be0e80b1bfa5c0a7ac609881e9e910`
+（2026-02-28、`docs: initialize project`）である。
+`0b23e28`（2026-07-01、`Add "Copy Python" button to inspect panel for Select tools`）
+は履歴中に存在するが、ルートではない。
 
-作り直し前にクローンした作業コピーでは、ローカル main と origin/main が
-**共通祖先を持たない**(`git merge-base` が空になる、`ahead/behind` が両方
-大きく出る)。これは異常ではなく、この作り直しによるもの。旧履歴側の
-コミットは件名・SHA ともに現履歴と一致しないが、内容は取り込み済み。
+## 古いクローンを確認するとき
 
-古いクローンを見つけた場合は、ローカル main を捨てて origin/main に
-合わせてよい(`git checkout -B main origin/main`)。
+クローンの時期だけで「共通祖先がない」「以前の作業は取り込み済み」と
+判断しない。まず `git fetch origin` 後に `git merge-base main origin/main` と
+`git log --left-right --oneline main...origin/main` で実際の差分を確認する。
+ローカルの未コミット変更と独自コミットは、退避・確認してから扱う。
+共通祖先がない場合も、原因を確認せずローカルブランチを上書きしない。
 
-## 作り直し時に意図的に落とした機能
+## 過去の機能に関する記述
 
-以下は旧履歴には存在するが、現履歴には**意図的に含めていない**。
-「消えた作業」ではないので復元不要。
-
-- **SQL 変換モジュール** — `src/yxray/sql/`(builder / ir / renderer)、
-  `tests/test_sql.py`、cluster-to-sql CLI、`yxray serve` コマンド。
-  実験的機能として廃止(旧履歴内でも serve コマンドは revert 済み)。
-- **companion タブ機能** — `_companion_window.py` による _report / _graph
-  の別タブ連携。single-file 出力への回帰に伴い除去。
-
-旧履歴で開発された UI・レポート系機能(minimap、Containers パネル、
-Excel ダウンロード、diff split view など)はすべて現履歴に含まれている。
+以前の本文にあった SQL 変換モジュールや companion タブの廃止理由、
+旧履歴からの取り込み範囲は、この記録だけでは裏付けられない。
+復元の要否を判断するときは対象コミットと現在の実装を個別に確認する。

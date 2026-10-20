@@ -31,8 +31,6 @@ from yxray.scaffold._common import (
     GeneratedCode,
     Requirement,
     ToolContext,
-    anchor_src,
-    frame_name,
 )
 from yxray.tool_registry import tool_segment
 
@@ -256,10 +254,8 @@ _EMBEDDED_SELECT_WARNING_LINES = (
 
 def gen_spatialmatch(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
-    t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
-    u_id = anchor_src(ctx.anchors, ctx.preds, ("Universe",), 1)
-    df_t = frame_name(ctx.names, t_id, "df_targets")
-    df_u = frame_name(ctx.names, u_id, "df_universe")
+    df_t = ctx.input_frame(("Targets", "Target"), 0, "df_targets")
+    df_u = ctx.input_frame(("Universe",), 1, "df_universe")
     method = ctx.config.get("Method", {})
     method_name = method.get("@method", "") if isinstance(method, dict) else ""
     predicate = method_name.lower() if method_name else "intersects"

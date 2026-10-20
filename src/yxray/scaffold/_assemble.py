@@ -10,8 +10,9 @@ the PathStyle passed in (PROJECT_PATHS vs INLINE_PATHS), where a
 generator's helper defs land (module level vs inline; see _tool_blocks),
 and the surrounding boilerplate.
 
-Variable naming: each tool's output is named df_<tool_id> (e.g. df_34, df_108),
-matching the ToolID comment above each block so the mapping is unambiguous.
+Variable naming: single-output tools use df_<tool_id>. Connected Join and
+Filter outputs add _l/_j/_r and _t/_f, respectively, so distinct streams
+from the same source tool cannot collapse into one frame.
 """
 
 from __future__ import annotations
@@ -24,8 +25,8 @@ from yxray.config_utils import (
     comment_safe,
     first_text,
 )
-from yxray.models.workflow import WorkflowDoc
-from yxray.scaffold._common import PathStyle, Requirement, ToolContext
+from yxray.models.workflow import AlteryxConnection, WorkflowDoc
+from yxray.scaffold._common import InputStream, PathStyle, Requirement, ToolContext
 from yxray.scaffold._io import (
     INLINE_PATHS,
     PROJECT_PATHS,
@@ -36,6 +37,7 @@ from yxray.scaffold._registry import DETAIL_HINT_SEGMENTS, GENERATORS
 from yxray.tool_registry import (
     SCAFFOLD_INPUT_SEGMENTS,
     SCAFFOLD_OUTPUT_SEGMENTS,
+    is_dataflow_tool,
     tool_segment,
 )
 from yxray.topology import build_predecessor_map, topo_order
@@ -65,7 +67,7 @@ def _assign_frame_names(
     order: list[int],
     node_map: dict[int, Any],
 ) -> dict[int, str]:
-    """Name each tool's output frame df_<tool_id> (e.g. df_34, df_108).
+    """Name each tool's base frame df_<tool_id> (e.g. df_34, df_108).
 
     One-to-one with ToolIDs so variable names are stable, unambiguous,
     and never collide between inputs and outputs of the same operation.
@@ -95,6 +97,9 @@ class ScaffoldPlan:
     anchor_map: dict[int, dict[str, int]]
     order: list[int]
     names: dict[int, str]
+    incoming: dict[int, list[AlteryxConnection]]
+    outgoing: dict[int, list[AlteryxConnection]]
+    connection_warnings: tuple[str, ...]
 
 
 def build_plan(doc: WorkflowDoc) -> ScaffoldPlan:
@@ -103,6 +108,15 @@ def build_plan(doc: WorkflowDoc) -> ScaffoldPlan:
         int(n.tool_id): n for n in doc.nodes if "ToolContainer" not in n.tool_type
     }
     order = topo_order(doc)
+    incoming: dict[int, list[AlteryxConnection]] = {}
+    outgoing: dict[int, list[AlteryxConnection]] = {}
+    for edge in doc.connections:
+        src = int(edge.src_tool)
+        node = node_map.get(src)
+        if node is None or not is_dataflow_tool(node.tool_type):
+            continue
+        incoming.setdefault(int(edge.dst_tool), []).append(edge)
+        outgoing.setdefault(src, []).append(edge)
     return ScaffoldPlan(
         source=pathlib.Path(doc.filepath).name,
         node_map=node_map,
@@ -110,6 +124,9 @@ def build_plan(doc: WorkflowDoc) -> ScaffoldPlan:
         anchor_map=_build_anchor_map(doc),
         order=order,
         names=_assign_frame_names(order, node_map),
+        incoming=incoming,
+        outgoing=outgoing,
+        connection_warnings=doc.connection_warnings,
     )
 
 
@@ -130,7 +147,107 @@ def _make_context(
         paths=paths,
         node_map=plan.node_map,
         pred_map=plan.pred_map,
+        input_streams=tuple(
+            InputStream(
+                int(edge.src_tool),
+                str(edge.src_anchor),
+                str(edge.dst_anchor),
+                _stream_frame(plan, edge),
+                edge.name,
+            )
+            for edge in plan.incoming.get(tool_id, [])
+        ),
+        output_ports=tuple(
+            dict.fromkeys(
+                str(edge.src_anchor) for edge in plan.outgoing.get(tool_id, [])
+            )
+        ),
     )
+
+
+_PORT_SUFFIXES = {
+    "Join": {"Left": "l", "Join": "j", "Right": "r"},
+    "Filter": {"True": "t", "False": "f"},
+}
+
+
+def _stream_frame(plan: ScaffoldPlan, edge: AlteryxConnection) -> str:
+    source = int(edge.src_tool)
+    base = plan.names.get(source, f"df_{source}")
+    ports = _PORT_SUFFIXES.get(tool_segment(plan.node_map[source].tool_type))
+    if ports is None:
+        return base
+    suffix = ports.get(str(edge.src_anchor), "unresolved")
+    return f"{base}_{suffix}"
+
+
+def _connection_notes(plan: ScaffoldPlan, ctx: ToolContext) -> list[str]:
+    """Make routing evidence visible in .py, .md and per-node copy snippets."""
+    notes = []
+    for edge, stream in zip(
+        plan.incoming.get(ctx.tool_id, []), ctx.input_streams or (), strict=True
+    ):
+        notes.append(
+            comment_safe(
+                f"# Connection: {edge.src_tool}.{edge.src_anchor} -> "
+                f"{edge.dst_tool}.{edge.dst_anchor}; input={stream.frame}"
+            )
+        )
+    if ctx.segment in _PORT_SUFFIXES:
+        for edge in plan.outgoing.get(ctx.tool_id, []):
+            notes.append(
+                comment_safe(
+                    f"# Connection: {edge.src_tool}.{edge.src_anchor} -> "
+                    f"{edge.dst_tool}.{edge.dst_anchor}; "
+                    f"output={_stream_frame(plan, edge)}"
+                )
+            )
+        notes += [
+            f"# WARNING: {comment_safe(message)}"
+            for message in plan.connection_warnings
+        ]
+        used = ", ".join(ctx.output_ports or ())
+        notes.append(
+            f"# Connected outputs: {comment_safe(used)} (from Connections)"
+            if used
+            else "# WARNING: no outgoing connection; used output is unknown. "
+            "Showing the default output as an isolated preview only."
+        )
+    return notes
+
+
+def _routing_error(plan: ScaffoldPlan, ctx: ToolContext) -> str | None:
+    # A Join/Filter's generic 'Output' is not evidence for J/True. In
+    # particular the parser's fallback for an absent attribute must not
+    # silently select one of these streams.
+    if plan.connection_warnings and ctx.segment in _PORT_SUFFIXES:
+        return "Connection XML is incomplete; verify routing before execution"
+    edges = [*plan.incoming.get(ctx.tool_id, []), *plan.outgoing.get(ctx.tool_id, [])]
+    for edge in edges:
+        segment = tool_segment(plan.node_map[int(edge.src_tool)].tool_type)
+        supported = _PORT_SUFFIXES.get(segment)
+        if supported is not None and str(edge.src_anchor) not in supported:
+            return (
+                f"Unresolved output: {edge.src_tool}.{edge.src_anchor}; "
+                f"expected {', '.join(supported)}. Verify Connections, not MetaInfo."
+            )
+        if supported is None and str(edge.src_anchor) != "Output":
+            return (
+                f"Unimplemented output: {edge.src_tool}.{edge.src_anchor} "
+                f"({segment}); verify this stream before execution."
+            )
+    incoming = ctx.input_streams or ()
+    if ctx.segment == "Join":
+        for port in ("Left", "Right"):
+            if sum(stream.target_port == port for stream in incoming) != 1:
+                return f"Join {ctx.tool_id}: expected exactly one {port} input"
+    elif ctx.segment == "Filter" and len(incoming) != 1:
+        return f"Filter {ctx.tool_id}: expected exactly one input"
+    return None
+
+
+def _routing_guard(error: str) -> str:
+    return f"# TODO: {comment_safe(error)}\nraise NotImplementedError({error!r})"
 
 
 def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
@@ -148,7 +265,9 @@ def node_code_snippets(doc: WorkflowDoc) -> dict[int, str]:
             continue
         # DETAIL_HINT excludes Input/Output, so the path style never matters here.
         ctx = _make_context(plan, tool_id, node, INLINE_PATHS)
-        snippets[tool_id] = GENERATORS[segment](ctx).code
+        error = _routing_error(plan, ctx)
+        code = _routing_guard(error) if error else GENERATORS[segment](ctx).code
+        snippets[tool_id] = "\n".join([*_connection_notes(plan, ctx), code])
     return snippets
 
 
@@ -303,10 +422,14 @@ def _tool_blocks(
             continue
         ctx = _make_context(plan, tool_id, node, paths)
         lines = _header_comment_lines(ctx.tool_id, ctx.segment, warnings_by_tool)
+        lines += _connection_notes(plan, ctx)
         gen = GENERATORS.get(ctx.segment)
         requirements: frozenset[Requirement] = frozenset()
         helpers: tuple[str, ...] = ()
-        if gen is None:
+        error = _routing_error(plan, ctx)
+        if error:
+            lines.append(_routing_guard(error))
+        elif gen is None:
             lines.append("# TODO: unsupported tool type — review manually")
             lines.append(f"# {ctx.df_out} = ...")
         else:

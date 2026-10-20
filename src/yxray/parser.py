@@ -425,9 +425,29 @@ def _parse_connections(root: etree._Element) -> list[AlteryxConnection]:
                 src_anchor=AnchorName(origin.get("Connection", "Output")),
                 dst_tool=ToolID(int(dst_tool_str)),
                 dst_anchor=AnchorName(dest.get("Connection", "Input")),
+                name=conn_elem.get("name", ""),
             )
         )
     return connections_list
+
+
+def _connection_warnings(root: etree._Element) -> tuple[str, ...]:
+    if root.find("Connections") is None:
+        return ("Connections section is absent; routing cannot be verified.",)
+    warnings = []
+    for number, edge in enumerate(root.findall("Connections/Connection"), 1):
+        for tag in ("Origin", "Destination"):
+            endpoint = edge.find(tag)
+            if endpoint is None:
+                warnings.append(f"Connection {number}: missing {tag}; edge skipped.")
+            else:
+                for attr in ("ToolID", "Connection"):
+                    if not endpoint.get(attr):
+                        warnings.append(
+                            f"Connection {number}: {tag}.{attr} is missing; "
+                            "routing cannot be verified."
+                        )
+    return tuple(warnings)
 
 
 def _tree_to_workflow(
@@ -454,6 +474,7 @@ def _tree_to_workflow(
         nodes=tuple(_parse_nodes(root, filter_ui_tools=filter_ui_tools)),
         connections=tuple(_parse_connections(root)),
         macro_interface=_parse_macro_interface(root),
+        connection_warnings=_connection_warnings(root),
     )
 
 

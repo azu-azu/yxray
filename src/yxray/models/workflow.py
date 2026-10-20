@@ -91,6 +91,8 @@ class AlteryxConnection:
     src_anchor: AnchorName
     dst_tool: ToolID
     dst_anchor: AnchorName
+    name: str = ""
+    """Optional Connection/@name identifier, used by Union OutputOrder."""
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -110,3 +112,5 @@ class WorkflowDoc:
     the blocks sit outside <Nodes> entirely, so no AlteryxNode could own them.
     Empty for every workflow that is not a batch macro.
     """
+    connection_warnings: tuple[str, ...] = ()
+    """Missing/incomplete connection XML, for scaffold diagnostics only."""
