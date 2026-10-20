@@ -1,12 +1,13 @@
-"""Join's J output with side-aware Select settings.
+"""Join's J output with side-aware Select, plus unmatched L/R outputs.
 
 Copy this file and select_edits.py into the target project and import
 join_selected alongside apply_select_edits. The scaffold emits calls, not
 helper definitions. Inputs must have unique string column names.
 
-This implements field-based inner joins only. It preserves duplicate-key
-multiplicity and both key columns until selection. Null matching follows
-pandas.merge; compare null-key cases against Alteryx before relying on parity.
+join_selected implements the field-based J output. It preserves duplicate-key
+multiplicity and both key columns until selection. join_unmatched implements
+L/R with the original input schema, dtypes and row multiplicity. Null matching
+follows pandas.merge; compare null-key cases against Alteryx before relying on parity.
 Ordinary duplicate names use Right_ prefixes. More complex naming collisions
 are rejected rather than guessing Alteryx's suffix rules. Type conversion
 has the same limitations as select_edits.py.
@@ -23,6 +24,41 @@ logger = logging.getLogger(__name__)
 
 # (input prefix, original input name, selected, output rename, target type)
 JoinColumn = tuple[str, str, bool, str | None, str | None]
+
+
+def join_unmatched(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    *,
+    keys: list[tuple[str, str]],
+    side: str = "Left",
+) -> pd.DataFrame:
+    """L/R output: preserve the unmatched input rows, columns and dtypes.
+
+    Matching uses pandas.merge, including its null-key behavior, just like
+    join_selected. Opposite-side duplicate keys must not multiply rows.
+    Integer probe columns avoid collisions with user field names.
+    """
+    if side not in ("Left", "Right"):
+        raise ValueError("Unmatched Join side must be Left or Right")
+    if not keys:
+        raise ValueError("Join requires at least one key pair")
+    if side == "Right":
+        return join_unmatched(right, left, keys=[(rkey, lkey) for lkey, rkey in keys])
+    for frame in (left, right):
+        if not frame.columns.is_unique or not all(
+            isinstance(name, str) for name in frame.columns
+        ):
+            raise ValueError("Join requires unique string input column names")
+    left_keys = left[[lkey for lkey, _ in keys]].copy()
+    right_keys = right[[rkey for _, rkey in keys]].copy()
+    left_keys.columns = right_keys.columns = pd.RangeIndex(len(keys))
+    if left.empty or right.empty:
+        return left.copy()
+    probe = left_keys.merge(
+        right_keys.drop_duplicates(), how="left", sort=False, indicator=True
+    )
+    return left.iloc[probe["_merge"].eq("left_only").to_numpy()].copy()
 
 
 def join_selected(

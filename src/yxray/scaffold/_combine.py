@@ -8,6 +8,7 @@ stream.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from yxray.config_utils import (
@@ -15,14 +16,13 @@ from yxray.config_utils import (
     comment_safe,
     field_name,
     first_text,
+    get_text,
     py_str,
     select_field_rows,
 )
 from yxray.scaffold._common import (
     GeneratedCode,
     ToolContext,
-    anchor_src,
-    frame_name,
 )
 
 _JOIN_COND_RE = re.compile(r"\[L:([^\]]+)\]\s*=\s*\[R:([^\]]+)\]", re.IGNORECASE)
@@ -83,13 +83,10 @@ def _resolve_join_matches(config: dict[str, Any]) -> list[tuple[str, str]]:
     return matches
 
 
-def gen_join(ctx: ToolContext) -> GeneratedCode:
-    names = ctx.names
+def _gen_join_selected(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
-    left_id = ctx.anchors.get("Left")
-    right_id = ctx.anchors.get("Right")
-    df_left = frame_name(names, left_id, "df_left")
-    df_right = frame_name(names, right_id, "df_right")
+    df_left = ctx.input_frame(("Left",), fallback="df_left")
+    df_right = ctx.input_frame(("Right",), 1, "df_right")
 
     expr = first_text(ctx.config, "JoinExpression") or ""
     matches = _resolve_join_matches(ctx.config)
@@ -184,22 +181,85 @@ def gen_join(ctx: ToolContext) -> GeneratedCode:
     )
 
 
+def gen_join(ctx: ToolContext) -> GeneratedCode:
+    """Emit each connected L/J/R stream separately; Select applies to J only."""
+    if not ctx.output_ports:
+        return _gen_join_selected(ctx)
+    if str(ctx.config.get("@joinByRecordPos", "False")).lower() == "true":
+        return GeneratedCode(
+            "# TODO: Join by record position is not implemented\n"
+            'raise NotImplementedError("Join by record position")'
+        )
+    keys = _resolve_join_matches(ctx.config)
+    if not keys:
+        return GeneratedCode(
+            "# TODO: Join keys could not be resolved\n"
+            'raise NotImplementedError("Unresolved Join keys")'
+        )
+    lines = []
+    for port in ctx.output_ports:
+        suffix = {"Left": "l", "Join": "j", "Right": "r"}[port]
+        output = f"{ctx.df_out}_{suffix}"
+        if port == "Join":
+            j_ctx = replace(ctx, names={**ctx.names, ctx.tool_id: output})
+            lines.append(_gen_join_selected(j_ctx).code)
+        else:
+            lines += [
+                "# NOTE: copy join_unmatched from reference_impl/join_selected.py",
+                "# together with select_edits.py; null matching follows pandas.",
+                f"{output} = join_unmatched(",
+                f"    {ctx.input_frame(('Left',))}, {ctx.input_frame(('Right',), 1)},",
+                f"    keys={keys!r}, side={port!r},",
+                ")",
+            ]
+    return GeneratedCode("\n".join(lines))
+
+
 def gen_union(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
     if not ctx.preds:
         return GeneratedCode(
             f"{df_out} = pd.concat([...], ignore_index=True)  # TODO: set inputs"
         )
-    parts = ", ".join(ctx.names.get(p, "df_?") for p in ctx.preds)
+    streams = list(ctx.input_streams or ())
+    order_setting = ctx.config.get("SetOutputOrder", {})
+    explicit_order = (
+        isinstance(order_setting, dict)
+        and str(order_setting.get("@value", "False")).lower() == "true"
+    )
+    if explicit_order and ctx.input_streams is not None:
+        order = ctx.config.get("OutputOrder", {})
+        ports = (
+            [
+                get_text({"port": port}, "port")
+                for port in as_list(order.get("Connection"))
+            ]
+            if isinstance(order, dict)
+            else []
+        )
+        by_port = {stream.name or stream.target_port: stream for stream in streams}
+        if (
+            len(by_port) != len(streams)
+            or len(set(ports)) != len(ports)
+            or set(ports) != set(by_port)
+        ):
+            return GeneratedCode(
+                "# TODO: Union output order does not resolve all input connections\n"
+                'raise NotImplementedError("Unresolved Union output order")'
+            )
+        streams = [by_port[port] for port in ports]
+    parts = (
+        ", ".join(stream.frame for stream in streams)
+        if ctx.input_streams is not None
+        else ", ".join(ctx.names.get(p, "df_?") for p in ctx.preds)
+    )
     return GeneratedCode(f"{df_out} = pd.concat([{parts}], ignore_index=True)")
 
 
 def gen_appendfields(ctx: ToolContext) -> GeneratedCode:
     df_out = ctx.df_out
-    t_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "Target"), 0)
-    s_id = anchor_src(ctx.anchors, ctx.preds, ("Sources", "Source"), 1)
-    df_t = frame_name(ctx.names, t_id, "df_targets")
-    df_s = frame_name(ctx.names, s_id, "df_sources")
+    df_t = ctx.input_frame(("Targets", "Target"), 0, "df_targets")
+    df_s = ctx.input_frame(("Sources", "Source"), 1, "df_sources")
     return GeneratedCode(
         "# Append Fields — every source record is appended"
         " to every target record\n"

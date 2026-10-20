@@ -20,6 +20,7 @@ __all__ = [
     "FILL_EMPTY_NOTE_LINES",
     "TOSTRING_FORMAT_WARNING_LINES",
     "GeneratedCode",
+    "InputStream",
     "PathStyle",
     "Requirement",
     "ToolContext",
@@ -142,6 +143,17 @@ class PathStyle:
 
 
 @dataclass(frozen=True)
+class InputStream:
+    """One incoming edge, retaining its source output and destination input."""
+
+    tool_id: int
+    source_port: str
+    target_port: str
+    frame: str
+    name: str = ""
+
+
+@dataclass(frozen=True)
 class ToolContext:
     """Everything a per-tool generator needs, in one argument.
 
@@ -149,6 +161,9 @@ class ToolContext:
     can dispatch on segment alone and the assembly loop carries no per-tool
     special cases. `paths` is only consulted by the Input/Output generators.
 
+    `input_streams` retains incoming source ports and resolved frame names;
+    `output_ports` lists outputs actually connected downstream. Use
+    input_frame() (not names[pred]) when generating data consumers.
     `preds` is this tool's immediate predecessors; `node_map`/`pred_map` are
     the whole workflow's tool_id -> node and tool_id -> predecessors maps,
     for the rare generator that needs to look further upstream than one
@@ -169,6 +184,31 @@ class ToolContext:
     paths: PathStyle
     node_map: dict[int, Any]
     pred_map: dict[int, list[int]]
+    # None is for isolated per-tool generators with no workflow topology.
+    # An empty tuple means topology was inspected but no edge was found.
+    input_streams: tuple[InputStream, ...] | None = None
+    output_ports: tuple[str, ...] | None = None
+
+    def input_frame(
+        self,
+        anchors: tuple[str, ...] = (),
+        index: int = 0,
+        fallback: str = "df_?",
+    ) -> str:
+        """Resolve an input by its edge, not only by predecessor ToolID."""
+        if self.input_streams is not None:
+            if anchors:
+                for stream in self.input_streams:
+                    if stream.target_port in anchors:
+                        return stream.frame
+                return fallback
+            return (
+                self.input_streams[index].frame
+                if len(self.input_streams) > index
+                else fallback
+            )
+        source = anchor_src(self.anchors, self.preds, anchors, index)
+        return frame_name(self.names, source, fallback)
 
     @property
     def df_out(self) -> str:
@@ -178,5 +218,4 @@ class ToolContext:
     @property
     def df_in(self) -> str:
         """Frame of the first predecessor — the input for single-input tools."""
-        src = self.preds[0] if self.preds else None
-        return frame_name(self.names, src)
+        return self.input_frame()

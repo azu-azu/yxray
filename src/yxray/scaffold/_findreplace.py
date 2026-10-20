@@ -28,8 +28,6 @@ from yxray.scaffold._common import (
     GeneratedCode,
     Requirement,
     ToolContext,
-    anchor_src,
-    frame_name,
 )
 
 
@@ -183,10 +181,8 @@ def gen_findreplace(ctx: ToolContext) -> GeneratedCode:
     # Alteryx FindReplace XML connection anchors: Targets = main stream (FieldFind),
     # Source = lookup table (FieldSearch). "F"/"R" are kept as fallbacks
     # for test fixtures.
-    f_id = anchor_src(ctx.anchors, ctx.preds, ("Targets", "F", "Find", "Input"), 0)
-    r_id = anchor_src(ctx.anchors, ctx.preds, ("Source", "R", "Replace"), 1)
-    df_f = frame_name(ctx.names, f_id, "df_find")
-    df_r = frame_name(ctx.names, r_id, "df_replace")
+    df_f = ctx.input_frame(("Targets", "F", "Find", "Input"), 0, "df_find")
+    df_r = ctx.input_frame(("Source", "R", "Replace"), 1, "df_replace")
 
     field_find = first_text(config, "FieldFind")
     field_search = first_text(config, "FieldSearch")
